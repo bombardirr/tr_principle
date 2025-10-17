@@ -1,32 +1,65 @@
-# If you prefer the allow list template instead of the deny list, see community template:
-# https://github.com/github/gitignore/blob/main/community/Golang/Go.AllowList.gitignore
-#
-# Binaries for programs and plugins
+# Build outputs (executables and generated files)
+build/bin/
+build/app/
+build/windows/installer/tmp/
+frontend/dist/
+frontend/node_modules/
+
+# Keep in git: build configuration files (NSIS scripts, icons, manifests)
+# - build/windows/installer/*.nsi (NSIS scripts)
+# - build/windows/installer/wails_tools.nsh
+# - build/windows/icon.ico
+# - build/windows/wails.exe.manifest
+# - build/windows/info.json
+# - build/darwin/ (macOS configs)
+# - build/appicon.png
+# - build/README.md
+
+# IDE files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+*.tmp
+*.temp
+temp_project/
+
+# Wails specific
+wailsjs/
+frontend/wailsjs/
+
+# Go specific
 *.exe
 *.exe~
 *.dll
 *.so
 *.dylib
-
-# Test binary, built with `go test -c`
 *.test
-
-# Code coverage profiles and other test artifacts
 *.out
-coverage.*
-*.coverprofile
-profile.cov
+vendor/
 
-# Dependency directories (remove the comment below to include it)
-# vendor/
+# Node.js specific
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.npm
+.yarn-integrity
 
-# Go workspace file
-go.work
-go.work.sum
-
-# env file
+# Environment files
 .env
-
-# Editor/IDE
-# .idea/
-# .vscode/
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
