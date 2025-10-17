@@ -12,23 +12,27 @@
 </template>
 
 <style>
+/* Reset styles */
 * {
   margin: 0;
   padding: 0;
   box-sizing: border-box;
 }
 
+/* App container */
 #app {
   width: 100%;
   height: 100vh;
 }
 
+/* Main container */
 .container {
   display: flex;
   width: 100%;
   height: 100%;
 }
 
+/* Area base styles */
 .area {
   flex: 1;
   display: flex;
@@ -37,14 +41,17 @@
   border: 1px solid #ccc;
 }
 
+/* Left area */
 .left {
   background-color: #f0f0f0;
 }
 
+/* Right area */
 .right {
   background-color: #e8e8e8;
 }
 
+/* Number styling */
 .number {
   font-size: 72px;
   font-weight: bold;
