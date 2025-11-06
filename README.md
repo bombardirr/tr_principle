@@ -1,19 +1,51 @@
-# README
+# Translation Tool
 
-## About
+Веб-приложение для переводчиков - аналог Trados.
 
-This is the official Wails Vue-TS template.
+## Текущее состояние
 
-You can configure the project by editing `wails.json`. More information about the project settings can be found
-here: https://wails.io/docs/reference/project-config
+Проект находится на начальной стадии разработки. Реализована базовая структура Vue3 приложения.
 
-## Live Development
+## Технологии
 
-To run in live development mode, run `wails dev` in the project directory. This will run a Vite development
-server that will provide very fast hot reload of your frontend changes. If you want to develop in a browser
-and have access to your Go methods, there is also a dev server that runs on http://localhost:34115. Connect
-to this in your browser, and you can call your Go code from devtools.
+- **Vue 3** - фронтенд фреймворк
+- **TypeScript** - типизация
+- **Vite** - сборщик и dev-сервер
 
-## Building
+## Структура проекта
 
-To build a redistributable, production mode package, use `wails build`.
+- `src/` - исходный код приложения
+- `src/composables/` - переиспользуемая логика (composables)
+- `src/types/` - TypeScript типы и интерфейсы
+- `src/components/` - Vue компоненты
+- `PLAN.md` - план разработки с этапами
+
+## Разработка
+
+### Установка зависимостей
+
+```bash
+npm install
+```
+
+### Запуск в режиме разработки
+
+```bash
+npm run dev
+```
+
+Приложение будет доступно по адресу `http://localhost:5173`
+
+### Сборка для продакшена
+
+```bash
+npm run build
+```
+
+## Особенности архитектуры
+
+- Использование `<script setup>` синтаксиса
+- Вся логика вынесена в composables для переиспользования
+- TypeScript типы централизованы в папке `src/types/`
+- Модульная структура для поддержки кода
+
