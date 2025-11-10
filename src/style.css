@@ -5,7 +5,16 @@
   @apply box-border;
 }
 
+html,
+body {
+  @apply h-full;
+}
+
 body {
   @apply font-sans antialiased;
+}
+
+#app {
+  @apply h-full;
 }
 

@@ -6,7 +6,9 @@
   "scripts": {
     "dev": "vite",
     "build": "vue-tsc && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "format": "prettier --write \"src/**/*.{ts,tsx,vue,scss,css,json}\"",
+    "format:check": "prettier --check \"src/**/*.{ts,tsx,vue,scss,css,json}\""
   },
   "repository": {
     "type": "git",
@@ -20,13 +22,15 @@
   },
   "homepage": "https://github.com/bombardirr/tr_principle#readme",
   "dependencies": {
-    "vue": "^3.5.23"
+    "vue": "^3.5.23",
+    "vue-router": "^4.6.3"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.1.16",
     "@vitejs/plugin-vue": "^6.0.1",
     "autoprefixer": "^10.4.21",
     "postcss": "^8.5.6",
+    "prettier": "^3.6.2",
     "sass": "^1.93.3",
     "tailwindcss": "^4.1.16",
     "typescript": "^5.9.3",

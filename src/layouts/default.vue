@@ -1,12 +1,11 @@
-<script setup lang="ts">
+<script lang="ts" setup>
 // Layout компонент
 </script>
 
 <template>
-  <div class="app">
-    <div class="app__container">
-      <h1 class="app__title">Translation Tool</h1>
-      <p class="app__description">Приложение для переводчиков</p>
+  <div class="tr">
+    <div class="tr__container">
+      <router-view />
     </div>
   </div>
 </template>
@@ -14,14 +13,16 @@
 <style lang="scss">
 @reference "tailwindcss";
 
-.app {
-  @apply min-h-screen;
+.tr {
+  @apply h-full;
   @apply bg-gray-50;
 
   &__container {
-    @apply max-w-6xl;
+    @apply h-full;
+    @apply max-w-11/12;
     @apply mx-auto;
     @apply px-4 py-8;
+    @apply text-center;
   }
 
   &__title {
@@ -34,4 +35,3 @@
   }
 }
 </style>
-

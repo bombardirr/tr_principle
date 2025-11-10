@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import DefaultLayout from './layouts/default.vue'
+// Главный компонент приложения
 </script>
 
 <template>
-  <DefaultLayout />
+  <router-view />
 </template>
 
