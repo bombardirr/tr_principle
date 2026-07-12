@@ -1,20 +1,88 @@
-@import "tailwindcss";
-
 * {
-  @apply m-0 p-0;
-  @apply box-border;
+  box-sizing: border-box;
 }
 
 html,
-body {
-  @apply h-full;
-}
-
-body {
-  @apply font-sans antialiased;
-}
-
+body,
 #app {
-  @apply h-full;
+  height: 100%;
+  margin: 0;
 }
 
+body {
+  font-family: "Segoe UI", "PT Sans", "Helvetica Neue", sans-serif;
+  -webkit-font-smoothing: antialiased;
+  background: var(--bg);
+  color: var(--text);
+}
+
+button,
+input,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+/* Dark (default) */
+html,
+html[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #0f1419;
+  --bg-grad: linear-gradient(160deg, #0f1419 0%, #151b24 50%, #121820 100%);
+  --surface: #1a222d;
+  --surface-2: #222b38;
+  --surface-soft: rgba(26, 34, 45, 0.92);
+  --topbar: rgba(18, 24, 32, 0.88);
+  --text: #e8eef5;
+  --text-muted: #9aa8b8;
+  --text-faint: #7a8798;
+  --border: rgba(232, 238, 245, 0.1);
+  --border-strong: rgba(232, 238, 245, 0.18);
+  --accent: #5b9fd4;
+  --accent-strong: #3d7eae;
+  --accent-text: #f2f7fb;
+  --ok: #7dbe8a;
+  --ok-bg: rgba(125, 190, 138, 0.12);
+  --warn: #d4a85a;
+  --danger: #e07070;
+  --danger-bg: rgba(224, 112, 112, 0.15);
+  --badge-bg: rgba(125, 190, 138, 0.15);
+  --badge-text: #9fd0a8;
+  --tag-bg: rgba(91, 159, 212, 0.22);
+  --tag-text: #b8d9f2;
+  --spinner-track: rgba(232, 238, 245, 0.12);
+  --filled-border: rgba(91, 159, 212, 0.45);
+  --saved-border: rgba(125, 190, 138, 0.4);
+  --dirty-border: rgba(212, 168, 90, 0.45);
+}
+
+html[data-theme="light"] {
+  color-scheme: light;
+  --bg: #f7f4ef;
+  --bg-grad: linear-gradient(160deg, #f7f4ef 0%, #eef2f6 45%, #e8eef5 100%);
+  --surface: #ffffff;
+  --surface-2: #f4f6f8;
+  --surface-soft: rgba(255, 255, 255, 0.9);
+  --topbar: rgba(255, 255, 255, 0.72);
+  --text: #1c2430;
+  --text-muted: #5a6573;
+  --text-faint: #7a8494;
+  --border: rgba(28, 36, 48, 0.08);
+  --border-strong: rgba(28, 36, 48, 0.15);
+  --accent: #2c5f8a;
+  --accent-strong: #2c5f8a;
+  --accent-text: #ffffff;
+  --ok: #2f5a2f;
+  --ok-bg: #e8f0e4;
+  --warn: #8a6a2f;
+  --danger: #a33;
+  --danger-bg: #fceaea;
+  --badge-bg: #e8f0e4;
+  --badge-text: #2f5a2f;
+  --tag-bg: #dce9f8;
+  --tag-text: #1a4a7a;
+  --spinner-track: rgba(28, 36, 48, 0.15);
+  --filled-border: rgba(44, 95, 138, 0.35);
+  --saved-border: rgba(47, 90, 47, 0.35);
+  --dirty-border: rgba(138, 106, 47, 0.45);
+}
