@@ -1,0 +1,3 @@
+# Private preview — do not index or crawl.
+User-agent: *
+Disallow: /

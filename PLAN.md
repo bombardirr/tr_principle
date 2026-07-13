@@ -18,6 +18,7 @@
 
 - [ ] Ручной чеклист в Word на реальных файлах
 - [ ] Статический деплой (мини-ПК / любой хостинг)
+  - nginx: `add_header X-Robots-Tag "noindex, nofollow, noarchive, nosnippet" always;` (вместе с `robots.txt` и meta в `index.html`)
 - [ ] Мелкий UX по результатам тестов
 
 ### Фаза B: Translation Memory
