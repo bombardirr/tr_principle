@@ -40,7 +40,7 @@
 
 **Приоритет 1 — то, что уже выявили тестами**
 
-- [ ] **Fragment / sub-segment match** — если сегмент длиннее записи TM, искать **вхождения** TM-фраз внутри сегмента (concordance-style), не только сравнение «вся строка ↔ вся строка»
+- [x] **Fragment / sub-segment match** — если сегмент длиннее записи TM, искать **вхождения** TM-фраз внутри сегмента (concordance-style), не только сравнение «вся строка ↔ вся строка»
   - MVP: разбивка source по `.?!…` + эвристика абзацев; для каждого фрагмента — exact/fuzzy по TM
   - UI: несколько подсказок или «лучший фрагмент» + %; в превью — подчёркивание только совпавшей части (позже)
   - Тест-кейс: «Вы нам нравитесь. … Вы нам нравитесь?» → match на каждое вхождение «Вы нам нравитесь.»
@@ -203,7 +203,7 @@ IndexedDB **всегда локальна** в браузере пользова
 
 1. Закрыть чеклист Word (A)
 2. ~~**B-local:** TM + TMX + match~~ ✅
-3. **B2:** fragment match + нормализация пунктуации + настраиваемый порог fuzzy
+3. ~~**B2:** fragment match + нормализация пунктуации + настраиваемый порог fuzzy~~ (fragment + punct ✅; порог — B2 p2)
 4. **D-lite:** Go API, postgres, docker local, auth, session_version, project lock, backup API
 5. **B+:** XLIFF 1.2; context match (101%); tag penalties
 6. SPA: login, offline outbox, feature flags, admin = Pro

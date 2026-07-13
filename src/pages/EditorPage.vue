@@ -13,6 +13,7 @@ import IconButton from '@/components/IconButton.vue'
 import EditorGlyph from '@/components/EditorGlyph.vue'
 import TooltipWrap from '@/components/TooltipWrap.vue'
 import { useProjectLease } from '@/composables/useProjectLease'
+import { useTmSettings } from '@/composables/useTmSettings'
 import { findTmMatch } from '@/tm/match'
 import { exportTmx, parseTmx } from '@/tm/tmx'
 import { listTmUnits, recordDoneSegmentsInTm, importTmUnits } from '@/storage/tmIdb'
@@ -49,6 +50,7 @@ let previewTimer: ReturnType<typeof setTimeout> | null = null
 let pageScrollSaveTimer: ReturnType<typeof setTimeout> | null = null
 const activeSegmentId = ref<string | null>(null)
 const projectLease = useProjectLease(() => props.id)
+const { settings: tmSettings, togglePunctuationMode: toggleTmPunctuation } = useTmSettings()
 const tmUnits = shallowRef<TmUnit[]>([])
 const tmImportInput = ref<HTMLInputElement | null>(null)
 
@@ -277,6 +279,11 @@ function tmMatchFor(seg: Segment): TmMatch | null {
     seg.source,
     record.value.meta.sourceLang,
     record.value.meta.targetLang,
+    {
+      punctuationMode: tmSettings.value.punctuationMode,
+      fuzzyMinScore: tmSettings.value.fuzzyMinScore,
+      enableFragments: tmSettings.value.enableFragments,
+    },
   )
   if (!match) return null
   if (seg.target.trim() === match.target.trim()) return null
@@ -525,6 +532,17 @@ async function goBack() {
           </IconButton>
           <IconButton :title="t('editor.importTmxHint')" @click="openTmxImport">
             <EditorGlyph name="upload-tmx" />
+          </IconButton>
+          <IconButton
+            :title="
+              tmSettings.punctuationMode === 'soft'
+                ? t('editor.tmPunctSoftHint')
+                : t('editor.tmPunctStrictHint')
+            "
+            :active="tmSettings.punctuationMode === 'soft'"
+            @click="toggleTmPunctuation()"
+          >
+            <EditorGlyph name="tm" />
           </IconButton>
           <input
             ref="tmImportInput"

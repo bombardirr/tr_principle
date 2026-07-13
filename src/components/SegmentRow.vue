@@ -70,9 +70,13 @@ const tmEnabled = computed(() => !!props.tmMatch && !filled.value)
 const tmTitle = computed(() => {
   if (!props.tmMatch || filled.value) return t('editor.tmUnavailable')
   const pct = Math.round(props.tmMatch.score * 100)
-  return props.tmMatch.kind === 'exact'
-    ? t('editor.tmApplyExact')
-    : t('editor.tmApplyFuzzy', { pct })
+  if (props.tmMatch.kind === 'exact') return t('editor.tmApplyExact')
+  if (props.tmMatch.kind === 'fragment') {
+    return props.tmMatch.score >= 1
+      ? t('editor.tmApplyFragmentExact')
+      : t('editor.tmApplyFragment', { pct })
+  }
+  return t('editor.tmApplyFuzzy', { pct })
 })
 
 function onApplyTmClick() {
