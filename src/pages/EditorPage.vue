@@ -2,12 +2,21 @@
 import { computed, nextTick, onMounted, onUnmounted, ref, shallowRef, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
+import MarqueeText from '@/components/MarqueeText.vue'
 import SegmentRow from '@/components/SegmentRow.vue'
 import DocxPreviewPanel from '@/components/DocxPreviewPanel.vue'
 import { buildTranslatedDocx, downloadBlob } from '@/docx/exportDocx'
 import { getProject, saveProject } from '@/storage/idb'
 import { readEditorScroll, restoreWindowScroll, writeEditorScroll } from '@/storage/editorScroll'
 import { packProjectFile } from '@/storage/projectFile'
+import IconButton from '@/components/IconButton.vue'
+import EditorGlyph from '@/components/EditorGlyph.vue'
+import TooltipWrap from '@/components/TooltipWrap.vue'
+import {
+  countDoneSegments,
+  finalizeSegmentStatus,
+  normalizeSegmentStatus,
+} from '@/utils/segmentStatus'
 import type { ProjectRecord, Segment } from '@/types/project'
 
 const props = defineProps<{ id: string }>()
@@ -34,15 +43,36 @@ let previewTimer: ReturnType<typeof setTimeout> | null = null
 let pageScrollSaveTimer: ReturnType<typeof setTimeout> | null = null
 const activeSegmentId = ref<string | null>(null)
 
-const done = computed(
-  () => record.value?.segments.filter((s) => s.target.trim() !== '').length ?? 0,
+const done = computed(() =>
+  record.value ? countDoneSegments(record.value.segments) : 0,
 )
 const total = computed(() => record.value?.segments.length ?? 0)
+
+const displayName = computed(() => {
+  const name = record.value?.meta.name ?? ''
+  return name.replace(/\.docx$/i, '') || name
+})
+
+const progressTitle = computed(() =>
+  t('editor.progress', { done: done.value, total: total.value }),
+)
+
+const saveStatusTitle = computed(() => {
+  if (saving.value) return t('editor.saving')
+  if (allSaved.value) return t('editor.autosaved')
+  return t('editor.unsavedPending')
+})
+
+const savePhase = computed(() => {
+  if (saving.value) return 'saving'
+  if (allSaved.value) return 'saved'
+  return 'pending'
+})
 
 function normalizeStatuses(segments: Segment[]): Segment[] {
   return segments.map((s) => ({
     ...s,
-    status: s.target.trim() ? 'done' : 'empty',
+    status: normalizeSegmentStatus(s),
   }))
 }
 
@@ -74,7 +104,7 @@ async function persistNow(): Promise<void> {
   clearSaveTimer()
   await saveProject(record.value)
   for (const s of record.value.segments) {
-    s.status = s.target.trim() ? 'done' : 'empty'
+    s.status = finalizeSegmentStatus(s)
   }
   allSaved.value = true
   error.value = ''
@@ -185,7 +215,10 @@ function scheduleSave() {
 function updateTarget(seg: Segment, value: string) {
   if (!record.value) return
   notice.value = ''
-  patchSegment(seg.id, { target: value, status: 'draft' })
+  patchSegment(seg.id, {
+    target: value,
+    status: value.trim() ? 'draft' : seg.status === 'done' ? 'draft' : 'empty',
+  })
   scheduleSave()
 }
 
@@ -196,10 +229,17 @@ function copySource(seg: Segment) {
   scheduleSave()
 }
 
-function clearTarget(seg: Segment) {
+function leaveEmpty(seg: Segment) {
   if (!record.value) return
   notice.value = ''
-  patchSegment(seg.id, { target: '', status: 'draft' })
+  patchSegment(seg.id, { target: '', status: 'done' })
+  scheduleSave()
+}
+
+function resetTarget(seg: Segment) {
+  if (!record.value) return
+  notice.value = ''
+  patchSegment(seg.id, { target: '', status: 'empty' })
   scheduleSave()
 }
 
@@ -217,8 +257,25 @@ async function withSaving<T>(fn: () => Promise<T>): Promise<T | undefined> {
 }
 
 function activateSegment(segId: string) {
+  if (activeSegmentId.value === segId) return
   activeSegmentId.value = segId
   scheduleScrollPersist()
+}
+
+function deactivateEditor() {
+  const el = document.activeElement
+  if (el instanceof HTMLElement && el.closest('.target-pane')) {
+    el.blur()
+  }
+  if (activeSegmentId.value === null) return
+  activeSegmentId.value = null
+  scheduleScrollPersist()
+}
+
+function onEditorPointerDown(e: PointerEvent) {
+  const target = e.target
+  if (target instanceof Element && target.closest('.target-pane')) return
+  deactivateEditor()
 }
 
 function schedulePreviewRefresh() {
@@ -284,42 +341,87 @@ async function goBack() {
 </script>
 
 <template>
-  <section v-if="record" class="editor-page">
-    <div class="toolbar">
-      <button type="button" class="ghost" @click="goBack">{{ t('editor.back') }}</button>
-      <h1>{{ record.meta.name }}</h1>
-      <span class="progress">{{ t('editor.progress', { done, total }) }}</span>
-      <span v-if="saving" class="save-status saving" aria-live="polite">
-        <span class="spinner" aria-hidden="true" />
-        {{ t('editor.saving') }}
-      </span>
-      <span v-else-if="allSaved" class="save-status saved" aria-live="polite">
-        {{ t('editor.autosaved') }}
-      </span>
-      <div class="spacer" />
-      <button
-        type="button"
-        class="toggle"
-        :class="{ active: previewEnabled }"
-        :title="t('editor.previewHint')"
-        @click="togglePreview"
-      >
-        {{ previewEnabled ? t('editor.previewOff') : t('editor.previewOn') }}
-      </button>
-      <button
-        v-if="previewEnabled"
-        type="button"
-        class="ghost"
-        :disabled="!record"
-        @click="refreshPreviewNow"
-      >
-        {{ t('editor.previewRefresh') }}
-      </button>
-      <button type="button" @click="downloadProject">{{ t('editor.saveProject') }}</button>
-      <button type="button" class="primary" @click="exportDocx">
-        {{ t('editor.exportDocx') }}
-      </button>
-    </div>
+  <section v-if="record" class="editor-page" @pointerdown.capture="onEditorPointerDown">
+    <Teleport to="#app-header-center">
+      <div class="toolbar-bar">
+        <div class="toolbar-zone toolbar-zone--nav">
+          <IconButton :title="t('editor.backHint')" @click="goBack">
+            <EditorGlyph name="back" />
+          </IconButton>
+        </div>
+        <span class="toolbar-sep" aria-hidden="true" />
+        <div class="toolbar-zone toolbar-zone--doc">
+          <h1 class="doc-title">
+            <MarqueeText :text="displayName" max-width="100%" />
+          </h1>
+          <TooltipWrap class="doc-format" :text="t('editor.docFormatHint')">
+            {{ t('editor.docFormat') }}
+          </TooltipWrap>
+        </div>
+        <span class="toolbar-sep" aria-hidden="true" />
+        <div class="toolbar-zone toolbar-zone--meta">
+          <span class="progress-group">
+            <TooltipWrap as="span" class="progress" :text="progressTitle">
+              {{ t('editor.progressShort', { done, total }) }}
+            </TooltipWrap>
+            <TooltipWrap
+              as="span"
+              class="save-indicator"
+              :class="savePhase"
+              :text="saveStatusTitle"
+              aria-live="polite"
+              :aria-label="saveStatusTitle"
+            >
+              <Transition name="save-state" mode="out-in">
+                <span v-if="savePhase === 'saving'" key="saving" class="save-spinner-wrap">
+                  <span class="save-spinner" aria-hidden="true" />
+                  <span class="save-orbit" aria-hidden="true" />
+                </span>
+                <svg
+                  v-else-if="savePhase === 'saved'"
+                  key="saved"
+                  class="save-check"
+                  viewBox="0 0 16 16"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2.25"
+                  aria-hidden="true"
+                >
+                  <path stroke-linecap="round" stroke-linejoin="round" d="m4.5 8.25 2.75 2.75L11.5 5.5" />
+                </svg>
+                <span v-else key="pending" class="save-pending-wrap" aria-hidden="true">
+                  <span class="save-pending-dot" />
+                  <span class="save-pending-ring" />
+                </span>
+              </Transition>
+            </TooltipWrap>
+          </span>
+        </div>
+        <span class="toolbar-sep" aria-hidden="true" />
+        <div class="toolbar-zone toolbar-zone--actions">
+          <IconButton
+            :title="previewEnabled ? t('editor.previewOffHint') : t('editor.previewOnHint')"
+            :active="previewEnabled"
+            @click="togglePreview"
+          >
+            <EditorGlyph :name="previewEnabled ? 'preview-off' : 'preview'" />
+          </IconButton>
+          <IconButton
+            :title="t('editor.previewRefreshHint')"
+            :disabled="!record || !previewEnabled"
+            @click="refreshPreviewNow"
+          >
+            <EditorGlyph name="refresh" />
+          </IconButton>
+          <IconButton :title="t('editor.saveProjectHint')" @click="downloadProject">
+            <EditorGlyph name="save" />
+          </IconButton>
+          <IconButton :title="t('editor.exportDocxHint')" @click="exportDocx">
+            <EditorGlyph name="export" />
+          </IconButton>
+        </div>
+      </div>
+    </Teleport>
 
     <p v-if="error" class="error">{{ error }}</p>
     <p v-else-if="notice" class="notice">{{ notice }}</p>
@@ -334,7 +436,8 @@ async function goBack() {
           :active="activeSegmentId === seg.id"
           @update-target="updateTarget(seg, $event)"
           @copy-source="copySource(seg)"
-          @clear-target="clearTarget(seg)"
+          @leave-empty="leaveEmpty(seg)"
+          @reset-target="resetTarget(seg)"
           @activate="activateSegment(seg.id)"
         />
       </div>
@@ -357,53 +460,175 @@ async function goBack() {
   max-width: none;
 }
 
-.toolbar {
-  display: flex;
-  flex-wrap: wrap;
+.toolbar-bar {
+  display: inline-flex;
   align-items: center;
-  gap: 0.65rem;
-  margin-bottom: 1rem;
-  position: sticky;
-  top: 0;
-  z-index: 2;
-  padding: 0.65rem 0;
-  background: var(--bg);
+  max-width: min(52rem, calc(100vw - 12rem));
+  padding: 0.15rem 0;
 }
 
-h1 {
+.toolbar-zone {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding-inline: 0.35rem;
+  min-width: 0;
+}
+
+.toolbar-zone--nav {
+  padding-inline-start: 0.15rem;
+}
+
+.toolbar-zone--doc {
+  gap: 0.45rem;
+  flex: 1 1 auto;
+  max-width: 13.5rem;
+}
+
+.toolbar-zone--meta {
+  gap: 0.3rem;
+  flex: 0 0 auto;
+  font-variant-numeric: tabular-nums;
+}
+
+.toolbar-zone--actions {
+  gap: 0.05rem;
+  padding-inline-end: 0.1rem;
+}
+
+.toolbar-sep {
+  flex: 0 0 1px;
+  align-self: stretch;
+  margin-block: 0.4rem;
+  background: var(--border);
+}
+
+h1.doc-title {
   margin: 0;
-  font-size: 1.15rem;
+  min-width: 0;
+  flex: 1 1 auto;
+  font-size: 1rem;
+  font-weight: 600;
   color: var(--text);
 }
 
+.doc-format,
 .progress {
-  font-size: 0.85rem;
+  flex: 0 0 auto;
+  font-size: 0.68rem;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  font-variant-numeric: tabular-nums;
   color: var(--text-muted);
 }
 
-.save-status {
+.progress-group {
   display: inline-flex;
   align-items: center;
-  gap: 0.4rem;
-  font-size: 0.85rem;
+  gap: 0.35rem;
+  flex: 0 0 auto;
 }
 
-.save-status.saving {
-  color: var(--text-muted);
+.save-indicator {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.25rem;
+  height: 1.25rem;
+  flex: 0 0 1.25rem;
+  color: var(--accent);
 }
 
-.save-status.saved {
+.save-indicator.saved {
   color: var(--ok);
-  font-weight: 600;
 }
 
-.spinner {
-  width: 0.9rem;
-  height: 0.9rem;
-  border: 2px solid var(--spinner-track);
-  border-top-color: var(--accent);
+.save-pending-wrap,
+.save-spinner-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.15rem;
+  height: 1.15rem;
+}
+
+.save-pending-dot {
+  width: 0.52rem;
+  height: 0.52rem;
   border-radius: 50%;
-  animation: spin 0.7s linear infinite;
+  background: currentColor;
+  animation: save-dot-breathe 1.05s ease-in-out infinite;
+}
+
+.save-pending-ring,
+.save-orbit {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 1.5px solid currentColor;
+  opacity: 0;
+  animation: save-orbit 1.05s ease-out infinite;
+}
+
+.save-spinner {
+  width: 1rem;
+  height: 1rem;
+  border: 2px solid transparent;
+  border-top-color: currentColor;
+  border-right-color: currentColor;
+  border-radius: 50%;
+  animation: spin 0.5s linear infinite;
+}
+
+.save-orbit {
+  inset: -1px;
+  animation-duration: 0.85s;
+}
+
+.save-check {
+  width: 1.15rem;
+  height: 1.15rem;
+  display: block;
+  animation: save-check-pop 0.34s cubic-bezier(0.34, 1.2, 0.64, 1);
+}
+
+.save-state-enter-active,
+.save-state-leave-active {
+  transition:
+    opacity 0.2s ease,
+    transform 0.2s cubic-bezier(0.34, 1.1, 0.64, 1);
+}
+
+.save-state-enter-from,
+.save-state-leave-to {
+  opacity: 0;
+  transform: scale(0.55);
+}
+
+@keyframes save-dot-breathe {
+  0%,
+  100% {
+    transform: scale(0.82);
+    opacity: 0.8;
+  }
+  50% {
+    transform: scale(1.18);
+    opacity: 1;
+  }
+}
+
+@keyframes save-orbit {
+  0% {
+    transform: scale(0.5);
+    opacity: 0.65;
+  }
+  100% {
+    transform: scale(1.45);
+    opacity: 0;
+  }
 }
 
 @keyframes spin {
@@ -412,28 +637,15 @@ h1 {
   }
 }
 
-.spacer {
-  flex: 1;
-}
-
-button {
-  border: 1px solid var(--border-strong);
-  background: var(--surface);
-  color: var(--text);
-  border-radius: 8px;
-  padding: 0.4rem 0.75rem;
-  cursor: pointer;
-  font-size: 0.9rem;
-}
-
-button.primary {
-  background: var(--accent-strong);
-  border-color: var(--accent-strong);
-  color: var(--accent-text);
-}
-
-button.ghost {
-  background: transparent;
+@keyframes save-check-pop {
+  from {
+    transform: scale(0.4);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
 }
 
 .error {
@@ -465,23 +677,24 @@ button.ghost {
 }
 
 .editor-layout.with-preview {
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: minmax(0, 1fr) auto;
 }
 
 .editor-main {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
   min-width: 0;
   width: 100%;
-}
-
-button.toggle.active {
-  border-color: var(--accent);
-  color: var(--accent);
-  background: rgba(91, 159, 212, 0.12);
 }
 
 @media (max-width: 1100px) {
   .editor-layout.with-preview {
     grid-template-columns: 1fr;
+  }
+
+  .editor-layout.with-preview :deep(.preview-panel) {
+    justify-self: center;
   }
 }
 </style>

@@ -16,6 +16,8 @@ export interface Segment {
   target: string
   status: SegmentStatus
   inTable: boolean
+  inTextbox: boolean
+  inCaption: boolean
   spans: RunSpan[]
 }
 

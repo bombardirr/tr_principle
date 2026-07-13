@@ -50,6 +50,33 @@ export function isInsideTable(para: Element): boolean {
   return false
 }
 
+export function isInsideTextbox(para: Element): boolean {
+  let n: Element | null = para.parentElement
+  while (n) {
+    const name = localName(n)
+    if (name === 'txbxContent' || name === 'textbox') return true
+    n = n.parentElement
+  }
+  return false
+}
+
+function paragraphStyleVal(para: Element): string | null {
+  for (const child of childrenElements(para)) {
+    if (localName(child) !== 'pPr') continue
+    for (const pPrChild of childrenElements(child)) {
+      if (localName(pPrChild) !== 'pStyle') continue
+      return pPrChild.getAttribute('w:val') ?? pPrChild.getAttribute('val')
+    }
+  }
+  return null
+}
+
+export function isCaptionParagraph(para: Element): boolean {
+  const style = paragraphStyleVal(para)
+  if (!style) return false
+  return /caption/i.test(style)
+}
+
 export function getTextNodes(run: Element): Element[] {
   const out: Element[] = []
   const walk = (el: Element) => {

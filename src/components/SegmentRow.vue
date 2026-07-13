@@ -2,7 +2,11 @@
 import { computed, nextTick, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { Segment } from '@/types/project'
+import IconButton from './IconButton.vue'
+import EditorGlyph from './EditorGlyph.vue'
 import TaggedEditor from './TaggedEditor.vue'
+import { isSegmentDone } from '@/utils/segmentStatus'
+import { resolveSegmentKinds, type SegmentKind } from '@/utils/segmentKind'
 
 const props = defineProps<{
   segment: Segment
@@ -12,26 +16,27 @@ const props = defineProps<{
 const emit = defineEmits<{
   updateTarget: [value: string]
   copySource: []
-  clearTarget: []
+  leaveEmpty: []
+  resetTarget: []
   activate: []
 }>()
 
 const { t, locale } = useI18n()
-const targetEditor = ref<{ focus: () => void; sync: () => void } | null>(null)
+const targetEditor = ref<{ focus: () => void; sync: () => void; blur: () => void } | null>(null)
 
-const labels = computed(() => {
-  const out: string[] = []
-  if (props.segment.inTable) out.push(t('editor.labelTable'))
-  if (props.segment.storyKey.startsWith('header:')) out.push(t('editor.labelHeader'))
-  if (props.segment.storyKey.startsWith('footer:')) out.push(t('editor.labelFooter'))
-  return out
-})
+const kinds = computed(() => resolveSegmentKinds(props.segment))
 
-const filled = computed(() => props.segment.target.trim() !== '')
+const filled = computed(() => isSegmentDone(props.segment))
 
-const translationLabel = computed(() =>
-  filled.value ? t('status.hasTranslation') : t('status.empty'),
-)
+const displayId = computed(() => props.segment.id.replace(/^seg-/, ''))
+
+function onTargetFocusIn() {
+  emit('activate')
+}
+
+function kindClass(kind: SegmentKind) {
+  return `seg-kind--${kind}`
+}
 
 function onCopyClick() {
   emit('copySource')
@@ -41,75 +46,104 @@ function onCopyClick() {
   })
 }
 
-function onClearClick() {
-  emit('clearTarget')
+function onLeaveEmptyClick() {
+  emit('leaveEmpty')
   nextTick(() => {
     targetEditor.value?.sync()
-    targetEditor.value?.focus()
+    targetEditor.value?.blur()
   })
 }
 
-function onTargetActivate() {
-  emit('activate')
+function onResetClick() {
+  emit('resetTarget')
+  nextTick(() => {
+    targetEditor.value?.sync()
+    targetEditor.value?.blur()
+  })
 }
 </script>
 
 <template>
   <article class="row" :class="{ active }">
     <div class="meta">
-      <span class="id">{{ segment.id }}</span>
-      <span v-for="l in labels" :key="l" class="badge">{{ l }}</span>
-      <span class="status translation" :class="filled ? 'has' : 'none'">{{ translationLabel }}</span>
-      <div class="meta-actions">
-        <button type="button" class="action-btn" :title="t('editor.copySourceHint')" @click="onCopyClick">
-          {{ t('editor.copySource') }}
-        </button>
-        <button type="button" class="action-btn" :title="t('editor.clearTargetHint')" @click="onClearClick">
-          {{ t('editor.clearTarget') }}
-        </button>
-      </div>
-    </div>
-    <div class="cols">
-      <div class="col">
-        <div class="col-title">{{ t('editor.source') }}</div>
-        <div class="pane">
-          <TaggedEditor
-            :model-value="segment.source"
-            :spans="segment.spans"
-            :locale="locale"
-            :editable="false"
-          />
-        </div>
-      </div>
-      <div class="col">
-        <div class="col-title">{{ t('editor.target') }}</div>
-        <div
-          class="pane target-pane"
-          :class="{ filled }"
-          @mousedown.self="onTargetActivate"
-          @focusin="onTargetActivate"
+      <span class="seg-id">{{ displayId }}</span>
+      <template v-if="kinds.length">
+        <span class="meta-sep" aria-hidden="true">·</span>
+        <span
+          v-for="kind in kinds"
+          :key="kind"
+          class="seg-kind"
+          :class="kindClass(kind)"
         >
-          <TaggedEditor
-            ref="targetEditor"
-            :model-value="segment.target"
-            :spans="segment.spans"
-            :locale="locale"
-            :placeholder="t('editor.placeholder')"
-            @update:model-value="emit('updateTarget', $event)"
-          />
-        </div>
+          {{ t(`editor.kind.${kind}`) }}
+        </span>
+      </template>
+    </div>
+
+    <div class="segment-workspace">
+      <div class="pane source-pane" :class="{ filled }">
+        <TaggedEditor
+          :model-value="segment.source"
+          :spans="segment.spans"
+          :locale="locale"
+          :editable="false"
+        />
+      </div>
+
+      <div class="mid-toolbar" role="toolbar" :aria-label="displayId">
+        <IconButton
+          :title="t('editor.copySourceHint')"
+          @mousedown.prevent
+          @click="onCopyClick"
+        >
+          <EditorGlyph name="copy" />
+        </IconButton>
+        <IconButton
+          :title="t('editor.leaveEmptyHint')"
+          :active="filled"
+          @mousedown.prevent
+          @click="onLeaveEmptyClick"
+        >
+          <EditorGlyph name="leave-empty" />
+        </IconButton>
+        <IconButton
+          :title="t('editor.resetTargetHint')"
+          @mousedown.prevent
+          @click="onResetClick"
+        >
+          <EditorGlyph name="reset" />
+        </IconButton>
+      </div>
+
+      <div
+        class="pane target-pane"
+        :class="{ filled }"
+        @mousedown.self="emit('activate')"
+        @focusin="onTargetFocusIn"
+      >
+        <TaggedEditor
+          ref="targetEditor"
+          :model-value="segment.target"
+          :spans="segment.spans"
+          :locale="locale"
+          :placeholder="t('editor.placeholder')"
+          @update:model-value="emit('updateTarget', $event)"
+        />
       </div>
     </div>
   </article>
 </template>
 
 <style scoped lang="scss">
+$row-grid: 1fr auto 1fr;
+$row-gap: 0.65rem;
+$toolbar-icon-size: 1.75rem;
+$toolbar-col-width: 2rem;
+
 .row {
-  background: var(--surface-soft);
-  border: 1px solid var(--border);
   border-radius: 12px;
-  padding: 0.85rem 1rem 1rem;
-  margin-bottom: 0.75rem;
+  padding: 0.85rem 1rem;
+  margin-bottom: 0;
 }
 
 .row.active {
@@ -119,79 +153,99 @@ function onTargetActivate() {
 .meta {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.4rem;
   align-items: center;
-  margin-bottom: 0.55rem;
+  gap: 0.45rem;
+  margin-bottom: 0.45rem;
   font-size: 0.8rem;
-  color: var(--text-muted);
 }
 
-.status.translation.has {
-  color: var(--ok);
-}
-
-.status.translation.none {
-  color: var(--text-muted);
-}
-
-.badge {
-  background: var(--badge-bg);
-  color: var(--badge-text);
-  border-radius: 999px;
-  padding: 0.1rem 0.5rem;
-}
-
-.meta-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.35rem;
-  margin-left: auto;
-}
-
-.action-btn {
-  border: 1px solid var(--border-strong);
-  background: var(--surface);
-  color: var(--text);
-  border-radius: 6px;
-  padding: 0.2rem 0.55rem;
+.seg-id {
   font-size: 0.75rem;
-  cursor: pointer;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
 }
 
-.action-btn:hover {
-  border-color: var(--accent);
-  color: var(--accent);
+.meta-sep {
+  color: var(--border-strong);
+  font-weight: 600;
+  line-height: 1;
+  user-select: none;
 }
 
-.cols {
+.seg-kind {
+  font-size: 0.68rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.seg-kind--table {
+  color: var(--kind-table);
+}
+
+.seg-kind--header {
+  color: var(--kind-header);
+}
+
+.seg-kind--footer {
+  color: var(--kind-footer);
+}
+
+.seg-kind--footnote {
+  color: var(--kind-footnote);
+}
+
+.seg-kind--endnote {
+  color: var(--kind-endnote);
+}
+
+.seg-kind--comment {
+  color: var(--kind-comment);
+}
+
+.seg-kind--textbox {
+  color: var(--kind-textbox);
+}
+
+.seg-kind--caption {
+  color: var(--kind-caption);
+}
+
+.segment-workspace {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 0.85rem;
+  grid-template-columns: $row-grid;
+  column-gap: $row-gap;
   align-items: stretch;
 }
 
-.col {
+.mid-toolbar {
   display: flex;
   flex-direction: column;
-  min-width: 0;
-  min-height: 0;
+  justify-content: center;
+  align-items: center;
+  gap: 0.35rem;
+  width: $toolbar-col-width;
+  justify-self: center;
+  padding: 0.2rem 0;
+  align-self: center;
 }
 
-.col-title {
-  flex: 0 0 auto;
-  font-size: 0.75rem;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--text-faint);
-  margin-bottom: 0.35rem;
+.mid-toolbar :deep(.icon-btn) {
+  width: $toolbar-icon-size;
+  height: $toolbar-icon-size;
+  border-radius: 6px;
+}
+
+.mid-toolbar :deep(.icon-btn.active) {
+  color: var(--accent);
 }
 
 .pane {
-  flex: 1 1 auto;
   width: 100%;
+  min-width: 0;
   box-sizing: border-box;
-  background: var(--surface-2);
-  border: 1px solid var(--border-strong);
   border-radius: 8px;
   padding: 0.7rem 0.8rem;
   line-height: 1.5;
@@ -202,21 +256,17 @@ function onTargetActivate() {
   flex-direction: column;
 }
 
+.source-pane {
+  background: var(--surface-2);
+}
+
 .target-pane {
   cursor: text;
+  background: var(--surface-2);
 }
 
-.target-pane.filled {
+.pane.filled {
   background: var(--target-filled-bg);
-  border-color: var(--target-filled-border);
-}
-
-.target-pane:focus-within {
-  border-color: var(--accent);
-}
-
-.target-pane.filled:focus-within {
-  border-color: var(--ok);
 }
 
 .pane :deep(.tagged-wrap) {
@@ -231,13 +281,32 @@ function onTargetActivate() {
 }
 
 @media (max-width: 800px) {
-  .cols {
-    grid-template-columns: 1fr;
+  .meta {
+    margin-bottom: 0.35rem;
   }
 
-  .meta-actions {
-    margin-left: 0;
-    width: 100%;
+  .segment-workspace {
+    grid-template-columns: 1fr;
+    row-gap: 0.45rem;
+  }
+
+  .mid-toolbar {
+    flex-direction: row;
+    width: auto;
+    justify-content: center;
+    padding: 0.15rem 0;
+  }
+
+  .segment-workspace .source-pane {
+    order: 1;
+  }
+
+  .segment-workspace .mid-toolbar {
+    order: 2;
+  }
+
+  .segment-workspace .target-pane {
+    order: 3;
   }
 }
 </style>

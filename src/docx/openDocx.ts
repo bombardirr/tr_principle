@@ -19,11 +19,19 @@ async function loadStories(zip: JSZip): Promise<StoryFile[]> {
   }
   stories.push({ key: 'document', path: 'word/document.xml', xml: documentXml })
 
-  const names = Object.keys(zip.files).filter(
-    (n) =>
-      !zip.files[n]!.dir &&
-      (n.match(/^word\/header\d+\.xml$/i) || n.match(/^word\/footer\d+\.xml$/i)),
-  )
+  const extraStories: { key: string; pattern: RegExp }[] = [
+    { key: 'footnotes', pattern: /^word\/footnotes\.xml$/i },
+    { key: 'endnotes', pattern: /^word\/endnotes\.xml$/i },
+    { key: 'comments', pattern: /^word\/comments\.xml$/i },
+  ]
+
+  const names = Object.keys(zip.files).filter((n) => {
+    if (zip.files[n]!.dir) return false
+    if (n.match(/^word\/header\d+\.xml$/i) || n.match(/^word\/footer\d+\.xml$/i)) {
+      return true
+    }
+    return extraStories.some((s) => s.pattern.test(n))
+  })
   names.sort()
 
   for (const path of names) {
@@ -34,8 +42,15 @@ async function loadStories(zip: JSZip): Promise<StoryFile[]> {
     const footerMatch = base.match(/^footer(\d+)\.xml$/)
     if (headerMatch) {
       stories.push({ key: `header:${headerMatch[1]}`, path, xml })
-    } else if (footerMatch) {
+      continue
+    }
+    if (footerMatch) {
       stories.push({ key: `footer:${footerMatch[1]}`, path, xml })
+      continue
+    }
+    const extra = extraStories.find((s) => s.pattern.test(path))
+    if (extra) {
+      stories.push({ key: extra.key, path, xml })
     }
   }
 

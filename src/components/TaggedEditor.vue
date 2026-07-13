@@ -2,6 +2,8 @@
 import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import type { RunSpan } from '@/types/project'
 import { lookForTag } from '@/docx/tagLook'
+import AppTooltip from '@/components/AppTooltip.vue'
+import { useAnchoredTooltip } from '@/composables/useAnchoredTooltip'
 
 const props = withDefaults(
   defineProps<{
@@ -25,12 +27,7 @@ let editor: HTMLDivElement | null = null
 let focused = false
 let hideTimer: ReturnType<typeof setTimeout> | null = null
 
-const tip = ref({
-  show: false,
-  text: '',
-  x: 0,
-  y: 0,
-})
+const { tip, tooltipRef, showAtAnchor, hide: hideTip } = useAnchoredTooltip()
 
 function escapeHtml(s: string): string {
   return s
@@ -123,7 +120,7 @@ function onFocus() {
 
 function onBlur() {
   focused = false
-  hideTip()
+  onHideTip()
   paint(true)
 }
 
@@ -133,32 +130,29 @@ function focus() {
   placeCaretEnd()
 }
 
+function blur() {
+  editor?.blur()
+}
+
 /** Force model → DOM (after programmatic target changes). */
 function sync() {
   paint(true)
   if (focused) placeCaretEnd()
 }
 
-defineExpose({ focus, sync })
+defineExpose({ focus, sync, blur })
 
-function showTipFor(tag: HTMLElement) {
+async function showTipFor(tag: HTMLElement) {
   if (hideTimer) {
     clearTimeout(hideTimer)
     hideTimer = null
   }
   const text = tag.getAttribute('data-tip') ?? ''
-  if (!text) return
-  const rect = tag.getBoundingClientRect()
-  tip.value = {
-    show: true,
-    text,
-    x: rect.left + rect.width / 2,
-    y: rect.top - 8,
-  }
+  await showAtAnchor(tag, text)
 }
 
-function hideTip() {
-  tip.value.show = false
+function onHideTip() {
+  hideTip()
 }
 
 function onOver(e: MouseEvent) {
@@ -175,11 +169,11 @@ function onOut(e: MouseEvent) {
   if (!tag) return
   const related = e.relatedTarget
   if (related instanceof Node && tag.contains(related)) return
-  hideTimer = setTimeout(hideTip, 80)
+  hideTimer = setTimeout(onHideTip, 80)
 }
 
 function onScroll() {
-  if (tip.value.show) hideTip()
+  if (tip.value.visible) onHideTip()
 }
 
 onMounted(() => {
@@ -225,14 +219,15 @@ watch(
   <div class="tagged-wrap">
     <!-- Keep this node childless in the Vue tree -->
     <div ref="host" class="tagged-host" />
-    <div
-      class="tag-tooltip"
-      :class="{ visible: tip.show }"
-      :style="{ left: `${tip.x}px`, top: `${tip.y}px` }"
-      role="tooltip"
-    >
-      {{ tip.text }}
-    </div>
+    <AppTooltip
+      ref="tooltipRef"
+      :text="tip.text"
+      :visible="tip.visible"
+      :ready="tip.ready"
+      :x="tip.x"
+      :y="tip.y"
+      :placement="tip.placement"
+    />
   </div>
 </template>
 
@@ -250,40 +245,6 @@ watch(
   flex: 1 1 auto;
   width: 100%;
   min-height: 4.5rem;
-}
-
-.tag-tooltip {
-  position: fixed;
-  z-index: 9999;
-  transform: translate(-50%, -100%);
-  max-width: 260px;
-  padding: 0.35rem 0.6rem;
-  border-radius: 8px;
-  border: 1px solid var(--border-strong);
-  background: var(--surface);
-  color: var(--text);
-  font-size: 0.78rem;
-  line-height: 1.35;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
-  pointer-events: none;
-  white-space: normal;
-  opacity: 0;
-  visibility: hidden;
-}
-
-.tag-tooltip.visible {
-  opacity: 1;
-  visibility: visible;
-}
-
-.tag-tooltip::after {
-  content: '';
-  position: absolute;
-  left: 50%;
-  top: 100%;
-  transform: translateX(-50%);
-  border: 6px solid transparent;
-  border-top-color: var(--surface);
 }
 </style>
 

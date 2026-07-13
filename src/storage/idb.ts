@@ -1,5 +1,6 @@
 import { openDB, type DBSchema, type IDBPDatabase } from 'idb'
 import type { ProjectMeta, ProjectRecord } from '@/types/project'
+import { countDoneSegments } from '@/utils/segmentStatus'
 import { copyArrayBuffer } from '@/utils/buffer'
 
 interface CatDb extends DBSchema {
@@ -51,6 +52,8 @@ export function cloneProjectRecord(record: ProjectRecord): ProjectRecord {
       target: s.target,
       status: s.status,
       inTable: s.inTable,
+      inTextbox: s.inTextbox ?? false,
+      inCaption: s.inCaption ?? false,
       spans: s.spans.map((sp) => ({
         runIndices: [...sp.runIndices],
         fingerprint: sp.fingerprint,
@@ -78,7 +81,7 @@ export async function saveProject(record: ProjectRecord): Promise<void> {
   const clone = cloneProjectRecord(record)
   clone.meta.updatedAt = new Date().toISOString()
   clone.meta.segmentCount = clone.segments.length
-  clone.meta.doneCount = clone.segments.filter((s) => s.target.trim() !== '').length
+  clone.meta.doneCount = countDoneSegments(clone.segments)
 
   // keep caller in sync with recount
   record.meta.updatedAt = clone.meta.updatedAt

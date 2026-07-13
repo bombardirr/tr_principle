@@ -76,11 +76,14 @@ export function coerceTargetTags(source: string, target: string): string {
   return out
 }
 
-export function prepareSegmentsForExport<T extends { source: string; target: string }>(
-  segments: T[],
-): T[] {
+import type { Segment } from '@/types/project'
+
+export function prepareSegmentsForExport(segments: Segment[]): Segment[] {
   return segments.map((s) => ({
     ...s,
-    target: coerceTargetTags(s.source, s.target),
+    target:
+      s.status === 'done' && s.target.trim() === ''
+        ? s.target
+        : coerceTargetTags(s.source, s.target),
   }))
 }

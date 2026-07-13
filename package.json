@@ -1,7 +1,7 @@
 {
   "name": "tr_principle",
   "version": "1.0.0",
-  "description": "Веб-приложение для переводчиков - аналог Trados.",
+  "description": "Веб-CAT для перевода DOCX в браузере с сохранением разметки.",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -24,6 +24,7 @@
   },
   "homepage": "https://github.com/bombardirr/tr_principle#readme",
   "dependencies": {
+    "@fontsource/ibm-plex-sans": "^5.2.8",
     "docx-preview": "^0.4.0",
     "idb": "^8.0.3",
     "jszip": "^3.10.1",

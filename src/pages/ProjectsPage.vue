@@ -10,6 +10,8 @@ import {
   saveProject,
 } from '@/storage/idb'
 import { unpackProjectFile } from '@/storage/projectFile'
+import IconButton from '@/components/IconButton.vue'
+import EditorGlyph from '@/components/EditorGlyph.vue'
 import type { ProjectMeta } from '@/types/project'
 
 const { t } = useI18n()
@@ -20,6 +22,7 @@ const error = ref('')
 const busy = ref(false)
 const docxInput = ref<HTMLInputElement | null>(null)
 const projectInput = ref<HTMLInputElement | null>(null)
+const pendingDeleteId = ref<string | null>(null)
 
 async function refresh() {
   projects.value = await listProjects()
@@ -83,9 +86,17 @@ async function onProjectFileSelected(e: Event) {
   }
 }
 
-async function remove(meta: ProjectMeta) {
-  if (!confirm(t('projects.confirmDelete', { name: meta.name }))) return
+function requestDelete(id: string) {
+  pendingDeleteId.value = id
+}
+
+function cancelDelete() {
+  pendingDeleteId.value = null
+}
+
+async function confirmRemove(meta: ProjectMeta) {
   await deleteProject(meta.id)
+  if (pendingDeleteId.value === meta.id) pendingDeleteId.value = null
   await refresh()
 }
 
@@ -132,21 +143,35 @@ function formatDate(iso: string) {
 
     <ul class="list">
       <li v-for="p in projects" :key="p.id" class="item">
-        <div>
-          <router-link class="name" :to="{ name: 'editor', params: { id: p.id } }">
-            {{ p.name }}
-          </router-link>
-          <div class="sub">
+        <router-link class="item-link" :to="{ name: 'editor', params: { id: p.id } }">
+          <span class="name">{{ p.name }}</span>
+          <span class="sub">
             {{ t('projects.segments', { done: p.doneCount, total: p.segmentCount }) }}
             ·
             {{ t('projects.updated', { date: formatDate(p.updatedAt) }) }}
+          </span>
+        </router-link>
+        <div class="item-delete" @click.stop>
+          <div v-if="pendingDeleteId === p.id" class="delete-confirm">
+            <IconButton
+              danger
+              :title="t('projects.confirmDelete', { name: p.name })"
+              @click="confirmRemove(p)"
+            >
+              <EditorGlyph name="check" />
+            </IconButton>
+            <IconButton :title="t('projects.deleteCancel')" @click="cancelDelete">
+              <EditorGlyph name="close" />
+            </IconButton>
           </div>
-        </div>
-        <div class="item-actions">
-          <router-link class="link-btn" :to="{ name: 'editor', params: { id: p.id } }">
-            {{ t('projects.open') }}
-          </router-link>
-          <button type="button" class="danger" @click="remove(p)">{{ t('projects.delete') }}</button>
+          <IconButton
+            v-else
+            danger
+            :title="t('projects.delete')"
+            @click="requestDelete(p.id)"
+          >
+            <EditorGlyph name="trash" />
+          </IconButton>
         </div>
       </li>
     </ul>
@@ -176,9 +201,8 @@ h1 {
   gap: 0.5rem;
 }
 
-button,
-.link-btn {
-  border: 1px solid var(--border-strong);
+button {
+  border: none;
   background: var(--surface);
   border-radius: 8px;
   padding: 0.45rem 0.85rem;
@@ -190,12 +214,7 @@ button,
 
 button.primary {
   background: var(--accent-strong);
-  border-color: var(--accent-strong);
   color: var(--accent-text);
-}
-
-button.danger {
-  color: var(--danger);
 }
 
 .error {
@@ -217,30 +236,46 @@ button.danger {
 
 .item {
   display: flex;
-  justify-content: space-between;
-  gap: 1rem;
   align-items: center;
+  gap: 0.35rem;
   background: var(--surface-soft);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: 0.9rem 1rem;
-  margin-bottom: 0.6rem;
+  border-radius: 10px;
+  padding: 0.5rem 0.35rem 0.5rem 0.65rem;
+  margin-bottom: 0.45rem;
+  transition: background 0.15s ease;
+}
+
+.item:hover {
+  background: var(--surface);
+}
+
+.item-link {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  text-decoration: none;
+  color: inherit;
 }
 
 .name {
   font-weight: 600;
   color: var(--text);
-  text-decoration: none;
 }
 
 .sub {
   font-size: 0.85rem;
   color: var(--text-muted);
-  margin-top: 0.2rem;
 }
 
-.item-actions {
-  display: flex;
-  gap: 0.4rem;
+.item-delete {
+  flex: 0 0 auto;
+}
+
+.delete-confirm {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.05rem;
 }
 </style>

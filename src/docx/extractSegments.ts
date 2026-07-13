@@ -4,7 +4,9 @@ import {
   allParagraphsLoose,
   collectRunsWithT,
   formatFingerprint,
+  isCaptionParagraph,
   isInsideTable,
+  isInsideTextbox,
   parseXml,
   runText,
 } from './xmlUtils'
@@ -81,7 +83,7 @@ export function extractSegmentsFromStories(stories: StoryFile[]): Segment[] {
 
       const source = buildTaggedText(spans.map((s) => s.text))
       segments.push({
-        id: `seg-${seq++}`,
+        id: String(seq++),
         storyKey: story.key,
         storyFile: story.path,
         paraIndex,
@@ -89,6 +91,8 @@ export function extractSegmentsFromStories(stories: StoryFile[]): Segment[] {
         target: '',
         status: 'empty',
         inTable: isInsideTable(para),
+        inTextbox: isInsideTextbox(para),
+        inCaption: isCaptionParagraph(para),
         spans,
       })
     })

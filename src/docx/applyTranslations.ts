@@ -1,4 +1,5 @@
 import type { Segment } from '@/types/project'
+import { isIntentionallyEmpty } from '@/utils/segmentStatus'
 import { splitTaggedText } from './tags'
 import {
   allParagraphsLoose,
@@ -9,8 +10,17 @@ import {
 } from './xmlUtils'
 
 function effectiveTarget(segment: Segment): string {
+  if (isIntentionallyEmpty(segment)) return ''
   const t = segment.target.trim()
   return t === '' ? segment.source : segment.target
+}
+
+function translationParts(segment: Segment): string[] | null {
+  if (isIntentionallyEmpty(segment)) {
+    if (segment.spans.length === 0) return null
+    return segment.spans.map(() => '')
+  }
+  return splitTaggedText(segment.source, effectiveTarget(segment))
 }
 
 /** Apply segment translations into story XML strings. Returns updated path→xml map. */
@@ -39,7 +49,7 @@ export function applyTranslationsToStories(
       if (!para) continue
 
       const runs = collectRunsWithT(para)
-      const parts = splitTaggedText(seg.source, effectiveTarget(seg))
+      const parts = translationParts(seg)
       if (!parts) continue
 
       if (seg.spans.length === 0) continue

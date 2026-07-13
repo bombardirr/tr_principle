@@ -18,6 +18,7 @@ const props = defineProps<{
 }>()
 
 const { t } = useI18n()
+const scroller = ref<HTMLElement | null>(null)
 const host = ref<HTMLElement | null>(null)
 const loading = ref(false)
 const refreshing = ref(false)
@@ -27,7 +28,9 @@ let gen = 0
 let segmentIndex = new Map<string, HTMLElement>()
 let pendingPreviewScroll: number | null = null
 let scrollSaveTimer: ReturnType<typeof setTimeout> | null = null
-let hostScrollTarget: HTMLElement | null = null
+let scrollerScrollTarget: HTMLElement | null = null
+let fitObserver: ResizeObserver | null = null
+let lastPreviewScale = 1
 
 function loadPendingPreviewScroll() {
   const snap = readEditorScroll(props.projectId)
@@ -35,35 +38,100 @@ function loadPendingPreviewScroll() {
 }
 
 function applyHighlight(scroll = false) {
-  if (!host.value) return
-  highlightPreviewSegment(host.value, segmentIndex, props.activeSegmentId ?? null, { scroll })
+  if (!scroller.value || !host.value) return
+  highlightPreviewSegment(
+    scroller.value,
+    segmentIndex,
+    props.record.segments,
+    props.activeSegmentId ?? null,
+    {
+    scroll,
+  })
 }
 
 function schedulePreviewScrollPersist() {
-  if (!host.value) return
+  if (!scroller.value) return
   if (scrollSaveTimer) clearTimeout(scrollSaveTimer)
   scrollSaveTimer = setTimeout(() => {
-    if (!host.value) return
-    writeEditorScroll(props.projectId, { previewY: host.value.scrollTop })
+    if (!scroller.value) return
+    writeEditorScroll(props.projectId, { previewY: scroller.value.scrollTop })
   }, 200)
 }
 
-function onHostScroll() {
+function onScrollerScroll() {
   schedulePreviewScrollPersist()
 }
 
-function bindHostScroll(el: HTMLElement | null) {
-  if (hostScrollTarget) {
-    hostScrollTarget.removeEventListener('scroll', onHostScroll)
-    hostScrollTarget = null
+function fitPreviewSheet() {
+  if (!host.value || !scroller.value || !hasContent.value) return
+  const wrapper = host.value.querySelector('.docx-wrapper') as HTMLElement | null
+  if (!wrapper) return
+
+  const prevScroll = scroller.value.scrollTop
+  const prevScale = lastPreviewScale
+
+  wrapper.style.transform = 'none'
+  wrapper.style.transformOrigin = ''
+  host.value.style.width = ''
+  host.value.style.height = ''
+  scroller.value.style.width = ''
+  scroller.value.style.maxWidth = ''
+  scroller.value.style.height = ''
+  scroller.value.classList.remove('is-scrollable')
+
+  const naturalWidth = wrapper.offsetWidth
+  if (naturalWidth <= 0) return
+
+  const layout = scroller.value.closest('.editor-layout') as HTMLElement | null
+  const maxAvailable = layout?.clientWidth ?? naturalWidth
+  const scale = Math.min(1, maxAvailable / naturalWidth)
+  lastPreviewScale = scale
+
+  const sheetWidth = naturalWidth * scale
+  const sheetHeight = Math.ceil(wrapper.getBoundingClientRect().height * scale)
+  const maxViewport = parseFloat(getComputedStyle(scroller.value).maxHeight)
+  const viewportHeight = Number.isFinite(maxViewport)
+    ? Math.min(sheetHeight, maxViewport)
+    : sheetHeight
+
+  wrapper.style.transformOrigin = 'top left'
+  wrapper.style.transform = scale < 1 ? `scale(${scale})` : 'none'
+  host.value.style.width = `${sheetWidth}px`
+  host.value.style.height = `${sheetHeight}px`
+  scroller.value.style.width = `${sheetWidth}px`
+  scroller.value.style.maxWidth = '100%'
+  scroller.value.style.height = `${viewportHeight}px`
+  if (sheetHeight > viewportHeight) {
+    scroller.value.classList.add('is-scrollable')
+  }
+
+  if (prevScale > 0 && prevScale !== scale && prevScroll > 0) {
+    scroller.value.scrollTop = prevScroll * (scale / prevScale)
+  }
+}
+
+function bindFitObserver(el: HTMLElement | null) {
+  fitObserver?.disconnect()
+  fitObserver = null
+  if (!el) return
+  const layout = el.closest('.editor-layout')
+  if (!layout) return
+  fitObserver = new ResizeObserver(() => fitPreviewSheet())
+  fitObserver.observe(layout)
+}
+
+function bindScrollerScroll(el: HTMLElement | null) {
+  if (scrollerScrollTarget) {
+    scrollerScrollTarget.removeEventListener('scroll', onScrollerScroll)
+    scrollerScrollTarget = null
   }
   if (!el) return
-  el.addEventListener('scroll', onHostScroll, { passive: true })
-  hostScrollTarget = el
+  el.addEventListener('scroll', onScrollerScroll, { passive: true })
+  scrollerScrollTarget = el
 }
 
 async function renderPreview() {
-  if (!host.value) return
+  if (!host.value || !scroller.value) return
   const run = ++gen
   const isRefresh = hasContent.value
   if (isRefresh) refreshing.value = true
@@ -72,7 +140,7 @@ async function renderPreview() {
 
   try {
     const blob = await buildTranslatedDocx(props.record.docx, props.record.segments)
-    if (run !== gen || !host.value) return
+    if (run !== gen || !host.value || !scroller.value) return
 
     const staging = document.createElement('div')
     await renderAsync(blob, staging, undefined, {
@@ -81,18 +149,20 @@ async function renderPreview() {
       breakPages: true,
       ignoreLastRenderedPageBreak: true,
     })
-    if (run !== gen || !host.value) return
+    if (run !== gen || !host.value || !scroller.value) return
 
-    let scrollTop = host.value.scrollTop
+    let scrollTop = scroller.value.scrollTop
     if (!isRefresh && pendingPreviewScroll !== null) {
       scrollTop = pendingPreviewScroll
       pendingPreviewScroll = null
     }
     const pageScrollY = window.scrollY
     host.value.replaceChildren(...staging.childNodes)
-    host.value.scrollTop = scrollTop
-    window.scrollTo(0, pageScrollY)
     hasContent.value = true
+    await nextTick()
+    fitPreviewSheet()
+    scroller.value.scrollTop = scrollTop
+    window.scrollTo(0, pageScrollY)
     segmentIndex = indexPreviewSegments(host.value, props.record.segments)
     applyHighlight(false)
   } catch (e) {
@@ -118,7 +188,10 @@ watch(
   },
 )
 
-watch(host, (el) => bindHostScroll(el), { immediate: true })
+watch(scroller, (el) => {
+  bindScrollerScroll(el)
+  bindFitObserver(el)
+}, { immediate: true })
 
 watch(
   () => props.refreshToken,
@@ -133,22 +206,19 @@ watch(
 
 onBeforeUnmount(() => {
   gen++
-  bindHostScroll(null)
+  bindScrollerScroll(null)
+  bindFitObserver(null)
   if (scrollSaveTimer) clearTimeout(scrollSaveTimer)
-  if (host.value) {
-    writeEditorScroll(props.projectId, { previewY: host.value.scrollTop })
+  if (scroller.value) {
+    writeEditorScroll(props.projectId, { previewY: scroller.value.scrollTop })
   }
 })
 </script>
 
 <template>
   <aside class="preview-panel" aria-label="preview">
-    <div class="preview-head">
-      <h2 class="preview-title">{{ t('editor.previewTitle') }}</h2>
-      <p class="preview-hint">{{ t('editor.previewHint') }}</p>
-    </div>
     <p v-if="error" class="preview-error">{{ error }}</p>
-    <div class="preview-body">
+    <div ref="scroller" class="preview-body">
       <div
         v-if="loading && !hasContent"
         class="preview-status"
@@ -173,42 +243,32 @@ onBeforeUnmount(() => {
   position: sticky;
   top: 4.5rem;
   align-self: start;
+  width: fit-content;
+  max-width: 100%;
+  flex-shrink: 0;
   max-height: calc(100vh - 5.5rem);
   display: flex;
   flex-direction: column;
-  min-width: 0;
-  background: var(--surface-soft);
-  border: 1px solid var(--border-strong);
-  border-radius: 12px;
-  overflow: hidden;
-}
-
-.preview-head {
-  flex: 0 0 auto;
-  padding: 0.75rem 0.9rem 0.55rem;
-  border-bottom: 1px solid var(--border);
-}
-
-.preview-title {
-  margin: 0;
-  font-size: 0.85rem;
-  font-weight: 600;
-  color: var(--text);
-}
-
-.preview-hint {
-  margin: 0.35rem 0 0;
-  font-size: 0.75rem;
-  color: var(--text-faint);
-  line-height: 1.35;
+  min-height: 0;
 }
 
 .preview-body {
   position: relative;
-  flex: 1 1 auto;
-  min-height: 12rem;
-  display: flex;
-  flex-direction: column;
+  flex: 0 0 auto;
+  width: fit-content;
+  max-width: 100%;
+  max-height: calc(100vh - 5.5rem);
+  overflow-x: hidden;
+  overflow-y: hidden;
+  overscroll-behavior: contain;
+  border-radius: 6px;
+  background: var(--preview-desk);
+  isolation: isolate;
+}
+
+.preview-body.is-scrollable {
+  overflow-y: auto;
+  scrollbar-gutter: stable;
 }
 
 .preview-status {
@@ -221,21 +281,17 @@ onBeforeUnmount(() => {
   margin: 0;
   font-size: 0.8rem;
   color: var(--text-muted);
-  background: var(--preview-desk);
 }
 
 .preview-error {
-  padding: 0.65rem 0.9rem;
   margin: 0;
   font-size: 0.8rem;
   color: var(--danger);
 }
 
 .preview-host {
-  flex: 1 1 auto;
-  overflow: auto;
-  padding: 1rem 0.75rem;
-  background: var(--preview-desk);
+  box-sizing: border-box;
+  overflow: hidden;
 }
 
 .preview-refresh {
@@ -264,18 +320,31 @@ onBeforeUnmount(() => {
 }
 
 .docx-host :deep(.docx-wrapper) {
-  margin: 0 auto;
-  padding: 0.25rem 0 0 !important;
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0 !important;
   background: transparent !important;
-  border-radius: 2px;
+  border-radius: 0;
   box-shadow: none;
+  overflow: hidden;
 }
 
 .docx-host :deep(.docx-wrapper > section.docx) {
+  flex-shrink: 0;
   background: #fff !important;
-  border-radius: 2px;
+  border-radius: 6px !important;
   box-shadow: var(--preview-page-shadow) !important;
+  margin: 0 !important;
+  overflow: hidden !important;
+}
+
+.docx-host :deep(.docx-wrapper > section.docx:not(:last-child)) {
   margin-bottom: 1rem !important;
+}
+
+.docx-host :deep(p.appzac-preview-done) {
+  background: var(--preview-done-bg);
+  border-radius: 2px;
 }
 
 .docx-host :deep(p.appzac-preview-hit) {

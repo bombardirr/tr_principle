@@ -1,9 +1,21 @@
 import { describe, expect, it } from 'vitest'
 import { JSDOM } from 'jsdom'
 import type { Segment } from '@/types/project'
-import { indexPreviewSegments, normalizePreviewText } from '@/docx/previewHighlight'
+import {
+  highlightPreviewSegment,
+  indexPreviewSegments,
+  isSegmentDone,
+  normalizePreviewText,
+  PREVIEW_DONE_CLASS,
+  PREVIEW_HIT_CLASS,
+} from '@/docx/previewHighlight'
 
-function seg(id: string, source: string, target = ''): Segment {
+function seg(
+  id: string,
+  source: string,
+  target = '',
+  status: Segment['status'] = 'empty',
+): Segment {
   return {
     id,
     storyKey: 'document',
@@ -11,8 +23,10 @@ function seg(id: string, source: string, target = ''): Segment {
     paraIndex: 0,
     source,
     target,
-    status: 'empty',
+    status,
     inTable: false,
+    inTextbox: false,
+    inCaption: false,
     spans: [],
   }
 }
@@ -41,5 +55,32 @@ describe('previewHighlight', () => {
 
     const map = indexPreviewSegments(host, segments)
     expect(map.get('seg-1')?.textContent).toBe('Привет мир')
+  })
+
+  it('marks done segments and active hit in preview', () => {
+    const dom = new JSDOM(
+      '<div id="host"><p>Done</p><p>Empty</p><p>Also done</p></div>',
+    )
+    const host = dom.window.document.getElementById('host')!
+    const segments = [
+      seg('seg-1', 'Done', 'Done', 'done'),
+      seg('seg-2', 'Empty'),
+      seg('seg-3', 'Also done', 'Also done', 'done'),
+    ]
+    const map = indexPreviewSegments(host, segments)
+
+    highlightPreviewSegment(host, map, segments, 'seg-2', { scroll: false })
+
+    expect(map.get('seg-1')?.classList.contains(PREVIEW_DONE_CLASS)).toBe(true)
+    expect(map.get('seg-2')?.classList.contains(PREVIEW_DONE_CLASS)).toBe(false)
+    expect(map.get('seg-2')?.classList.contains(PREVIEW_HIT_CLASS)).toBe(true)
+    expect(map.get('seg-3')?.classList.contains(PREVIEW_DONE_CLASS)).toBe(true)
+    expect(isSegmentDone(segments[0])).toBe(true)
+    expect(isSegmentDone(segments[1])).toBe(false)
+  })
+
+  it('marks intentionally empty done segments as done', () => {
+    const segment = seg('seg-1', 'Hello', '', 'done')
+    expect(isSegmentDone(segment)).toBe(true)
   })
 })
