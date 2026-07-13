@@ -54,6 +54,7 @@ export function cloneProjectRecord(record: ProjectRecord): ProjectRecord {
       inTable: s.inTable,
       inTextbox: s.inTextbox ?? false,
       inCaption: s.inCaption ?? false,
+      tmSavePending: s.tmSavePending ?? false,
       spans: s.spans.map((sp) => ({
         runIndices: [...sp.runIndices],
         fingerprint: sp.fingerprint,

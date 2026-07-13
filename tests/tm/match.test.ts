@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { findTmMatch } from '@/tm/match'
+import { findTmMatch, buildTmApplyTarget } from '@/tm/match'
 import { tmLookupKey } from '@/tm/normalize'
 import type { TmUnit } from '@/types/tm'
+
+const S1 = 'Вы нам нравитесь.'
 
 function unit(
   source: string,
@@ -60,7 +62,7 @@ describe('tm match', () => {
 
   it('soft mode treats trailing punctuation as exact', () => {
     const match = findTmMatch(
-      [unit('Вы нам нравитесь.', 'We like you.')],
+      [unit(S1, 'We like you.')],
       'Вы нам нравитесь',
       'ru',
       'en',
@@ -72,8 +74,8 @@ describe('tm match', () => {
 
   it('finds fragment match inside long segment', () => {
     const match = findTmMatch(
-      [unit('Вы нам нравитесь.', 'We like you.')],
-      'Вы нам нравитесь. Вы нам реально нравитесь. Вы нам нравитесь?',
+      [unit(S1, 'We like you.')],
+      `${S1} Вы нам реально нравитесь. Вы нам нравитесь?`,
       'ru',
       'en',
       { punctuationMode: 'soft', enableFragments: true },
@@ -81,6 +83,71 @@ describe('tm match', () => {
     expect(match?.kind).toBe('fragment')
     expect(match?.score).toBe(1)
     expect(match?.target).toBe('We like you.')
-    expect(match?.matchedFragment).toBe('Вы нам нравитесь.')
+    expect(match?.matchedFragment).toBe(S1)
+  })
+
+  it('assembles apply target from all matching fragments', () => {
+    const target = buildTmApplyTarget(
+      [unit(S1, 'We like you.')],
+      `${S1} Вы нам реально нравитесь. Вы нам нравитесь?`,
+      'ru',
+      'en',
+      { punctuationMode: 'soft', enableFragments: true },
+    )
+    expect(target).toBe(
+      'We like you. Вы нам реально нравитесь. We like you.',
+    )
+  })
+
+  it('ignores incomplete whole-segment TU when sentence TUs exist', () => {
+    const composite = `${S1} Вы нам реально нравитесь. Вы нам нравитесь?`
+    const target = buildTmApplyTarget(
+      [
+        unit(composite, 'We like you.', { id: 'whole' }),
+        unit(S1, 'We like you.', { id: 'frag' }),
+      ],
+      composite,
+      'ru',
+      'en',
+      { punctuationMode: 'soft', enableFragments: true },
+    )
+    expect(target).toBe(
+      'We like you. Вы нам реально нравитесь. We like you.',
+    )
+  })
+
+  it('falls back to whole-segment TU when no sentence TUs exist', () => {
+    const composite = `${S1} Вы нам реально нравитесь.`
+    const target = buildTmApplyTarget(
+      [unit(composite, 'We like you. We really like you.')],
+      composite,
+      'ru',
+      'en',
+      { punctuationMode: 'soft', enableFragments: true },
+    )
+    expect(target).toBe('We like you. We really like you.')
+  })
+
+  it('prefers period TM over newer question TM for unpunctuated fragment', () => {
+    const units = [
+      unit(S1, 'We like you.', {
+        id: 'a',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      }),
+      unit('Вы нам нравитесь?', 'We like you?', {
+        id: 'b',
+        updatedAt: '2026-02-01T00:00:00.000Z',
+      }),
+    ]
+    const target = buildTmApplyTarget(
+      units,
+      `${S1} Вы нам реально нравитесь. Вы нам нравитесь`,
+      'ru',
+      'en',
+      { punctuationMode: 'soft', enableFragments: true },
+    )
+    expect(target).toBe(
+      'We like you. Вы нам реально нравитесь. We like you.',
+    )
   })
 })

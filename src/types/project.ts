@@ -19,6 +19,8 @@ export interface Segment {
   inTextbox: boolean
   inCaption: boolean
   spans: RunSpan[]
+  /** Composite segment filled from TM — wait for explicit commit before autosaving to TM. */
+  tmSavePending?: boolean
 }
 
 export interface ProjectMeta {

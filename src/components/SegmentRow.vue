@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, ref } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { TmMatch } from '@/types/tm'
 import type { Segment } from '@/types/project'
@@ -22,10 +22,12 @@ const emit = defineEmits<{
   resetTarget: []
   activate: []
   applyTm: []
+  commitTm: []
 }>()
 
 const { t, locale } = useI18n()
 const targetEditor = ref<{ focus: () => void; sync: () => void; blur: () => void } | null>(null)
+const tmOverwritePending = ref(false)
 
 const kinds = computed(() => resolveSegmentKinds(props.segment))
 
@@ -65,10 +67,29 @@ function onResetClick() {
   })
 }
 
-const tmEnabled = computed(() => !!props.tmMatch && !filled.value)
+const hasTm = computed(() => !!props.tmMatch)
+
+const tmMatchesTarget = computed(() => {
+  if (!props.tmMatch) return false
+  return props.segment.target.trim() === props.tmMatch.target.trim()
+})
+
+const tmShowStrike = computed(() => hasTm.value && filled.value)
+
+const tmCanApply = computed(() => hasTm.value && !filled.value)
+
+const tmCanOverwrite = computed(() => hasTm.value && filled.value)
+
+const tmCommitPending = computed(() => !!props.segment.tmSavePending && filled.value)
 
 const tmTitle = computed(() => {
-  if (!props.tmMatch || filled.value) return t('editor.tmUnavailable')
+  if (tmCommitPending.value) return t('editor.tmCommitHint')
+  if (!props.tmMatch) return t('editor.tmUnavailable')
+  if (tmOverwritePending.value) return t('editor.tmOverwritePrompt')
+  if (filled.value) {
+    if (tmMatchesTarget.value) return t('editor.tmReapplyHint')
+    return t('editor.tmOverwriteHint')
+  }
   const pct = Math.round(props.tmMatch.score * 100)
   if (props.tmMatch.kind === 'exact') return t('editor.tmApplyExact')
   if (props.tmMatch.kind === 'fragment') {
@@ -79,12 +100,44 @@ const tmTitle = computed(() => {
   return t('editor.tmApplyFuzzy', { pct })
 })
 
-function onApplyTmClick() {
-  emit('applyTm')
+watch(
+  () => [props.segment.id, props.segment.target] as const,
+  () => {
+    tmOverwritePending.value = false
+  },
+)
+
+function syncTargetEditor() {
   nextTick(() => {
     targetEditor.value?.sync()
     targetEditor.value?.focus()
   })
+}
+
+function onApplyTmClick() {
+  if (!props.tmMatch || !tmCanApply.value) return
+  emit('applyTm')
+  syncTargetEditor()
+}
+
+function requestTmOverwrite() {
+  if (!tmCanOverwrite.value) return
+  tmOverwritePending.value = true
+}
+
+function confirmTmOverwrite() {
+  if (!props.tmMatch) return
+  tmOverwritePending.value = false
+  emit('applyTm')
+  syncTargetEditor()
+}
+
+function cancelTmOverwrite() {
+  tmOverwritePending.value = false
+}
+
+function onCommitTmClick() {
+  emit('commitTm')
 }
 </script>
 
@@ -123,15 +176,49 @@ function onApplyTmClick() {
         >
           <EditorGlyph name="copy" />
         </IconButton>
-        <IconButton
-          class="tm-btn"
-          :title="tmTitle"
-          :disabled="!tmEnabled"
-          @mousedown.prevent
-          @click="onApplyTmClick"
-        >
-          <EditorGlyph name="tm" />
-        </IconButton>
+        <div class="tm-slot">
+          <div v-if="tmOverwritePending" class="tm-confirm" role="group" :aria-label="tmTitle">
+            <IconButton
+              class="tm-confirm-yes"
+              :title="t('editor.tmOverwriteConfirm')"
+              @mousedown.prevent
+              @click="confirmTmOverwrite"
+            >
+              <EditorGlyph name="check" />
+            </IconButton>
+            <IconButton
+              :title="t('editor.tmOverwriteCancel')"
+              @mousedown.prevent
+              @click="cancelTmOverwrite"
+            >
+              <EditorGlyph name="close" />
+            </IconButton>
+          </div>
+          <IconButton
+            v-else
+            class="tm-btn"
+            :class="{
+              'tm-btn--strike': tmShowStrike && !tmCommitPending,
+              'tm-btn--commit': tmCommitPending,
+            }"
+            :title="tmTitle"
+            :disabled="!hasTm && !tmCommitPending"
+            @mousedown.prevent
+            @click="
+              tmCommitPending
+                ? onCommitTmClick()
+                : tmCanApply
+                  ? onApplyTmClick()
+                  : requestTmOverwrite()
+            "
+          >
+            <EditorGlyph
+              :name="
+                tmCommitPending ? 'tm-commit' : tmShowStrike ? 'tm-strike' : 'tm'
+              "
+            />
+          </IconButton>
+        </div>
         <IconButton
           :title="t('editor.leaveEmptyHint')"
           :active="filled"
@@ -266,6 +353,7 @@ $toolbar-col-width: 2rem;
   justify-self: center;
   padding: 0.2rem 0;
   align-self: center;
+  overflow: visible;
 }
 
 .mid-toolbar :deep(.icon-btn) {
@@ -280,6 +368,45 @@ $toolbar-col-width: 2rem;
 
 .mid-toolbar :deep(.tm-btn:not(:disabled)) {
   color: var(--tm-accent);
+}
+
+.mid-toolbar :deep(.tm-btn.tm-btn--strike:disabled) {
+  color: var(--text-muted);
+  opacity: 0.45;
+}
+
+.mid-toolbar :deep(.tm-btn.tm-btn--commit) {
+  color: var(--ok);
+}
+
+.tm-slot {
+  position: relative;
+  flex: 0 0 $toolbar-icon-size;
+  width: $toolbar-icon-size;
+  height: $toolbar-icon-size;
+}
+
+.tm-confirm {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  z-index: 2;
+  display: inline-flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 0.05rem;
+  transform: translate(-50%, -50%);
+  pointer-events: auto;
+}
+
+.tm-confirm :deep(.icon-btn) {
+  width: 1.32rem;
+  height: 1.32rem;
+  border-radius: 5px;
+}
+
+.tm-confirm :deep(.tm-confirm-yes) {
+  color: var(--warn);
 }
 
 .pane {

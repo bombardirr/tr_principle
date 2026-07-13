@@ -4,6 +4,7 @@ export interface TmSettings {
   punctuationMode: TmPunctuationMode
   fuzzyMinScore: number
   enableFragments: boolean
+  autoSaveToTm: boolean
 }
 
 const STORAGE_KEY = 'appzac-tm-settings'
@@ -12,6 +13,7 @@ export const TM_SETTINGS_DEFAULT: TmSettings = {
   punctuationMode: 'soft',
   fuzzyMinScore: 0.85,
   enableFragments: true,
+  autoSaveToTm: true,
 }
 
 export function readTmSettings(): TmSettings {
@@ -30,6 +32,7 @@ export function readTmSettings(): TmSettings {
           ? parsed.fuzzyMinScore
           : TM_SETTINGS_DEFAULT.fuzzyMinScore,
       enableFragments: parsed.enableFragments !== false,
+      autoSaveToTm: parsed.autoSaveToTm !== false,
     }
   } catch {
     return { ...TM_SETTINGS_DEFAULT }

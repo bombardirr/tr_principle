@@ -21,9 +21,18 @@ export function useTmSettings() {
     writeTmSettings(settings.value)
   }
 
+  function toggleAutoSaveToTm() {
+    settings.value = {
+      ...settings.value,
+      autoSaveToTm: !settings.value.autoSaveToTm,
+    }
+    writeTmSettings(settings.value)
+  }
+
   return {
     settings,
     reload,
     togglePunctuationMode,
+    toggleAutoSaveToTm,
   }
 }

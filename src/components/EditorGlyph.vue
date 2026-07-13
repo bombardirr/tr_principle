@@ -15,6 +15,8 @@ defineProps<{
     | 'download-tmx'
     | 'upload-tmx'
     | 'tm'
+    | 'tm-strike'
+    | 'tm-commit'
     | 'import'
     | 'theme'
     | 'trash'
@@ -181,6 +183,32 @@ defineProps<{
         d="M3.25 5.25v5.5c0 .97 2.13 1.75 4.75 1.75s4.75-.78 4.75-1.75v-5.5"
       />
       <path stroke-linecap="round" d="M3.25 8c0 .97 2.13 1.75 4.75 1.75S12.75 8.97 12.75 8" />
+    </g>
+    <g v-else-if="name === 'tm-strike'">
+      <ellipse cx="8" cy="5.25" rx="4.75" ry="1.75" />
+      <path
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        d="M3.25 5.25v5.5c0 .97 2.13 1.75 4.75 1.75s4.75-.78 4.75-1.75v-5.5"
+      />
+      <path stroke-linecap="round" d="M3.25 8c0 .97 2.13 1.75 4.75 1.75S12.75 8.97 12.75 8" />
+      <path stroke-linecap="round" d="m3.5 12.75 9-9" />
+    </g>
+    <g v-else-if="name === 'tm-commit'">
+      <ellipse cx="8" cy="5.25" rx="4.75" ry="1.75" />
+      <path
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        d="M3.25 5.25v5.5c0 .97 2.13 1.75 4.75 1.75s4.75-.78 4.75-1.75v-5.5"
+      />
+      <path stroke-linecap="round" d="M3.25 8c0 .97 2.13 1.75 4.75 1.75S12.75 8.97 12.75 8" />
+      <circle cx="11.35" cy="4.15" r="2.35" fill="var(--surface, #fff)" stroke="currentColor" />
+      <path
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        stroke-width="1.35"
+        d="m10.35 4.2 0.55 0.55 1.35-1.35"
+      />
     </g>
     <g v-else-if="name === 'import'">
       <path

@@ -2,7 +2,7 @@
 
 Спека: [`docs/superpowers/specs/2026-07-13-web-cat-mvp-design.md`](docs/superpowers/specs/2026-07-13-web-cat-mvp-design.md)
 
-## Сделано (фаза A — MVP)
+## Сделано (фаза A — локальный MVP без аккаунта)
 
 - [x] Снос старого драфта, Vue 3 + Vite + TS с нуля
 - [x] DOCX → сегменты (абзацы, таблицы, колонтитулы) → редактор → экспорт DOCX с сохранением разметки
@@ -13,216 +13,191 @@
 - [x] Unit-тесты round-trip / теги
 - [x] Предпросмотр DOCX (`docx-preview`), связка превью ↔ редактор (клик, ховер, скролл)
 - [x] Lease одной вкладки на проект (localStorage + `BroadcastChannel`) — fallback до серверного lock
+- [x] Локальная TM (IndexedDB) + TMX + exact/fuzzy/fragment + soft punctuation
+
+## Граница MVP (целевая)
+
+В MVP входят: **DOCX round-trip**, **аккаунт**, **облачная TM** (одна на пользователя, sync с локальным кэшем), **бэкап проекта**, Telegram-сброс пароля.
+
+Не в MVP (после): другие форматы документов (XLIFF…), MT, multi-TM, SRX, полный sync проектов, глоссарий TBX.
+
+---
 
 ## Дальше
 
-### Полировка A (закрыть)
+### Полировка A (не блокирует auth)
 
-- [ ] Ручной чеклист в Word на реальных файлах (первый проход на appzac.ru — ок, нужен полный прогон)
-- [x] Статический деплой SPA — Docker + CI, см. `docker-compose.prod.yml`, `deploy/CURSOR_MINI_PC.txt`
-- [x] Мелкий UX по результатам тестов (основное — сделано; правки по чеклисту Word)
-
----
-
-### Фаза B: Translation Memory + обмен форматами (локально, без сервера)
-
-**TM (ядро B — сделано)**
-
-- [x] Локальное хранилище TM (IndexedDB `appzac-tm`)
-- [x] Запись подтверждённых (`done`) сегментов в TM при автосейве
-- [x] Exact + fuzzy match в редакторе (порог 85%, Levenshtein по всей строке)
-- [x] Импорт / экспорт **TMX 1.4**
-- [x] UI: кнопка ТМ (янтарь), подчёркивание в превью, always-visible disabled state
-
-**TM (B2 — ближе к стандартам Trados / memoQ / Smartcat, в рамках local-first)**
-
-> Референс-поведение крупных CAT: exact → context (101%) → fuzzy с настраиваемым порогом; concordance / fragment recall; штрафы за теги и цифры; опции нормализации пунктуации. Реализуем поэтапно — без over-engineering на первом проходе.
-
-**Приоритет 1 — то, что уже выявили тестами**
-
-- [x] **Fragment / sub-segment match** — если сегмент длиннее записи TM, искать **вхождения** TM-фраз внутри сегмента (concordance-style), не только сравнение «вся строка ↔ вся строка»
-  - MVP: разбивка source по `.?!…` + эвристика абзацев; для каждого фрагмента — exact/fuzzy по TM
-  - UI: несколько подсказок или «лучший фрагмент» + %; в превью — подчёркивание только совпавшей части (позже)
-  - Тест-кейс: «Вы нам нравитесь. … Вы нам нравитесь?» → match на каждое вхождение «Вы нам нравитесь.»
-- [x] **Нормализация пунктуации (опция)** — для fuzzy (и опционально exact):
-  - игнор **конечной** пунктуации (`. , ; : ! ? …`)
-  - опционально: нормализация `?` / `!` ↔ `.` при сравнении
-  - настройка в UI или `localStorage`: «строго» / «мягко» — toggle в тулбаре, дефолт **soft**
-  - тест-кейс: «…нравитесь» и «…нравитесь.» → 100% в режиме «мягко»
-
-**Приоритет 2 — типичные CAT-фичи, реалистичные локально**
-
-- [ ] **Настраиваемый порог fuzzy** (slider 70–100%, дефолт 85% — как у многих CAT)
-- [ ] **Context match (101%)** — ключ TM = source + id/hash **соседнего** сегмента (prev/next); показывать выше обычного 100%
-- [ ] **Штраф за расхождение тегов** `{1}…{2}` — fuzzy score −N% если последовательность tag id не совпадает (inline tags уже есть)
-- [ ] **Match metadata в UI** — exact / fuzzy / fragment / context, %; tooltip как в CAT
-- [ ] **Concordance search** — отдельная панель «поиск по TM» по подстроке (read-only, без автоподстановки)
-
-**Приоритет 3 — после D-lite / облачной TM**
-
-- [ ] Несколько TM с приоритетом (project TM + global TM)
-- [ ] Penalty за числа/единицы (упрощённо: разный digit-sequence → −%)
-- [ ] TM maintainability: dedupe, merge on import, `updatedAt` conflict rules
-- [ ] **SRX** / пользовательские правила сегментации (backlog — сильно ближе к enterprise CAT)
-
-**Не цель MVP / B2 (явно отложить)**
-
-- MT integration, adaptive MT, auto-propagation across files
-- Perfect 101% / structure match с полным tree alignment
-- Server-side TM index (Elasticsearch) — только при масштабе Pro
-
-**Обмен сегментами (B+, не заменяет DOCX round-trip)**
-
-- [ ] Импорт / экспорт **XLIFF 1.2** (приоритет для агентств)
-- [ ] Backlog: XLIFF 2.0, SDLXLIFF — по спросу
-
-> DOCX сохраняет вёрстку Word. TMX/XLIFF — текст, статусы, теги; отдельные пункты UI «Импорт / Экспорт».
+- [ ] Ручной чеклист в Word на реальных файлах
+- [x] Статический деплой SPA
+- [x] Мелкий UX по тестам
 
 ---
 
-### Фаза C: Глоссарий
+### Фаза B: локальная TM — сделано
 
-- [ ] Простой termbase (локально)
-- [ ] Подсветка терминов в source
-- [ ] Backlog: **TBX** import/export
+- [x] IndexedDB `appzac-tm`, автосейв done-сегментов
+- [x] Exact + fuzzy (85%) + fragment + soft punct
+- [x] TMX import/export, UI-кнопка ТМ
+
+**B2 p2 — после auth + облачной TM** (перед стартом — словарь ниже)
+
+- [ ] Настраиваемый порог fuzzy
+- [ ] Context match (101%)
+- [ ] Штраф за теги
+- [ ] Match metadata в UI
+- [ ] Segment edit audit
+- [ ] Concordance panel
+
+**Обмен форматами (после MVP)**
+
+- [ ] XLIFF 1.2; backlog XLIFF 2.0 / SDLXLIFF
+
+#### Словарь: B2 (перед реализацией этих пунктов)
+
+| Термин | Что это |
+|--------|---------|
+| **Context match (101%)** | Source совпал **и** совпал соседний сегмент (prev/next). Реже ошибочная подстановка одной и той же фразы в разном контексте. |
+| **Штраф за теги** | Разные `{1}…{2}` у TM и сегмента → понижаем % fuzzy. |
+| **Concordance** | Поиск по памяти по подстроке, без автоподстановки. |
+| **Audit** | История правок сегмента (ручной / ТМ / сброс). |
+
+#### Словарь: отложено после MVP (расшифровка)
+
+| Термин | Что это | Зачем / когда |
+|--------|---------|----------------|
+| **Облачная TM** | Память переводов на сервере у аккаунта; браузер кэширует локально и синкает. | **В MVP** — одна TM на пользователя на всех устройствах. |
+| **MT** | Machine Translation — подсказка из движка (DeepL/Google/…), не из вашей памяти. | После MVP; отдельный ключ API, квоты, UI «вставить из MT». |
+| **multi-TM** | Несколько памятей сразу (проектная + общая + клиентская) с приоритетом и штрафами. | После MVP; в MVP достаточно **одной** облачной TM на user. |
+| **SRX** | Правила, *где* резать текст на сегменты (не «после каждой точки» вслепую). | После MVP / enterprise; сейчас режем по абзацам Word. |
 
 ---
 
-### Фаза D-lite: аккаунт, API, серверная сессия (бесплатно с логином)
+### Фаза C: Глоссарий (после MVP-auth)
 
-**Цель:** логин для всех; local-first редактор; сервер — auth, lock, бэкап. Pro — расширения (sync, лимиты, облачная TM).
+- [ ] Локальный termbase + подсветка в source
+- [ ] Backlog: TBX
 
-#### Backend (новый сервис, по мотивам disput)
+---
 
-Референс: `d:\DEV\AG\disput` — bcrypt, rate limit, JWT Bearer, коды ошибок, reset password (хеш токена в БД).
+### Фаза D-lite / MVP-cloud ← **следующий этап**
 
-**Добавить поверх disput-паттерна (в disput этого нет):**
+**Цель:** аккаунт → облачная TM → lock/backup. Без SMTP.
 
-- [ ] `users.session_version` + claim `sv` в JWT → одна активная auth-сессия на аккаунт
-- [ ] `project_locks` (user, project_id, session_id, expires_at) + heartbeat → один редактор проекта онлайн
-- [ ] При логине: bump `session_version` (старые JWT недействительны)
-- [ ] Роли: `user` | `admin`; **admin = все Pro-фичи включены** без подписки
-- [ ] Первый admin: создать пользователя вручную на проде + `UPDATE users SET is_admin = true` (или CLI `appzac-admin promote`)
+#### 1) Auth
 
-**Минимальные эндпоинты v1**
+- [ ] `users`: `login`, `password_hash`, `session_version`, `is_admin`, `telegram_id` (nullable)
+- [ ] Register / login / me / logout; JWT + claim `sv`
+- [ ] Admin promote через SQL/CLI
+
+#### 2) Сброс пароля через Telegram (без почты)
+
+**Зачем `telegram_id`:** это не «логин в Telegram», а числовой ID чата пользователя в Telegram (`123456789`). Бот умеет писать **только** в чаты, которые ему известны. Мы один раз связываем аккаунт appzac ↔ этот ID и дальше шлём код сброса туда.
+
+Да, **хранить надо** (в таблице `users`, поле `telegram_id`):
+- без него бот не знает, *кому* из миллионов чатов отправить код, когда в SPA ввели login;
+- храним только числовой id + факт привязки; username Telegram не обязателен;
+- отвязка / смена — в профиле.
+
+Поток:
+1. В профиле: «Привязать Telegram» → ссылка `t.me/bot?start=link_<token>` → бот сохраняет `telegram_id` у пользователя.
+2. «Забыл пароль» → API (по login) находит user → если есть `telegram_id`, шлёт код в этот чат.
+3. Код + новый пароль в SPA.
+
+Если не привязан — сброс только админом.
+
+- [ ] Link / unlink Telegram
+- [ ] password-reset request/confirm + webhook бота
+- [ ] Rate limit; `{ ok: true }` без enumeration
+
+#### 3) Облачная TM (в MVP)
+
+Одна память на `user_id`. Локальный IndexedDB — кэш; сервер — источник правды для аккаунта.
+
+- [ ] Таблица `tm_units` (или blob snapshot + дельта — выбрать при реализации; старт: row-per-unit как локально)
+- [ ] `GET/PUT /api/tm` или sync: pull since `updated_at` + push upserts
+- [ ] Клиент: после login — merge/pull; при записи done — local + queue upload
+- [ ] Офлайн: работа из кэша; при online — sync
+- [ ] Конфликт MVP: побеждает больший `updated_at` (или last-write-wins по unit id)
+
+#### 4) Lock + backup проекта
+
+- [ ] `project_locks` + heartbeat
+- [ ] Backup `.tcat.zip` API (свой user_id)
+- [ ] Tab-lease остаётся для гостя / офлайн
+
+#### Эндпоинты v1 (сжато)
 
 | Метод | Путь | Назначение |
 |-------|------|------------|
-| POST | `/api/auth/register` | регистрация (пока invite-only или open — решить) |
-| POST | `/api/auth/login` | login + новый JWT + bump session |
-| GET | `/api/auth/me` | профиль, `is_admin`, flags Pro |
-| POST | `/api/auth/logout` | bump session / invalidate |
-| POST | `/api/projects/{id}/lock` | heartbeat lock (редактирование) |
-| DELETE | `/api/projects/{id}/lock` | release |
-| PUT | `/api/projects/{id}/backup` | загрузка `.tcat.zip` (encrypted at rest — позже) |
-| GET | `/api/projects/{id}/backup` | скачать бэкап **только своего** user_id |
-| GET | `/api/health` | `jwt_ready`, версия API |
+| POST | `/api/auth/register` | регистрация |
+| POST | `/api/auth/login` | JWT + bump session |
+| GET | `/api/auth/me` | профиль / flags |
+| POST | `/api/auth/logout` | invalidate |
+| POST | `/api/auth/password-reset/request` | → Telegram |
+| POST | `/api/auth/password-reset/confirm` | новый пароль |
+| POST | `/api/telegram/webhook` | бот |
+| GET/PUT | `/api/tm` (или `/api/tm/sync`) | облачная TM |
+| POST/DELETE | `/api/projects/{id}/lock` | lock |
+| PUT/GET | `/api/projects/{id}/backup` | бэкап |
+| GET | `/api/health` | health |
 
-**Клиент (SPA)**
+#### Клиент
 
-- [ ] Экран login/register (Bearer в localStorage, как disput)
-- [ ] Офлайн: редактор на IndexedDB; баннер «Нет сети»; очередь `sync_outbox`
-- [ ] Онлайн + auth: серверный project lock вместо/поверх tab-lease
-- [ ] Tab-lease **оставить** для гостя / офлайн / API недоступен
-- [ ] Feature flags: `canPreview`, `canCloudSync`, … — `is_admin` → все `true`
+- [ ] Login/register; привязка Telegram; сброс пароля
+- [ ] TM sync после login + при автосейве
+- [ ] Баннер offline; позже outbox
+- [ ] Feature flags; admin = Pro
 
-#### Docker: локальная разработка API
+#### Docker
 
-- [ ] `docker-compose.local.yml` — **postgres + api** (SPA по-прежнему `npm run dev` на хосте)
-- [ ] `.env.local.example` — `DATABASE_URL`, `JWT_SECRET`, `VITE_API_BASE=http://localhost:8080`
-- [ ] Команда: `docker compose -f docker-compose.local.yml up -d`
-- [ ] Миграции: `db/migrations/` ( golang-migrate или аналог, как disput)
-
-Стек local (план):
-
-```text
-appzac-local-db   → postgres:16
-appzac-local-api  → Go API :8080
-```
-
-#### Docker: прод (мини-ПК)
-
-Текущий `docker-compose.prod.yml` — только **статический SPA**. После D-lite:
-
-- [ ] `docker-compose.prod.yml` — сервисы `web` + `api` + `db` (или db на хосте)
-- [ ] NPM: `appzac.ru` → web; `api.appzac.ru` (или `/api` reverse proxy) → api
-- [ ] `.env.prod.example` — секреты, `JWT_SECRET`, `DATABASE_URL`, `TRUST_PROXY=1`
-- [ ] Инструкция деплоя — дополнить `deploy/CURSOR_MINI_PC.txt` (шаги после появления API)
-
-**Прод — чеклист (когда API готов)**
-
-1. `cp .env.prod.example .env.prod`, задать `JWT_SECRET` (≥32 символа), пароль Postgres
-2. `docker compose --env-file .env.prod -p appzac -f docker-compose.prod.yml up -d --build`
-3. NPM: proxy `api.appzac.ru` → `appzac-prod-api:8080`, SPA → `appzac-prod-web:80`
-4. Миграции: `docker compose exec api ./migrate up` (или init-контейнер)
-5. Создать пользователя (register или SQL seed)
-6. Выдать admin: `UPDATE users SET is_admin = true WHERE email = '...'`
-7. Проверить `/api/health`, login, `/api/auth/me` → `is_admin: true`
+- [ ] `docker-compose.local.yml` — postgres + api
+- [ ] `.env.local.example` — `DATABASE_URL`, `JWT_SECRET`, `TELEGRAM_BOT_TOKEN`, `VITE_API_BASE`
+- [ ] Prod: web + api + db; webhook на HTTPS; обновить `deploy/CURSOR_MINI_PC.txt`
 
 ---
 
-### Фаза D / Pro (платное и расширения)
+### После MVP (фаза D / Pro и отложенное)
 
-- [ ] Двусторонний sync проектов (не только backup snapshot)
-- [ ] TM в облаке + sync между устройствами
-- [ ] Лимиты free (число проектов, объём бэкапа) — admin без лимитов
-- [ ] **Pro для обычных users:** облачный sync, облачная TM, расширенные лимиты
-- [ ] Preview DOCX — сейчас всем; позже trial/free vs Pro (admin всегда on)
-
----
-
-## Безопасность и приватность (обязательный чеклист перед D-lite prod)
-
-### Принцип
-
-IndexedDB **всегда локальна** в браузере пользователя. Сервер **не может** читать IndexedDB напрямую. Риски — утечка через API, XSS, общий компьютер, слабая изоляция SPA.
-
-### Чеклист перед релизом auth
-
-- [ ] **API:** без валидного JWT нельзя получить чужие проекты, бэкапы, TM, профиль
-- [ ] **API:** все `GET/PUT/DELETE` по `project_id` проверяют `user_id` владельца (или ACL позже)
-- [ ] **API:** rate limit на login/register/reset (как disput)
-- [ ] **API:** generic `INVALID_CREDENTIALS`, reset — `{ ok: true }` без enumeration
-- [ ] **JWT:** короткий access + `session_version`; logout / новый login отзывает старые
-- [ ] **Клиент:** не логировать token; `Authorization` только на свой origin API
-- [ ] **Клиент:** при logout — очистить token + чувствительные ключи sessionStorage
-- [ ] **IndexedDB:** ключи с `userId` в имени БД или prefix (`appzac-u-{uuid}`), чтобы смена аккаунта на том же браузере не показывала чужие проекты
-- [ ] **IndexedDB:** при logout — опционально «оставить локальные копии» vs «очистить» (UX + privacy)
-- [ ] **Ручная проверка:** DevTools → Application → IndexedDB — после logout другой user не видит прошлые данные без явного «локальный гость»
-- [ ] **Ручная проверка:** curl без token → 401 на все `/api/*` кроме health/register/login
-- [ ] **CSP / XSS:** минимизировать `v-html`; санитизация; позже CSP headers в nginx
-- [ ] **HTTPS** на проде (NPM + Let's Encrypt)
-
-### Что IndexedDB **не** защищает
-
-Любой с доступом к профилю браузера на машине может открыть DevTools. Это норма для local-first. Защита — OS-аккаунт + full-disk encryption; мы не храним пароль в IDB.
+- [ ] MT (подсказки машинного перевода)
+- [ ] multi-TM (несколько памятей с приоритетом)
+- [ ] SRX (правила сегментации)
+- [ ] Двусторонний sync **проектов** (не только TM + backup snapshot)
+- [ ] Лимиты free; Pro-пакеты
+- [ ] Penalty за числа; TM dedupe/merge; Elasticsearch при масштабе
 
 ---
 
-## Порядок реализации (рекомендуемый)
+## Безопасность (перед prod auth)
 
-1. Закрыть чеклист Word (A)
-2. ~~**B-local:** TM + TMX + match~~ ✅
-3. ~~**B2:** fragment match + нормализация пунктуации + настраиваемый порог fuzzy~~ (fragment + punct ✅; порог — B2 p2)
-4. **D-lite:** Go API, postgres, docker local, auth, session_version, project lock, backup API
-5. **B+:** XLIFF 1.2; context match (101%); tag penalties
-6. SPA: login, offline outbox, feature flags, admin = Pro
-7. **Prod:** расширить compose + `deploy/CURSOR_MINI_PC.txt`, admin user
-8. **Security pass** — чеклист выше
-9. **C:** глоссарий
-10. **D/Pro:** полный sync, облачная TM, concordance + multi-TM
+- [ ] JWT на защищённых маршрутах; TM/backup только своего `user_id`
+- [ ] Rate limit auth / reset / telegram link
+- [ ] `session_version`; хранить `telegram_id` + hash токенов link/reset с TTL
+- [ ] Не логировать bot token / JWT
+- [ ] IndexedDB per-user prefix после login
+- [ ] HTTPS; webhook только на свой API
 
 ---
 
-## Архитектура (целевая)
+## Порядок реализации (актуальный)
+
+1. **Auth** ← сейчас: Go API, Postgres, docker local, register/login, JWT + `session_version`
+2. Telegram: link + password reset
+3. SPA: login/register + привязка TG
+4. **Облачная TM** sync (MVP)
+5. Project lock + backup
+6. Prod + security pass
+7. B2 p2 (context / tags / concordance / audit) — по словарю выше
+8. Глоссарий; форматы; MT; multi-TM; SRX
+
+---
+
+## Архитектура (MVP-cloud)
 
 ```text
 [Browser SPA]
-  ├─ IndexedDB (projects, TM, outbox) — local-first, per-user namespace после login
-  ├─ Tab lease (fallback)
+  ├─ IndexedDB (projects, TM cache)
+  ├─ Tab lease (guest / offline)
   └─ HTTPS → API (JWT + session_version)
-         ├─ Postgres (users, locks, backups meta, TM cloud later)
-         └─ Blob storage (backup files) — FS или S3 позже
+         ├─ Postgres (users.telegram_id, tm_units, locks, backups)
+         └─ Telegram Bot (link + password reset)
 ```
-
-**Офлайн:** редактирование локально; sync_outbox; при reconnect — push/pull; конфликты — MVP «версия на сервере новее».

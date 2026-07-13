@@ -14,12 +14,20 @@ import EditorGlyph from '@/components/EditorGlyph.vue'
 import TooltipWrap from '@/components/TooltipWrap.vue'
 import { useProjectLease } from '@/composables/useProjectLease'
 import { useTmSettings } from '@/composables/useTmSettings'
-import { findTmMatch } from '@/tm/match'
+import { findTmMatch, buildTmApplyTarget } from '@/tm/match'
 import { exportTmx, parseTmx } from '@/tm/tmx'
-import { listTmUnits, recordDoneSegmentsInTm, importTmUnits } from '@/storage/tmIdb'
+import {
+  listTmUnits,
+  recordDoneSegmentsInTm,
+  importTmUnits,
+  upsertTmFromSegment,
+  deleteTmForSegmentSource,
+} from '@/storage/tmIdb'
+import { isCompositeSegment } from '@/tm/fragments'
 import {
   countTranslatedSegments,
   finalizeSegmentStatus,
+  isSegmentDone,
   isSegmentTranslated,
   normalizeSegmentStatus,
 } from '@/utils/segmentStatus'
@@ -50,7 +58,8 @@ let previewTimer: ReturnType<typeof setTimeout> | null = null
 let pageScrollSaveTimer: ReturnType<typeof setTimeout> | null = null
 const activeSegmentId = ref<string | null>(null)
 const projectLease = useProjectLease(() => props.id)
-const { settings: tmSettings, togglePunctuationMode: toggleTmPunctuation } = useTmSettings()
+const { settings: tmSettings, togglePunctuationMode: toggleTmPunctuation, toggleAutoSaveToTm } =
+  useTmSettings()
 const tmUnits = shallowRef<TmUnit[]>([])
 const tmImportInput = ref<HTMLInputElement | null>(null)
 
@@ -125,12 +134,15 @@ async function persistNow(): Promise<void> {
   }
 
   await saveProject(record.value)
-  await recordDoneSegmentsInTm(record.value.segments, {
-    sourceLang: record.value.meta.sourceLang,
-    targetLang: record.value.meta.targetLang,
-    projectId: record.value.meta.id,
-  })
-  tmUnits.value = await listTmUnits()
+  if (tmSettings.value.autoSaveToTm) {
+    const segmentsForTm = record.value.segments.filter((s) => !s.tmSavePending)
+    await recordDoneSegmentsInTm(segmentsForTm, {
+      sourceLang: record.value.meta.sourceLang,
+      targetLang: record.value.meta.targetLang,
+      projectId: record.value.meta.id,
+    })
+    tmUnits.value = await listTmUnits()
+  }
   allSaved.value = true
   error.value = ''
 }
@@ -241,68 +253,134 @@ function scheduleSave() {
   }, SAVE_IDLE_MS)
 }
 
+function clearTmSavePending(patch: Partial<Segment> = {}): Partial<Segment> {
+  return { ...patch, tmSavePending: false }
+}
+
 function updateTarget(seg: Segment, value: string) {
   if (!record.value || projectLease.blocked.value) return
   notice.value = ''
-  patchSegment(seg.id, {
-    target: value,
-    status: value.trim() ? 'draft' : seg.status === 'done' ? 'draft' : 'empty',
-  })
+  patchSegment(
+    seg.id,
+    clearTmSavePending({
+      target: value,
+      status: value.trim() ? 'draft' : seg.status === 'done' ? 'draft' : 'empty',
+    }),
+  )
   scheduleSave()
 }
 
 function copySource(seg: Segment) {
   if (!record.value || projectLease.blocked.value) return
   notice.value = ''
-  patchSegment(seg.id, { target: seg.source, status: 'draft' })
+  patchSegment(seg.id, clearTmSavePending({ target: seg.source, status: 'draft' }))
   scheduleSave()
 }
 
 function leaveEmpty(seg: Segment) {
   if (!record.value || projectLease.blocked.value) return
   notice.value = ''
-  patchSegment(seg.id, { target: '', status: 'done' })
+  // Mark done only — do not touch TM (same source may still be needed elsewhere).
+  patchSegment(seg.id, clearTmSavePending({ target: '', status: 'done' }))
   scheduleSave()
 }
 
 function resetTarget(seg: Segment) {
   if (!record.value || projectLease.blocked.value) return
   notice.value = ''
-  patchSegment(seg.id, { target: '', status: 'empty' })
+  patchSegment(seg.id, clearTmSavePending({ target: '', status: 'empty' }))
+  void removeSegmentFromTm(seg)
   scheduleSave()
 }
 
-function tmMatchFor(seg: Segment): TmMatch | null {
-  if (!record.value || isSegmentTranslated(seg)) return null
+async function removeSegmentFromTm(seg: Segment) {
+  if (!record.value) return
+  try {
+    await deleteTmForSegmentSource(seg.source, {
+      sourceLang: record.value.meta.sourceLang,
+      targetLang: record.value.meta.targetLang,
+    })
+    tmUnits.value = await listTmUnits()
+  } catch (e) {
+    setSaveError(e)
+  }
+}
+
+function tmMatchOptions() {
+  return {
+    punctuationMode: tmSettings.value.punctuationMode,
+    fuzzyMinScore: tmSettings.value.fuzzyMinScore,
+    enableFragments: tmSettings.value.enableFragments,
+  }
+}
+
+function tmLookupFor(seg: Segment): TmMatch | null {
+  if (!record.value) return null
+  const opts = tmMatchOptions()
   const match = findTmMatch(
     tmUnits.value,
     seg.source,
     record.value.meta.sourceLang,
     record.value.meta.targetLang,
-    {
-      punctuationMode: tmSettings.value.punctuationMode,
-      fuzzyMinScore: tmSettings.value.fuzzyMinScore,
-      enableFragments: tmSettings.value.enableFragments,
-    },
+    opts,
   )
   if (!match) return null
-  if (seg.target.trim() === match.target.trim()) return null
-  return match
+  const applyTarget =
+    buildTmApplyTarget(
+      tmUnits.value,
+      seg.source,
+      record.value.meta.sourceLang,
+      record.value.meta.targetLang,
+      opts,
+    ) ?? match.target
+  return { ...match, target: applyTarget }
+}
+
+function tmMatchFor(seg: Segment): TmMatch | null {
+  return tmLookupFor(seg)
 }
 
 const tmHintSegmentIds = computed(() => {
   if (!record.value) return []
   return record.value.segments
-    .filter((seg) => tmMatchFor(seg) !== null)
+    .filter((seg) => tmLookupFor(seg) !== null && !isSegmentTranslated(seg))
     .map((seg) => seg.id)
 })
 
 function applyTm(seg: Segment) {
-  const match = tmMatchFor(seg)
+  const match = tmLookupFor(seg)
   if (!record.value || !match || projectLease.blocked.value) return
   notice.value = ''
-  patchSegment(seg.id, { target: match.target, status: 'draft' })
+  patchSegment(seg.id, {
+    target: match.target,
+    status: 'draft',
+    tmSavePending: isCompositeSegment(seg.source),
+  })
   scheduleSave()
+}
+
+async function commitSegmentToTm(seg: Segment) {
+  if (!record.value || projectLease.blocked.value) return
+  const current = record.value.segments.find((s) => s.id === seg.id)
+  if (!current?.tmSavePending || !current.target.trim()) return
+
+  const finalized = { ...current, status: finalizeSegmentStatus(current) }
+  if (!isSegmentDone(finalized)) return
+
+  try {
+    await upsertTmFromSegment(finalized, {
+      sourceLang: record.value.meta.sourceLang,
+      targetLang: record.value.meta.targetLang,
+      projectId: record.value.meta.id,
+    })
+    patchSegment(seg.id, { tmSavePending: false, status: finalized.status })
+    tmUnits.value = await listTmUnits()
+    notice.value = t('editor.tmCommitted')
+    error.value = ''
+    scheduleSave()
+  } catch (e) {
+    setSaveError(e)
+  }
 }
 
 async function exportTmxFile() {
@@ -535,6 +613,17 @@ async function goBack() {
           </IconButton>
           <IconButton
             :title="
+              tmSettings.autoSaveToTm
+                ? t('editor.tmAutoSaveOnHint')
+                : t('editor.tmAutoSaveOffHint')
+            "
+            :active="tmSettings.autoSaveToTm"
+            @click="toggleAutoSaveToTm()"
+          >
+            <EditorGlyph name="tm-commit" />
+          </IconButton>
+          <IconButton
+            :title="
               tmSettings.punctuationMode === 'soft'
                 ? t('editor.tmPunctSoftHint')
                 : t('editor.tmPunctStrictHint')
@@ -579,6 +668,7 @@ async function goBack() {
           @leave-empty="leaveEmpty(seg)"
           @reset-target="resetTarget(seg)"
           @apply-tm="applyTm(seg)"
+          @commit-tm="commitSegmentToTm(seg)"
           @activate="activateSegment(seg.id)"
         />
       </div>

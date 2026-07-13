@@ -1,6 +1,6 @@
 import type { TmMatch, TmMatchOptions, TmUnit } from '@/types/tm'
-import { splitTmFragments } from './fragments'
-import { normalizeTmForMatch, tmLookupKey } from './normalize'
+import { splitTmFragments, plainSource } from './fragments'
+import { normalizeTmForMatch, normalizeTmSource, tmLookupKey } from './normalize'
 import { TM_SETTINGS_DEFAULT, type TmPunctuationMode } from './settings'
 
 function levenshtein(a: string, b: string): number {
@@ -55,12 +55,38 @@ function isExactSource(
 }
 
 function pickBestExact(
+  needle: string,
   hits: TmUnit[],
-  extras?: Partial<TmMatch>,
+  punctuationMode: TmPunctuationMode,
 ): TmMatch | null {
   if (!hits.length) return null
-  hits.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
-  return { target: hits[0]!.target, kind: 'exact', score: 1, ...extras }
+  const ranked = [...hits].sort((a, b) => {
+    const aLiteral = normalizeTmSource(needle) === normalizeTmSource(a.source) ? 1 : 0
+    const bLiteral = normalizeTmSource(needle) === normalizeTmSource(b.source) ? 1 : 0
+    if (bLiteral !== aLiteral) return bLiteral - aLiteral
+
+    if (punctuationMode === 'soft') {
+      const aPunct = trailingPunctAffinity(needle, a.source)
+      const bPunct = trailingPunctAffinity(needle, b.source)
+      if (bPunct !== aPunct) return bPunct - aPunct
+    }
+
+    return b.updatedAt.localeCompare(a.updatedAt)
+  })
+  return { target: ranked[0]!.target, kind: 'exact', score: 1 }
+}
+
+/** Prefer TU whose trailing punctuation closest to the needle (for soft-mode ties). */
+function trailingPunctAffinity(needle: string, unitSource: string): number {
+  const n = needle.trim()
+  const u = unitSource.trim()
+  const nTrail = n.match(/[.?!…]$/)?.[0] ?? ''
+  const uTrail = u.match(/[.?!…]$/)?.[0] ?? ''
+  if (nTrail === uTrail) return 3
+  if (!nTrail && uTrail === '.') return 2
+  if (!nTrail && !uTrail) return 2
+  if (nTrail && uTrail === nTrail) return 3
+  return 1
 }
 
 function findExactForNeedle(
@@ -76,7 +102,9 @@ function findExactForNeedle(
       langsMatch(unit, sourceLang, targetLang) &&
       isExactSource(needle, unit, punctuationMode),
   )
-  return pickBestExact(hits, extras)
+  const exact = pickBestExact(needle, hits, punctuationMode)
+  if (!exact) return null
+  return extras ? { ...exact, ...extras } : exact
 }
 
 function findFuzzyForNeedle(
@@ -209,4 +237,74 @@ export function findTmMatch(
   }
 
   return best
+}
+
+/** Build target text to apply — replaces each matched sentence fragment in multi-sentence segments. */
+export function buildTmApplyTarget(
+  units: TmUnit[],
+  source: string,
+  sourceLang?: string,
+  targetLang?: string,
+  options?: TmMatchOptions,
+): string | null {
+  const punctuationMode = options?.punctuationMode ?? TM_SETTINGS_DEFAULT.punctuationMode
+  const fuzzyMinScore = options?.fuzzyMinScore ?? TM_SETTINGS_DEFAULT.fuzzyMinScore
+  const enableFragments = options?.enableFragments ?? TM_SETTINGS_DEFAULT.enableFragments
+  const plain = plainSource(source)
+  const fragments = splitTmFragments(source)
+
+  if (fragments.length <= 1 || !enableFragments) {
+    return findTmMatch(units, source, sourceLang, targetLang, options)?.target ?? null
+  }
+
+  // Sentence-level matches only — skip whole-segment TUs so a bad
+  // "composite → one sentence" entry cannot hijack every fragment.
+  const wholeNorm = normalizeTmForMatch(plain, punctuationMode)
+  const fragmentUnits = units.filter(
+    (unit) =>
+      normalizeTmForMatch(unit.source, punctuationMode) !== wholeNorm,
+  )
+
+  let cursor = 0
+  let out = ''
+  let matchedCount = 0
+
+  for (const fragment of fragments) {
+    const pos = plain.indexOf(fragment, cursor)
+    if (pos === -1) {
+      out += fragment
+      continue
+    }
+    if (pos > cursor) out += plain.slice(cursor, pos)
+
+    const hit = findMatchForNeedle(
+      fragmentUnits,
+      fragment,
+      sourceLang,
+      targetLang,
+      punctuationMode,
+      fuzzyMinScore,
+      'fragment',
+      fragment,
+    )
+    if (hit) {
+      out += hit.target
+      matchedCount++
+    } else {
+      out += fragment
+    }
+    cursor = pos + fragment.length
+  }
+
+  if (cursor < plain.length) out += plain.slice(cursor)
+
+  if (matchedCount > 0) return out.trim()
+
+  // No sentence TUs — fall back to whole-segment match.
+  return (
+    findTmMatch(units, source, sourceLang, targetLang, {
+      ...options,
+      enableFragments: false,
+    })?.target ?? null
+  )
 }
