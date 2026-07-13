@@ -6,7 +6,7 @@ import type { Segment } from '@/types/project'
 import IconButton from './IconButton.vue'
 import EditorGlyph from './EditorGlyph.vue'
 import TaggedEditor from './TaggedEditor.vue'
-import { isSegmentDone } from '@/utils/segmentStatus'
+import { isSegmentTranslated } from '@/utils/segmentStatus'
 import { resolveSegmentKinds, type SegmentKind } from '@/utils/segmentKind'
 
 const props = defineProps<{
@@ -29,7 +29,7 @@ const targetEditor = ref<{ focus: () => void; sync: () => void; blur: () => void
 
 const kinds = computed(() => resolveSegmentKinds(props.segment))
 
-const filled = computed(() => isSegmentDone(props.segment))
+const filled = computed(() => isSegmentTranslated(props.segment))
 
 const displayId = computed(() => props.segment.id.replace(/^seg-/, ''))
 
@@ -65,8 +65,10 @@ function onResetClick() {
   })
 }
 
-const tmHint = computed(() => {
-  if (!props.tmMatch || filled.value) return ''
+const tmEnabled = computed(() => !!props.tmMatch && !filled.value)
+
+const tmTitle = computed(() => {
+  if (!props.tmMatch || filled.value) return t('editor.tmUnavailable')
   const pct = Math.round(props.tmMatch.score * 100)
   return props.tmMatch.kind === 'exact'
     ? t('editor.tmApplyExact')
@@ -118,6 +120,15 @@ function onApplyTmClick() {
           <EditorGlyph name="copy" />
         </IconButton>
         <IconButton
+          class="tm-btn"
+          :title="tmTitle"
+          :disabled="!tmEnabled"
+          @mousedown.prevent
+          @click="onApplyTmClick"
+        >
+          <EditorGlyph name="tm" />
+        </IconButton>
+        <IconButton
           :title="t('editor.leaveEmptyHint')"
           :active="filled"
           @mousedown.prevent
@@ -131,15 +142,6 @@ function onApplyTmClick() {
           @click="onResetClick"
         >
           <EditorGlyph name="reset" />
-        </IconButton>
-        <IconButton
-          v-if="tmMatch && !filled"
-          class="tm-btn"
-          :title="tmHint"
-          @mousedown.prevent
-          @click="onApplyTmClick"
-        >
-          <EditorGlyph name="tm" />
         </IconButton>
       </div>
 
@@ -272,8 +274,8 @@ $toolbar-col-width: 2rem;
   color: var(--accent);
 }
 
-.mid-toolbar :deep(.tm-btn) {
-  color: var(--ok);
+.mid-toolbar :deep(.tm-btn:not(:disabled)) {
+  color: var(--tm-accent);
 }
 
 .pane {

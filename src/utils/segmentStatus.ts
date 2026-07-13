@@ -4,8 +4,17 @@ export function isSegmentDone(segment: Segment): boolean {
   return segment.status === 'done'
 }
 
+/** Segment has a translation (including draft while typing). */
+export function isSegmentTranslated(segment: Segment): boolean {
+  return isSegmentDone(segment) || segment.target.trim() !== ''
+}
+
 export function countDoneSegments(segments: Segment[]): number {
   return segments.filter(isSegmentDone).length
+}
+
+export function countTranslatedSegments(segments: Segment[]): number {
+  return segments.filter(isSegmentTranslated).length
 }
 
 export function normalizeSegmentStatus(segment: Segment): Segment['status'] {

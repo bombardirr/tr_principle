@@ -17,6 +17,7 @@ const props = defineProps<{
   record: ProjectRecord
   refreshToken: number
   activeSegmentId?: string | null
+  tmSegmentIds?: string[]
 }>()
 
 const emit = defineEmits<{
@@ -59,8 +60,10 @@ function applyHighlight(scroll = false) {
     props.record.segments,
     props.activeSegmentId ?? null,
     {
-    scroll,
-  })
+      scroll,
+      tmSegmentIds: new Set(props.tmSegmentIds ?? []),
+    },
+  )
 }
 
 function schedulePreviewScrollPersist() {
@@ -222,6 +225,12 @@ watch(
   },
 )
 
+watch(
+  () => props.tmSegmentIds,
+  () => applyHighlight(false),
+  { deep: true },
+)
+
 onBeforeUnmount(() => {
   gen++
   bindScrollerScroll(null)
@@ -363,18 +372,31 @@ onBeforeUnmount(() => {
 .docx-host :deep([data-appzac-segment-id]) {
   cursor: pointer;
   border-radius: 2px;
-  transition: background 0.15s ease;
+  transition:
+    background 0.15s ease,
+    text-decoration-color 0.15s ease;
 }
 
 .docx-host :deep(p.appzac-preview-done) {
   background: var(--preview-done-bg);
 }
 
+.docx-host :deep(p.appzac-preview-tm) {
+  text-decoration: underline;
+  text-decoration-color: var(--preview-tm-underline);
+  text-underline-offset: 0.14em;
+  text-decoration-thickness: 1.5px;
+}
+
+.docx-host :deep(p.appzac-preview-tm:hover) {
+  text-decoration-color: var(--preview-tm-underline-hover);
+}
+
 .docx-host :deep(p.appzac-preview-hit) {
   background: var(--preview-hit-bg);
 }
 
-.docx-host :deep([data-appzac-segment-id]:hover) {
+.docx-host :deep([data-appzac-segment-id]:not(.appzac-preview-tm):not(.appzac-preview-done):hover) {
   background: var(--preview-hit-bg);
 }
 </style>

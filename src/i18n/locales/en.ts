@@ -69,6 +69,7 @@ export default {
     leaseBlocked: 'This project is open in another tab. View only here.',
     tmApplyExact: 'Insert exact TM match',
     tmApplyFuzzy: 'Insert fuzzy TM match ({pct}%)',
+    tmUnavailable: 'No TM suggestion for this segment',
     exportTmx: 'Export TM (TMX)',
     exportTmxHint: 'Download translation memory as TMX',
     importTmx: 'Import TM (TMX)',

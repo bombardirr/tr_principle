@@ -50,6 +50,8 @@ html[data-theme="dark"] {
   --accent-text: #f2f7fb;
   --ok: #7dbe8a;
   --warn: #d4a85a;
+  --tm-accent: #d4a85a;
+  --tm-accent-muted: rgba(212, 168, 90, 0.45);
   --danger: #e07070;
   --danger-bg: rgba(224, 112, 112, 0.15);
   --badge-bg: rgba(125, 190, 138, 0.15);
@@ -66,6 +68,8 @@ html[data-theme="dark"] {
   --preview-page-shadow: 0 4px 18px rgba(0, 0, 0, 0.32), 0 0 0 1px rgba(91, 159, 212, 0.1);
   --preview-hit-bg: rgba(91, 159, 212, 0.2);
   --preview-done-bg: rgba(125, 190, 138, 0.18);
+  --preview-tm-underline: rgba(212, 168, 90, 0.55);
+  --preview-tm-underline-hover: rgba(212, 168, 90, 0.9);
   --kind-table: #d4a85a;
   --kind-header: #7eb8e8;
   --kind-footer: #b39ddb;
@@ -97,6 +101,8 @@ html[data-theme="light"] {
   --accent-text: #ffffff;
   --ok: #2f5a2f;
   --warn: #8a6a2f;
+  --tm-accent: #b8860b;
+  --tm-accent-muted: rgba(184, 134, 11, 0.4);
   --danger: #a33;
   --danger-bg: #fceaea;
   --badge-bg: #e8f0e4;
@@ -113,6 +119,8 @@ html[data-theme="light"] {
   --preview-page-shadow: 0 4px 20px rgba(44, 95, 138, 0.14), 0 0 0 1px rgba(44, 95, 138, 0.08);
   --preview-hit-bg: rgba(44, 95, 138, 0.14);
   --preview-done-bg: rgba(47, 90, 47, 0.1);
+  --preview-tm-underline: rgba(184, 134, 11, 0.45);
+  --preview-tm-underline-hover: rgba(184, 134, 11, 0.85);
   --kind-table: #9a6b1a;
   --kind-header: #2c5f8a;
   --kind-footer: #6b4c9a;

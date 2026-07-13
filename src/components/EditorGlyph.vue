@@ -10,6 +10,10 @@ defineProps<{
     | 'refresh'
     | 'save'
     | 'export'
+    | 'archive'
+    | 'download-docx'
+    | 'download-tmx'
+    | 'upload-tmx'
     | 'tm'
     | 'import'
     | 'theme'
@@ -101,6 +105,72 @@ defineProps<{
         stroke-linecap="round"
         stroke-linejoin="round"
         d="M3.25 11.75V12.75A1.25 1.25 0 0 0 4.5 14h7a1.25 1.25 0 0 0 1.25-1.25v-1"
+      />
+    </g>
+    <g v-else-if="name === 'archive'">
+      <path
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        d="M4.25 5.25h7.5l1 2.25H3.25l1-2.25Z"
+      />
+      <path
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        d="M3.25 7.5v4.25A1.25 1.25 0 0 0 4.5 13h7a1.25 1.25 0 0 0 1.25-1.25V7.5"
+      />
+      <path stroke-linecap="round" d="M6.25 9.75h3.5" />
+    </g>
+    <g v-else-if="name === 'download-docx'">
+      <path
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        d="M5.75 2.75h3.25l2 2v5.75a1.25 1.25 0 0 1-1.25 1.25H5.75A1.25 1.25 0 0 1 4.5 9.25V4A1.25 1.25 0 0 1 5.75 2.75Z"
+      />
+      <path stroke-linecap="round" d="M8.75 2.75V5h2" />
+      <path stroke-linecap="round" d="M6.1 6.75h3.8M6.1 8.25h2.6" />
+      <path
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        d="M8 11.5v2.25"
+      />
+      <path stroke-linecap="round" stroke-linejoin="round" d="M6.5 13 8 14.5l1.5-1.5" />
+    </g>
+    <g v-else-if="name === 'download-tmx'">
+      <ellipse cx="8" cy="4.1" rx="3.35" ry="1.2" />
+      <path
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        d="M4.65 4.1v2.55c0 .68 1.5 1.23 3.35 1.23s3.35-.55 3.35-1.23V4.1"
+      />
+      <path
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        d="M8 9.75v2.25"
+      />
+      <path stroke-linecap="round" stroke-linejoin="round" d="M6.5 11.25 8 12.75l1.5-1.5" />
+      <path
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        d="M4.25 13.75h7.5"
+      />
+    </g>
+    <g v-else-if="name === 'upload-tmx'">
+      <path
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        d="M8 3.25v2.25"
+      />
+      <path stroke-linecap="round" stroke-linejoin="round" d="M6.5 5.75 8 4.25l1.5 1.5" />
+      <path
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        d="M4.25 3.25h7.5"
+      />
+      <ellipse cx="8" cy="10.15" rx="3.35" ry="1.2" />
+      <path
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        d="M4.65 10.15v2.55c0 .68 1.5 1.23 3.35 1.23s3.35-.55 3.35-1.23v-2.55"
       />
     </g>
     <g v-else-if="name === 'tm'">

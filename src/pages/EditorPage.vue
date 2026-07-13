@@ -17,9 +17,9 @@ import { findTmMatch } from '@/tm/match'
 import { exportTmx, parseTmx } from '@/tm/tmx'
 import { listTmUnits, recordDoneSegmentsInTm, importTmUnits } from '@/storage/tmIdb'
 import {
-  countDoneSegments,
+  countTranslatedSegments,
   finalizeSegmentStatus,
-  isSegmentDone,
+  isSegmentTranslated,
   normalizeSegmentStatus,
 } from '@/utils/segmentStatus'
 import type { ProjectRecord, Segment } from '@/types/project'
@@ -53,7 +53,7 @@ const tmUnits = shallowRef<TmUnit[]>([])
 const tmImportInput = ref<HTMLInputElement | null>(null)
 
 const done = computed(() =>
-  record.value ? countDoneSegments(record.value.segments) : 0,
+  record.value ? countTranslatedSegments(record.value.segments) : 0,
 )
 const total = computed(() => record.value?.segments.length ?? 0)
 
@@ -111,10 +111,18 @@ function setSaveError(e: unknown) {
 async function persistNow(): Promise<void> {
   if (!record.value || projectLease.blocked.value) return
   clearSaveTimer()
-  await saveProject(record.value)
-  for (const s of record.value.segments) {
-    s.status = finalizeSegmentStatus(s)
+
+  const segments = record.value.segments.map((s) => ({
+    ...s,
+    status: finalizeSegmentStatus(s),
+  }))
+  record.value = {
+    meta: record.value.meta,
+    segments,
+    docx: record.value.docx,
   }
+
+  await saveProject(record.value)
   await recordDoneSegmentsInTm(record.value.segments, {
     sourceLang: record.value.meta.sourceLang,
     targetLang: record.value.meta.targetLang,
@@ -263,7 +271,7 @@ function resetTarget(seg: Segment) {
 }
 
 function tmMatchFor(seg: Segment): TmMatch | null {
-  if (!record.value || isSegmentDone(seg)) return null
+  if (!record.value || isSegmentTranslated(seg)) return null
   const match = findTmMatch(
     tmUnits.value,
     seg.source,
@@ -274,6 +282,13 @@ function tmMatchFor(seg: Segment): TmMatch | null {
   if (seg.target.trim() === match.target.trim()) return null
   return match
 }
+
+const tmHintSegmentIds = computed(() => {
+  if (!record.value) return []
+  return record.value.segments
+    .filter((seg) => tmMatchFor(seg) !== null)
+    .map((seg) => seg.id)
+})
 
 function applyTm(seg: Segment) {
   const match = tmMatchFor(seg)
@@ -500,16 +515,16 @@ async function goBack() {
             <EditorGlyph name="refresh" />
           </IconButton>
           <IconButton :title="t('editor.saveProjectHint')" @click="downloadProject">
-            <EditorGlyph name="save" />
+            <EditorGlyph name="archive" />
           </IconButton>
           <IconButton :title="t('editor.exportDocxHint')" @click="exportDocx">
-            <EditorGlyph name="export" />
+            <EditorGlyph name="download-docx" />
           </IconButton>
           <IconButton :title="t('editor.exportTmxHint')" @click="exportTmxFile">
-            <EditorGlyph name="tm" />
+            <EditorGlyph name="download-tmx" />
           </IconButton>
           <IconButton :title="t('editor.importTmxHint')" @click="openTmxImport">
-            <EditorGlyph name="import" />
+            <EditorGlyph name="upload-tmx" />
           </IconButton>
           <input
             ref="tmImportInput"
@@ -555,6 +570,7 @@ async function goBack() {
         :record="record"
         :refresh-token="previewToken"
         :active-segment-id="activeSegmentId"
+        :tm-segment-ids="tmHintSegmentIds"
         @select-segment="onPreviewSelectSegment"
       />
     </div>
@@ -775,6 +791,7 @@ h1.doc-title {
   gap: 1rem;
   align-items: start;
   width: 100%;
+  padding-top: 0.75rem;
 }
 
 .editor-layout:not(.with-preview) {

@@ -26,12 +26,50 @@
 
 ### Фаза B: Translation Memory + обмен форматами (локально, без сервера)
 
-**TM (ядро B)**
+**TM (ядро B — сделано)**
 
-- [ ] Локальное хранилище TM (IndexedDB)
-- [ ] Запись подтверждённых (`done`) сегментов в TM
-- [ ] Exact + fuzzy match в редакторе
-- [ ] Импорт / экспорт **TMX**
+- [x] Локальное хранилище TM (IndexedDB `appzac-tm`)
+- [x] Запись подтверждённых (`done`) сегментов в TM при автосейве
+- [x] Exact + fuzzy match в редакторе (порог 85%, Levenshtein по всей строке)
+- [x] Импорт / экспорт **TMX 1.4**
+- [x] UI: кнопка ТМ (янтарь), подчёркивание в превью, always-visible disabled state
+
+**TM (B2 — ближе к стандартам Trados / memoQ / Smartcat, в рамках local-first)**
+
+> Референс-поведение крупных CAT: exact → context (101%) → fuzzy с настраиваемым порогом; concordance / fragment recall; штрафы за теги и цифры; опции нормализации пунктуации. Реализуем поэтапно — без over-engineering на первом проходе.
+
+**Приоритет 1 — то, что уже выявили тестами**
+
+- [ ] **Fragment / sub-segment match** — если сегмент длиннее записи TM, искать **вхождения** TM-фраз внутри сегмента (concordance-style), не только сравнение «вся строка ↔ вся строка»
+  - MVP: разбивка source по `.?!…` + эвристика абзацев; для каждого фрагмента — exact/fuzzy по TM
+  - UI: несколько подсказок или «лучший фрагмент» + %; в превью — подчёркивание только совпавшей части (позже)
+  - Тест-кейс: «Вы нам нравитесь. … Вы нам нравитесь?» → match на каждое вхождение «Вы нам нравитесь.»
+- [ ] **Нормализация пунктуации (опция)** — для fuzzy (и опционально exact):
+  - игнор **конечной** пунктуации (`. , ; : ! ? …`)
+  - опционально: нормализация `?` / `!` ↔ `.` при сравнении
+  - настройка в UI или `localStorage`: «строго» (как сейчас) / «мягко» (ближе к CAT)
+  - тест-кейс: «…нравитесь» и «…нравитесь.» → 100% в режиме «мягко»
+
+**Приоритет 2 — типичные CAT-фичи, реалистичные локально**
+
+- [ ] **Настраиваемый порог fuzzy** (slider 70–100%, дефолт 85% — как у многих CAT)
+- [ ] **Context match (101%)** — ключ TM = source + id/hash **соседнего** сегмента (prev/next); показывать выше обычного 100%
+- [ ] **Штраф за расхождение тегов** `{1}…{2}` — fuzzy score −N% если последовательность tag id не совпадает (inline tags уже есть)
+- [ ] **Match metadata в UI** — exact / fuzzy / fragment / context, %; tooltip как в CAT
+- [ ] **Concordance search** — отдельная панель «поиск по TM» по подстроке (read-only, без автоподстановки)
+
+**Приоритет 3 — после D-lite / облачной TM**
+
+- [ ] Несколько TM с приоритетом (project TM + global TM)
+- [ ] Penalty за числа/единицы (упрощённо: разный digit-sequence → −%)
+- [ ] TM maintainability: dedupe, merge on import, `updatedAt` conflict rules
+- [ ] **SRX** / пользовательские правила сегментации (backlog — сильно ближе к enterprise CAT)
+
+**Не цель MVP / B2 (явно отложить)**
+
+- MT integration, adaptive MT, auto-propagation across files
+- Perfect 101% / structure match с полным tree alignment
+- Server-side TM index (Elasticsearch) — только при масштабе Pro
 
 **Обмен сегментами (B+, не заменяет DOCX round-trip)**
 
@@ -164,14 +202,15 @@ IndexedDB **всегда локальна** в браузере пользова
 ## Порядок реализации (рекомендуемый)
 
 1. Закрыть чеклист Word (A)
-2. **B-local:** TM + TMX + match
-3. **D-lite:** Go API, postgres, docker local, auth, session_version, project lock, backup API
-4. **B+:** XLIFF 1.2
-5. SPA: login, offline outbox, feature flags, admin = Pro
-6. **Prod:** расширить compose + `deploy/CURSOR_MINI_PC.txt`, admin user
-7. **Security pass** — чеклист выше
-8. **C:** глоссарий
-9. **D/Pro:** полный sync, монетизация
+2. ~~**B-local:** TM + TMX + match~~ ✅
+3. **B2:** fragment match + нормализация пунктуации + настраиваемый порог fuzzy
+4. **D-lite:** Go API, postgres, docker local, auth, session_version, project lock, backup API
+5. **B+:** XLIFF 1.2; context match (101%); tag penalties
+6. SPA: login, offline outbox, feature flags, admin = Pro
+7. **Prod:** расширить compose + `deploy/CURSOR_MINI_PC.txt`, admin user
+8. **Security pass** — чеклист выше
+9. **C:** глоссарий
+10. **D/Pro:** полный sync, облачная TM, concordance + multi-TM
 
 ---
 
