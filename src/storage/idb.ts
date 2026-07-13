@@ -1,5 +1,6 @@
 import { openDB, type DBSchema, type IDBPDatabase } from 'idb'
-import type { ProjectMeta, ProjectRecord, Segment } from '@/types/project'
+import type { ProjectMeta, ProjectRecord } from '@/types/project'
+import { copyArrayBuffer } from '@/utils/buffer'
 
 interface CatDb extends DBSchema {
   projects: {
@@ -28,8 +29,7 @@ function getDb() {
 
 /** Plain clone safe for IndexedDB (strips Vue proxies). */
 export function cloneProjectRecord(record: ProjectRecord): ProjectRecord {
-  const docx = new ArrayBuffer(record.docx.byteLength)
-  new Uint8Array(docx).set(new Uint8Array(record.docx))
+  const docx = copyArrayBuffer(record.docx)
 
   return {
     meta: {
@@ -78,7 +78,7 @@ export async function saveProject(record: ProjectRecord): Promise<void> {
   const clone = cloneProjectRecord(record)
   clone.meta.updatedAt = new Date().toISOString()
   clone.meta.segmentCount = clone.segments.length
-  clone.meta.doneCount = clone.segments.filter((s) => s.status === 'done').length
+  clone.meta.doneCount = clone.segments.filter((s) => s.target.trim() !== '').length
 
   // keep caller in sync with recount
   record.meta.updatedAt = clone.meta.updatedAt
@@ -103,13 +103,4 @@ export async function deleteProject(id: string): Promise<void> {
 
 export function createProjectId(): string {
   return crypto.randomUUID()
-}
-
-export function recountMeta(segments: Segment[], meta: ProjectMeta): ProjectMeta {
-  return {
-    ...meta,
-    segmentCount: segments.length,
-    doneCount: segments.filter((s) => s.status === 'done').length,
-    updatedAt: new Date().toISOString(),
-  }
 }

@@ -12,7 +12,7 @@ export function getTheme(): Theme {
   return readStored()
 }
 
-export function applyTheme(theme: Theme) {
+function applyTheme(theme: Theme) {
   document.documentElement.dataset.theme = theme
   localStorage.setItem(STORAGE_KEY, theme)
 }

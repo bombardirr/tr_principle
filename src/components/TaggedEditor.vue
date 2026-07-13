@@ -17,7 +17,6 @@ const props = withDefaults(
 
 const emit = defineEmits<{
   'update:modelValue': [value: string]
-  focus: []
 }>()
 
 /** Empty mount point — Vue must not put siblings here or it will wipe the editor. */
@@ -120,7 +119,6 @@ function onInput() {
 
 function onFocus() {
   focused = true
-  emit('focus')
 }
 
 function onBlur() {

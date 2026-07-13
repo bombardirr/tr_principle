@@ -19,6 +19,7 @@ const notice = ref('')
 const saving = ref(false)
 const allSaved = ref(true)
 let saveTimer: ReturnType<typeof setTimeout> | null = null
+let loadGen = 0
 
 const SAVE_IDLE_MS = 3000
 
@@ -27,29 +28,76 @@ const done = computed(
 )
 const total = computed(() => record.value?.segments.length ?? 0)
 
-function syncStatusesFromDisk(segments: Segment[]) {
-  for (const s of segments) {
-    s.status = s.target.trim() ? 'done' : 'empty'
+function normalizeStatuses(segments: Segment[]): Segment[] {
+  return segments.map((s) => ({
+    ...s,
+    status: s.target.trim() ? 'done' : 'empty',
+  }))
+}
+
+function withNormalizedRecord(rec: ProjectRecord): ProjectRecord {
+  return {
+    meta: rec.meta,
+    docx: rec.docx,
+    segments: normalizeStatuses(rec.segments),
   }
+}
+
+function clearSaveTimer() {
+  if (saveTimer) {
+    clearTimeout(saveTimer)
+    saveTimer = null
+  }
+}
+
+function setSaveError(e: unknown) {
+  if (e instanceof Error && e.message === 'QUOTA') {
+    error.value = t('projects.quota')
+  } else {
+    error.value = e instanceof Error ? e.message : String(e)
+  }
+}
+
+async function persistNow(): Promise<void> {
+  if (!record.value) return
+  clearSaveTimer()
+  await saveProject(record.value)
+  record.value = withNormalizedRecord(record.value)
+  allSaved.value = true
+  error.value = ''
 }
 
 async function load() {
+  const gen = ++loadGen
   error.value = ''
   allSaved.value = true
   const found = await getProject(props.id)
+  if (gen !== loadGen) return
   if (!found) {
-    error.value = 'Project not found'
+    error.value = t('editor.projectNotFound')
+    record.value = null
     return
   }
-  syncStatusesFromDisk(found.segments)
-  record.value = found
+  record.value = withNormalizedRecord(found)
 }
 
-onMounted(load)
+function onBeforeUnload(e: BeforeUnloadEvent) {
+  if (!allSaved.value) e.preventDefault()
+}
+
+onMounted(() => {
+  load()
+  window.addEventListener('beforeunload', onBeforeUnload)
+})
+
 watch(() => props.id, load)
 
 onUnmounted(() => {
-  if (saveTimer) clearTimeout(saveTimer)
+  window.removeEventListener('beforeunload', onBeforeUnload)
+  clearSaveTimer()
+  if (record.value && !allSaved.value) {
+    void saveProject(record.value).catch(() => {})
+  }
 })
 
 /** Replace a segment immutably so shallowRef children re-render. */
@@ -68,28 +116,15 @@ function patchSegment(segId: string, patch: Partial<Segment>) {
 function scheduleSave() {
   if (!record.value) return
   allSaved.value = false
-  if (saveTimer) clearTimeout(saveTimer)
+  notice.value = ''
+  clearSaveTimer()
   saveTimer = setTimeout(async () => {
     if (!record.value) return
     saving.value = true
     try {
-      await saveProject(record.value)
-      record.value = {
-        meta: record.value.meta,
-        docx: record.value.docx,
-        segments: record.value.segments.map((s) => ({
-          ...s,
-          status: s.target.trim() ? 'done' : 'empty',
-        })),
-      }
-      allSaved.value = true
-      error.value = ''
+      await persistNow()
     } catch (e) {
-      if (e instanceof Error && e.message === 'QUOTA') {
-        error.value = t('projects.quota')
-      } else {
-        error.value = e instanceof Error ? e.message : String(e)
-      }
+      setSaveError(e)
     } finally {
       saving.value = false
     }
@@ -98,78 +133,69 @@ function scheduleSave() {
 
 function updateTarget(seg: Segment, value: string) {
   if (!record.value) return
+  notice.value = ''
   patchSegment(seg.id, { target: value, status: 'draft' })
   scheduleSave()
 }
 
 function copySource(seg: Segment) {
   if (!record.value) return
+  notice.value = ''
   patchSegment(seg.id, { target: seg.source, status: 'draft' })
   scheduleSave()
 }
 
-async function downloadProject() {
-  if (!record.value) return
+async function withSaving<T>(fn: () => Promise<T>): Promise<T | undefined> {
+  saving.value = true
   try {
-    if (saveTimer) {
-      clearTimeout(saveTimer)
-      saveTimer = null
-    }
-    saving.value = true
-    await saveProject(record.value)
-    record.value = {
-      meta: record.value.meta,
-      docx: record.value.docx,
-      segments: record.value.segments.map((s) => ({
-        ...s,
-        status: s.target.trim() ? 'done' : 'empty',
-      })),
-    }
-    allSaved.value = true
-    const blob = await packProjectFile(record.value)
-    downloadBlob(blob, `${record.value.meta.name}.tcat.zip`)
-    notice.value = t('editor.projectSaved')
+    await persistNow()
+    return await fn()
   } catch (e) {
-    error.value = e instanceof Error ? e.message : String(e)
+    setSaveError(e)
+    return undefined
   } finally {
     saving.value = false
   }
 }
 
+async function downloadProject() {
+  if (!record.value) return
+  await withSaving(async () => {
+    const blob = await packProjectFile(record.value!)
+    downloadBlob(blob, `${record.value!.meta.name}.tcat.zip`)
+    notice.value = t('editor.projectSaved')
+  })
+}
+
 async function exportDocx() {
   if (!record.value) return
-  try {
-    if (saveTimer) {
-      clearTimeout(saveTimer)
-      saveTimer = null
-      saving.value = true
-      await saveProject(record.value)
-      record.value = {
-        meta: record.value.meta,
-        docx: record.value.docx,
-        segments: record.value.segments.map((s) => ({
-          ...s,
-          status: s.target.trim() ? 'done' : 'empty',
-        })),
-      }
-      allSaved.value = true
+  await withSaving(async () => {
+    const blob = await buildTranslatedDocx(record.value!.docx, record.value!.segments)
+    downloadBlob(blob, `${record.value!.meta.name}.translated.docx`)
+    notice.value = t('editor.exported')
+  })
+}
+
+async function goBack() {
+  if (record.value && !allSaved.value) {
+    saving.value = true
+    try {
+      await persistNow()
+    } catch (e) {
+      setSaveError(e)
+      return
+    } finally {
       saving.value = false
     }
-    const blob = await buildTranslatedDocx(record.value.docx, record.value.segments)
-    downloadBlob(blob, `${record.value.meta.name}.translated.docx`)
-    notice.value = t('editor.exported')
-    error.value = ''
-  } catch (e) {
-    error.value = e instanceof Error ? e.message : String(e)
-    saving.value = false
   }
+  await router.push('/')
 }
 </script>
 
 <template>
   <section v-if="record">
     <div class="toolbar">
-      <button type="button" class="ghost" @click="router.push('/')">{{ t('editor.back') }}</button>
+      <button type="button" class="ghost" @click="goBack">{{ t('editor.back') }}</button>
       <h1>{{ record.meta.name }}</h1>
       <span class="progress">{{ t('editor.progress', { done, total }) }}</span>
       <span v-if="saving" class="save-status saving" aria-live="polite">

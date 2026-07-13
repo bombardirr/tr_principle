@@ -1,5 +1,3 @@
-const W_NS = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'
-
 export function parseXml(xml: string): Document {
   const doc = new DOMParser().parseFromString(xml, 'application/xml')
   const err = doc.querySelector('parsererror')
@@ -30,13 +28,6 @@ export function isW(el: Element, name: string): boolean {
 
 export function childrenElements(parent: Element): Element[] {
   return Array.from(parent.childNodes).filter((n): n is Element => n.nodeType === 1)
-}
-
-/** All w:p in document order (includes table cells). */
-export function allParagraphs(root: Element): Element[] {
-  return Array.from(root.getElementsByTagNameNS(W_NS, 'p')).filter(
-    (el) => el.namespaceURI === W_NS || localName(el) === 'p',
-  )
 }
 
 /** Fallback when NS lookups fail (some serializers drop NS). */
@@ -88,27 +79,6 @@ export function setRunText(run: Element, text: string): void {
   for (let i = 1; i < nodes.length; i++) {
     nodes[i]!.textContent = ''
   }
-}
-
-/** Direct and nested text runs under paragraph, document order (incl. hyperlinks). */
-export function collectTextRuns(para: Element): Element[] {
-  const runs: Element[] = []
-  const walk = (el: Element) => {
-    for (const c of childrenElements(el)) {
-      const name = localName(c)
-      if (name === 'r') {
-        if (runText(c).length > 0 || getTextNodes(c).length > 0) {
-          // include runs that have w:t even if empty after clear
-          if (getTextNodes(c).length > 0) runs.push(c)
-        }
-      } else if (name === 'hyperlink' || name === 'sdt' || name === 'sdtContent') {
-        walk(c)
-      }
-      // do not descend into nested tbl from here — nested paras handled separately
-    }
-  }
-  walk(para)
-  return runs
 }
 
 /** Collect runs that currently have w:t (for write-back indexing). */

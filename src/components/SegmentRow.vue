@@ -30,7 +30,11 @@ const dirty = computed(() => props.segment.status === 'draft')
 const translationLabel = computed(() =>
   filled.value ? t('status.hasTranslation') : t('status.empty'),
 )
-const saveLabel = computed(() => (dirty.value ? t('status.draft') : t('status.done')))
+const saveLabel = computed(() => {
+  if (props.segment.status === 'draft') return t('status.draft')
+  if (props.segment.status === 'done') return t('status.done')
+  return ''
+})
 
 function onCopyClick() {
   emit('copySource')
@@ -51,7 +55,7 @@ function focusTarget() {
       <span class="id">{{ segment.id }}</span>
       <span v-for="l in labels" :key="l" class="badge">{{ l }}</span>
       <span class="status translation" :class="filled ? 'has' : 'none'">{{ translationLabel }}</span>
-      <span class="status save" :class="dirty ? 'dirty' : 'ok'">{{ saveLabel }}</span>
+      <span v-if="saveLabel" class="status save" :class="dirty ? 'dirty' : 'ok'">{{ saveLabel }}</span>
       <button type="button" class="copy-btn" :title="t('editor.copySourceHint')" @click="onCopyClick">
         {{ t('editor.copySource') }}
       </button>

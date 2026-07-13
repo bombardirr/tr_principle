@@ -1,6 +1,7 @@
 import JSZip from 'jszip'
 import type { Segment } from '@/types/project'
 import { extractSegmentsFromStories, type StoryFile } from './extractSegments'
+import { toArrayBuffer } from '@/utils/buffer'
 
 export class DocxError extends Error {
   constructor(message: string) {
@@ -41,10 +42,16 @@ async function loadStories(zip: JSZip): Promise<StoryFile[]> {
   return stories
 }
 
+export async function storiesToMap(zip: JSZip): Promise<Record<string, string>> {
+  const stories = await loadStories(zip)
+  const map: Record<string, string> = {}
+  for (const s of stories) map[s.path] = s.xml
+  return map
+}
+
 export interface OpenDocxResult {
   zipBytes: ArrayBuffer
   segments: Segment[]
-  storyPaths: string[]
 }
 
 export async function openDocx(input: File | ArrayBuffer | Uint8Array): Promise<OpenDocxResult> {
@@ -74,21 +81,10 @@ export async function openDocx(input: File | ArrayBuffer | Uint8Array): Promise<
   return {
     zipBytes,
     segments,
-    storyPaths: stories.map((s) => s.path),
   }
-}
-
-function toArrayBuffer(data: ArrayBuffer | Uint8Array): ArrayBuffer {
-  if (data instanceof ArrayBuffer) return data.slice(0)
-  const out = new ArrayBuffer(data.byteLength)
-  new Uint8Array(out).set(data)
-  return out
 }
 
 export async function readStoryMap(zipBytes: ArrayBuffer): Promise<Record<string, string>> {
   const zip = await JSZip.loadAsync(zipBytes)
-  const stories = await loadStories(zip)
-  const map: Record<string, string> = {}
-  for (const s of stories) map[s.path] = s.xml
-  return map
+  return storiesToMap(zip)
 }

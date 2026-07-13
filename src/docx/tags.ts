@@ -55,14 +55,6 @@ export function splitTaggedText(source: string, target: string): string[] | null
   return parts
 }
 
-export function listBrokenTagSegments(
-  segments: { id: string; source: string; target: string }[],
-): string[] {
-  return segments
-    .filter((s) => s.target.trim() !== '' && !tagsMatch(s.source, s.target))
-    .map((s) => s.id)
-}
-
 /**
  * If tags were dropped while translating, put all plain text into the first
  * format span so export still works (inline format may collapse for that segment).

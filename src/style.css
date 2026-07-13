@@ -42,7 +42,6 @@ html[data-theme="dark"] {
   --accent-strong: #3d7eae;
   --accent-text: #f2f7fb;
   --ok: #7dbe8a;
-  --ok-bg: rgba(125, 190, 138, 0.12);
   --warn: #d4a85a;
   --danger: #e07070;
   --danger-bg: rgba(224, 112, 112, 0.15);
@@ -73,7 +72,6 @@ html[data-theme="light"] {
   --accent-strong: #2c5f8a;
   --accent-text: #ffffff;
   --ok: #2f5a2f;
-  --ok-bg: #e8f0e4;
   --warn: #8a6a2f;
   --danger: #a33;
   --danger-bg: #fceaea;

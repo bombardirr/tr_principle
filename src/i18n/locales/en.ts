@@ -33,16 +33,11 @@ export default {
     labelTable: 'Table',
     labelHeader: 'Header',
     labelFooter: 'Footer',
-    markDone: 'Done',
     saving: 'Saving…',
     autosaved: 'Saved',
-    exportBlocked: 'Export blocked due to broken tags',
-    tagHint: 'Keep tags like {1}…{2} as in the source — only edit the text between them',
-    tagHintSoft:
-      'Format tags do not match — on export the translation will use the first style span',
-    brokenTags: 'Fix tags in segments: {ids}',
     exported: 'Translated DOCX downloaded',
     projectSaved: 'Project backup downloaded (.tcat.zip) — reopen later via “Open project backup”',
+    projectNotFound: 'Project not found',
   },
   status: {
     empty: 'No translation',

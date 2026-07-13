@@ -2,13 +2,12 @@
 import { onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { setLocale } from '@/i18n'
-import { getTheme, initTheme, toggleTheme, type Theme } from '@/theme'
+import { getTheme, toggleTheme, type Theme } from '@/theme'
 
 const { t, locale } = useI18n()
 const theme = ref<Theme>('dark')
 
 onMounted(() => {
-  initTheme()
   theme.value = getTheme()
 })
 

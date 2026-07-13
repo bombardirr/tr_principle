@@ -2,16 +2,16 @@ import JSZip from 'jszip'
 import type { Segment } from '@/types/project'
 import { prepareSegmentsForExport } from './tags'
 import { applyTranslationsToStories } from './applyTranslations'
-import { readStoryMap } from './openDocx'
+import { storiesToMap } from './openDocx'
 
 export async function buildTranslatedDocx(
   originalBytes: ArrayBuffer,
   segments: Segment[],
 ): Promise<Blob> {
   const ready = prepareSegmentsForExport(segments)
-  const stories = await readStoryMap(originalBytes)
-  const updated = applyTranslationsToStories(stories, ready)
   const zip = await JSZip.loadAsync(originalBytes)
+  const stories = await storiesToMap(zip)
+  const updated = applyTranslationsToStories(stories, ready)
   for (const [path, xml] of Object.entries(updated)) {
     zip.file(path, xml)
   }
