@@ -38,6 +38,12 @@ export default {
     exported: 'Translated DOCX downloaded',
     projectSaved: 'Project backup downloaded (.tcat.zip) — reopen later via “Open project backup”',
     projectNotFound: 'Project not found',
+    previewOn: 'Preview',
+    previewOff: 'Hide preview',
+    previewTitle: 'DOCX preview',
+    previewHint: 'Updates after autosave. Heavy on weak PCs — turn off when not needed.',
+    previewLoading: 'Building document…',
+    previewRefresh: 'Refresh preview',
   },
   status: {
     empty: 'No translation',

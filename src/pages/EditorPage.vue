@@ -3,6 +3,7 @@ import { computed, onMounted, onUnmounted, ref, shallowRef, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import SegmentRow from '@/components/SegmentRow.vue'
+import DocxPreviewPanel from '@/components/DocxPreviewPanel.vue'
 import { buildTranslatedDocx, downloadBlob } from '@/docx/exportDocx'
 import { getProject, saveProject } from '@/storage/idb'
 import { packProjectFile } from '@/storage/projectFile'
@@ -22,6 +23,13 @@ let saveTimer: ReturnType<typeof setTimeout> | null = null
 let loadGen = 0
 
 const SAVE_IDLE_MS = 3000
+const PREVIEW_STORAGE_KEY = 'appzac-preview-enabled'
+
+const previewEnabled = ref(
+  typeof localStorage !== 'undefined' && localStorage.getItem(PREVIEW_STORAGE_KEY) === '1',
+)
+const previewToken = ref(0)
+let previewTimer: ReturnType<typeof setTimeout> | null = null
 
 const done = computed(
   () => record.value?.segments.filter((s) => s.target.trim() !== '').length ?? 0,
@@ -95,6 +103,7 @@ watch(() => props.id, load)
 onUnmounted(() => {
   window.removeEventListener('beforeunload', onBeforeUnload)
   clearSaveTimer()
+  if (previewTimer) clearTimeout(previewTimer)
   if (record.value && !allSaved.value) {
     void saveProject(record.value).catch(() => {})
   }
@@ -158,6 +167,33 @@ async function withSaving<T>(fn: () => Promise<T>): Promise<T | undefined> {
   }
 }
 
+function schedulePreviewRefresh() {
+  if (!previewEnabled.value) return
+  if (previewTimer) clearTimeout(previewTimer)
+  previewTimer = setTimeout(() => {
+    previewToken.value++
+  }, 800)
+}
+
+function togglePreview() {
+  previewEnabled.value = !previewEnabled.value
+  localStorage.setItem(PREVIEW_STORAGE_KEY, previewEnabled.value ? '1' : '0')
+  if (previewEnabled.value) previewToken.value++
+}
+
+function refreshPreviewNow() {
+  if (!previewEnabled.value) return
+  previewToken.value++
+}
+
+watch(allSaved, (saved) => {
+  if (saved) schedulePreviewRefresh()
+})
+
+watch(previewEnabled, (on) => {
+  if (on) previewToken.value++
+})
+
 async function downloadProject() {
   if (!record.value) return
   await withSaving(async () => {
@@ -206,6 +242,24 @@ async function goBack() {
         {{ t('editor.autosaved') }}
       </span>
       <div class="spacer" />
+      <button
+        type="button"
+        class="toggle"
+        :class="{ active: previewEnabled }"
+        :title="t('editor.previewHint')"
+        @click="togglePreview"
+      >
+        {{ previewEnabled ? t('editor.previewOff') : t('editor.previewOn') }}
+      </button>
+      <button
+        v-if="previewEnabled"
+        type="button"
+        class="ghost"
+        :disabled="!record"
+        @click="refreshPreviewNow"
+      >
+        {{ t('editor.previewRefresh') }}
+      </button>
       <button type="button" @click="downloadProject">{{ t('editor.saveProject') }}</button>
       <button type="button" class="primary" @click="exportDocx">
         {{ t('editor.exportDocx') }}
@@ -216,13 +270,22 @@ async function goBack() {
     <p v-else-if="notice" class="notice">{{ notice }}</p>
     <p v-if="total === 0" class="notice">{{ t('projects.emptyDoc') }}</p>
 
-    <SegmentRow
-      v-for="seg in record.segments"
-      :key="seg.id"
-      :segment="seg"
-      @update-target="updateTarget(seg, $event)"
-      @copy-source="copySource(seg)"
-    />
+    <div class="editor-layout" :class="{ 'with-preview': previewEnabled }">
+      <div class="editor-main">
+        <SegmentRow
+          v-for="seg in record.segments"
+          :key="seg.id"
+          :segment="seg"
+          @update-target="updateTarget(seg, $event)"
+          @copy-source="copySource(seg)"
+        />
+      </div>
+      <DocxPreviewPanel
+        v-if="previewEnabled"
+        :record="record"
+        :refresh-token="previewToken"
+      />
+    </div>
   </section>
   <p v-else-if="error" class="error">{{ error }}</p>
   <p v-else>…</p>
@@ -318,5 +381,32 @@ button.ghost {
 .notice {
   color: var(--ok);
   font-size: 0.9rem;
+}
+
+.editor-layout {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1rem;
+  align-items: start;
+}
+
+.editor-layout.with-preview {
+  grid-template-columns: minmax(0, 1.15fr) minmax(280px, 0.85fr);
+}
+
+.editor-main {
+  min-width: 0;
+}
+
+button.toggle.active {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: rgba(91, 159, 212, 0.12);
+}
+
+@media (max-width: 1100px) {
+  .editor-layout.with-preview {
+    grid-template-columns: 1fr;
+  }
 }
 </style>

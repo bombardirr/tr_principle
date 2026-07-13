@@ -39,6 +39,12 @@ export default {
     exported: 'Переведённый DOCX скачан',
     projectSaved: 'Копия проекта скачана (.tcat.zip) — её можно открыть позже через «Открыть копию проекта»',
     projectNotFound: 'Проект не найден',
+    previewOn: 'Предпросмотр',
+    previewOff: 'Скрыть превью',
+    previewTitle: 'Предпросмотр DOCX',
+    previewHint: 'Обновляется после автосохранения. Тяжёлая операция — выключайте на слабом ПК.',
+    previewLoading: 'Собираем документ…',
+    previewRefresh: 'Обновить превью',
   },
   status: {
     empty: 'Нет перевода',
