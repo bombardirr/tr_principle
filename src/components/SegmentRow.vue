@@ -64,7 +64,7 @@ function onResetClick() {
 </script>
 
 <template>
-  <article class="row" :class="{ active }">
+  <article :id="`segment-${segment.id}`" class="row" :class="{ active }">
     <div class="meta">
       <span class="seg-id">{{ displayId }}</span>
       <template v-if="kinds.length">
@@ -144,6 +144,8 @@ $toolbar-col-width: 2rem;
   border-radius: 12px;
   padding: 0.85rem 1rem;
   margin-bottom: 0;
+  scroll-margin-top: 5rem;
+  scroll-margin-bottom: 1.5rem;
 }
 
 .row.active {

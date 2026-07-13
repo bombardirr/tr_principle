@@ -262,6 +262,17 @@ function activateSegment(segId: string) {
   scheduleScrollPersist()
 }
 
+function scrollToSegment(segId: string) {
+  const el = document.getElementById(`segment-${segId}`)
+  el?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+}
+
+function onPreviewSelectSegment(segId: string) {
+  activeSegmentId.value = segId
+  scheduleScrollPersist()
+  void nextTick(() => scrollToSegment(segId))
+}
+
 function deactivateEditor() {
   const el = document.activeElement
   if (el instanceof HTMLElement && el.closest('.target-pane')) {
@@ -447,6 +458,7 @@ async function goBack() {
         :record="record"
         :refresh-token="previewToken"
         :active-segment-id="activeSegmentId"
+        @select-segment="onPreviewSelectSegment"
       />
     </div>
   </section>

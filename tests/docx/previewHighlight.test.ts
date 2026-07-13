@@ -5,9 +5,11 @@ import {
   highlightPreviewSegment,
   indexPreviewSegments,
   isSegmentDone,
+  markPreviewSegments,
   normalizePreviewText,
   PREVIEW_DONE_CLASS,
   PREVIEW_HIT_CLASS,
+  resolvePreviewSegmentClick,
 } from '@/docx/previewHighlight'
 
 function seg(
@@ -82,5 +84,19 @@ describe('previewHighlight', () => {
   it('marks intentionally empty done segments as done', () => {
     const segment = seg('seg-1', 'Hello', '', 'done')
     expect(isSegmentDone(segment)).toBe(true)
+  })
+
+  it('marks preview paragraphs and resolves click target to segment id', () => {
+    const dom = new JSDOM('<div id="host"><p>Hello world</p></div>')
+    const host = dom.window.document.getElementById('host')!
+    const segments = [seg('seg-1', 'Hello world')]
+    const map = indexPreviewSegments(host, segments)
+    markPreviewSegments(map)
+
+    const paragraph = map.get('seg-1')!
+    expect(paragraph.getAttribute('data-appzac-segment-id')).toBe('seg-1')
+    expect(resolvePreviewSegmentClick(paragraph)).toBe('seg-1')
+    expect(resolvePreviewSegmentClick(paragraph.firstChild!)).toBe('seg-1')
+    expect(resolvePreviewSegmentClick(host)).toBeNull()
   })
 })

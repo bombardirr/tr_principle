@@ -6,6 +6,7 @@ export { isSegmentDone } from '@/utils/segmentStatus'
 
 export const PREVIEW_HIT_CLASS = 'appzac-preview-hit'
 export const PREVIEW_DONE_CLASS = 'appzac-preview-done'
+export const PREVIEW_SEGMENT_ATTR = 'data-appzac-segment-id'
 
 export function segmentDisplayText(segment: Segment): string {
   const target = segment.target.trim()
@@ -67,6 +68,29 @@ export function indexPreviewSegments(
   }
 
   return map
+}
+
+export function markPreviewSegments(index: Map<string, HTMLElement>): void {
+  for (const [segmentId, el] of index) {
+    el.setAttribute(PREVIEW_SEGMENT_ATTR, segmentId)
+  }
+}
+
+function eventTargetElement(target: EventTarget | null): Element | null {
+  if (!target || typeof target !== 'object' || !('nodeType' in target)) return null
+  const node = target as Node
+  if (node.nodeType === node.ELEMENT_NODE) return node as Element
+  if (node.nodeType === node.TEXT_NODE) return (node as Text).parentElement
+  return null
+}
+
+export function resolvePreviewSegmentClick(target: EventTarget | null): string | null {
+  const el = eventTargetElement(target)
+  if (!el) return null
+  const marked = el.hasAttribute(PREVIEW_SEGMENT_ATTR)
+    ? el
+    : el.closest(`[${PREVIEW_SEGMENT_ATTR}]`)
+  return marked?.getAttribute(PREVIEW_SEGMENT_ATTR) ?? null
 }
 
 export function clearPreviewHighlights(host: HTMLElement): void {

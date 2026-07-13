@@ -6,6 +6,8 @@ import { buildTranslatedDocx } from '@/docx/exportDocx'
 import {
   highlightPreviewSegment,
   indexPreviewSegments,
+  markPreviewSegments,
+  resolvePreviewSegmentClick,
 } from '@/docx/previewHighlight'
 import { readEditorScroll, writeEditorScroll } from '@/storage/editorScroll'
 import type { ProjectRecord } from '@/types/project'
@@ -15,6 +17,10 @@ const props = defineProps<{
   record: ProjectRecord
   refreshToken: number
   activeSegmentId?: string | null
+}>()
+
+const emit = defineEmits<{
+  selectSegment: [segmentId: string]
 }>()
 
 const { t } = useI18n()
@@ -31,10 +37,18 @@ let scrollSaveTimer: ReturnType<typeof setTimeout> | null = null
 let scrollerScrollTarget: HTMLElement | null = null
 let fitObserver: ResizeObserver | null = null
 let lastPreviewScale = 1
+let scrollPreviewOnHighlight = true
 
 function loadPendingPreviewScroll() {
   const snap = readEditorScroll(props.projectId)
   pendingPreviewScroll = snap?.previewY ?? null
+}
+
+function onPreviewClick(e: MouseEvent) {
+  const segmentId = resolvePreviewSegmentClick(e.target)
+  if (!segmentId) return
+  scrollPreviewOnHighlight = false
+  emit('selectSegment', segmentId)
 }
 
 function applyHighlight(scroll = false) {
@@ -164,6 +178,7 @@ async function renderPreview() {
     scroller.value.scrollTop = scrollTop
     window.scrollTo(0, pageScrollY)
     segmentIndex = indexPreviewSegments(host.value, props.record.segments)
+    markPreviewSegments(segmentIndex)
     applyHighlight(false)
   } catch (e) {
     if (run === gen) {
@@ -201,7 +216,10 @@ watch(
 
 watch(
   () => props.activeSegmentId,
-  () => applyHighlight(true),
+  () => {
+    applyHighlight(scrollPreviewOnHighlight)
+    scrollPreviewOnHighlight = true
+  },
 )
 
 onBeforeUnmount(() => {
@@ -226,7 +244,7 @@ onBeforeUnmount(() => {
       >
         {{ t('editor.previewLoading') }}
       </div>
-      <div ref="host" class="preview-host docx-host" />
+      <div ref="host" class="preview-host docx-host" @click="onPreviewClick" />
       <div
         v-if="refreshing"
         class="preview-refresh"
@@ -342,14 +360,21 @@ onBeforeUnmount(() => {
   margin-bottom: 1rem !important;
 }
 
+.docx-host :deep([data-appzac-segment-id]) {
+  cursor: pointer;
+  border-radius: 2px;
+  transition: background 0.15s ease;
+}
+
 .docx-host :deep(p.appzac-preview-done) {
   background: var(--preview-done-bg);
-  border-radius: 2px;
 }
 
 .docx-host :deep(p.appzac-preview-hit) {
   background: var(--preview-hit-bg);
-  border-radius: 2px;
-  transition: background 0.15s ease;
+}
+
+.docx-host :deep([data-appzac-segment-id]:hover) {
+  background: var(--preview-hit-bg);
 }
 </style>
