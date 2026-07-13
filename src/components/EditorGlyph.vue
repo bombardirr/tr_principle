@@ -10,6 +10,8 @@ defineProps<{
     | 'refresh'
     | 'save'
     | 'export'
+    | 'tm'
+    | 'import'
     | 'theme'
     | 'trash'
     | 'check'
@@ -93,6 +95,28 @@ defineProps<{
         stroke-linecap="round"
         stroke-linejoin="round"
         d="M8 2.75v7.5"
+      />
+      <path stroke-linecap="round" stroke-linejoin="round" d="M5.5 7.75 8 10.25l2.5-2.5" />
+      <path
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        d="M3.25 11.75V12.75A1.25 1.25 0 0 0 4.5 14h7a1.25 1.25 0 0 0 1.25-1.25v-1"
+      />
+    </g>
+    <g v-else-if="name === 'tm'">
+      <ellipse cx="8" cy="5.25" rx="4.75" ry="1.75" />
+      <path
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        d="M3.25 5.25v5.5c0 .97 2.13 1.75 4.75 1.75s4.75-.78 4.75-1.75v-5.5"
+      />
+      <path stroke-linecap="round" d="M3.25 8c0 .97 2.13 1.75 4.75 1.75S12.75 8.97 12.75 8" />
+    </g>
+    <g v-else-if="name === 'import'">
+      <path
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        d="M8 10.25V2.75"
       />
       <path stroke-linecap="round" stroke-linejoin="round" d="M5.5 7.75 8 10.25l2.5-2.5" />
       <path

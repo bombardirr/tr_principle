@@ -13,12 +13,17 @@ import IconButton from '@/components/IconButton.vue'
 import EditorGlyph from '@/components/EditorGlyph.vue'
 import TooltipWrap from '@/components/TooltipWrap.vue'
 import { useProjectLease } from '@/composables/useProjectLease'
+import { findTmMatch } from '@/tm/match'
+import { exportTmx, parseTmx } from '@/tm/tmx'
+import { listTmUnits, recordDoneSegmentsInTm, importTmUnits } from '@/storage/tmIdb'
 import {
   countDoneSegments,
   finalizeSegmentStatus,
+  isSegmentDone,
   normalizeSegmentStatus,
 } from '@/utils/segmentStatus'
 import type { ProjectRecord, Segment } from '@/types/project'
+import type { TmMatch, TmUnit } from '@/types/tm'
 
 const props = defineProps<{ id: string }>()
 const { t } = useI18n()
@@ -44,6 +49,8 @@ let previewTimer: ReturnType<typeof setTimeout> | null = null
 let pageScrollSaveTimer: ReturnType<typeof setTimeout> | null = null
 const activeSegmentId = ref<string | null>(null)
 const projectLease = useProjectLease(() => props.id)
+const tmUnits = shallowRef<TmUnit[]>([])
+const tmImportInput = ref<HTMLInputElement | null>(null)
 
 const done = computed(() =>
   record.value ? countDoneSegments(record.value.segments) : 0,
@@ -108,6 +115,12 @@ async function persistNow(): Promise<void> {
   for (const s of record.value.segments) {
     s.status = finalizeSegmentStatus(s)
   }
+  await recordDoneSegmentsInTm(record.value.segments, {
+    sourceLang: record.value.meta.sourceLang,
+    targetLang: record.value.meta.targetLang,
+    projectId: record.value.meta.id,
+  })
+  tmUnits.value = await listTmUnits()
   allSaved.value = true
   error.value = ''
 }
@@ -164,6 +177,9 @@ const PAGE_SCROLL_OPTS: AddEventListenerOptions = { passive: true }
 onMounted(() => {
   projectLease.start()
   void load()
+  void listTmUnits().then((units) => {
+    tmUnits.value = units
+  })
   window.addEventListener('scroll', onPageScroll, PAGE_SCROLL_OPTS)
   window.addEventListener('beforeunload', onBeforeUnload)
 })
@@ -244,6 +260,62 @@ function resetTarget(seg: Segment) {
   notice.value = ''
   patchSegment(seg.id, { target: '', status: 'empty' })
   scheduleSave()
+}
+
+function tmMatchFor(seg: Segment): TmMatch | null {
+  if (!record.value || isSegmentDone(seg)) return null
+  const match = findTmMatch(
+    tmUnits.value,
+    seg.source,
+    record.value.meta.sourceLang,
+    record.value.meta.targetLang,
+  )
+  if (!match) return null
+  if (seg.target.trim() === match.target.trim()) return null
+  return match
+}
+
+function applyTm(seg: Segment) {
+  const match = tmMatchFor(seg)
+  if (!record.value || !match || projectLease.blocked.value) return
+  notice.value = ''
+  patchSegment(seg.id, { target: match.target, status: 'draft' })
+  scheduleSave()
+}
+
+async function exportTmxFile() {
+  if (!record.value) return
+  if (!tmUnits.value.length) {
+    notice.value = t('editor.tmxExportEmpty')
+    return
+  }
+  const xml = exportTmx(tmUnits.value, {
+    sourceLang: record.value.meta.sourceLang,
+    targetLang: record.value.meta.targetLang,
+  })
+  downloadBlob(new Blob([xml], { type: 'application/xml' }), 'translation-memory.tmx')
+  notice.value = t('editor.exportTmx')
+}
+
+function openTmxImport() {
+  tmImportInput.value?.click()
+}
+
+async function onTmxImportChange(e: Event) {
+  const input = e.target as HTMLInputElement
+  const file = input.files?.[0]
+  input.value = ''
+  if (!file) return
+  try {
+    const xml = await file.text()
+    const units = parseTmx(xml)
+    const count = await importTmUnits(units)
+    tmUnits.value = await listTmUnits()
+    notice.value = t('editor.tmxImported', { count })
+    error.value = ''
+  } catch (err) {
+    setSaveError(err)
+  }
 }
 
 async function withSaving<T>(fn: () => Promise<T>): Promise<T | undefined> {
@@ -433,6 +505,19 @@ async function goBack() {
           <IconButton :title="t('editor.exportDocxHint')" @click="exportDocx">
             <EditorGlyph name="export" />
           </IconButton>
+          <IconButton :title="t('editor.exportTmxHint')" @click="exportTmxFile">
+            <EditorGlyph name="tm" />
+          </IconButton>
+          <IconButton :title="t('editor.importTmxHint')" @click="openTmxImport">
+            <EditorGlyph name="import" />
+          </IconButton>
+          <input
+            ref="tmImportInput"
+            type="file"
+            accept=".tmx,application/xml,text/xml"
+            hidden
+            @change="onTmxImportChange"
+          />
         </div>
       </div>
     </Teleport>
@@ -455,10 +540,12 @@ async function goBack() {
           :key="seg.id"
           :segment="seg"
           :active="activeSegmentId === seg.id"
+          :tm-match="tmMatchFor(seg)"
           @update-target="updateTarget(seg, $event)"
           @copy-source="copySource(seg)"
           @leave-empty="leaveEmpty(seg)"
           @reset-target="resetTarget(seg)"
+          @apply-tm="applyTm(seg)"
           @activate="activateSegment(seg.id)"
         />
       </div>

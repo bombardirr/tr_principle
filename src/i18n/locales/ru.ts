@@ -68,5 +68,13 @@ export default {
     previewRefresh: 'Обновить превью',
     previewRefreshHint: 'Обновить предпросмотр по текущим переводам',
     leaseBlocked: 'Проект открыт в другой вкладке. Здесь доступен только просмотр.',
+    tmApplyExact: 'Вставить точное совпадение из ТМ',
+    tmApplyFuzzy: 'Вставить нечёткое совпадение из ТМ ({pct}%)',
+    exportTmx: 'Экспорт ТМ (TMX)',
+    exportTmxHint: 'Скачать память переводов в формате TMX',
+    importTmx: 'Импорт ТМ (TMX)',
+    importTmxHint: 'Добавить записи из TMX в локальную ТМ',
+    tmxImported: 'Импортировано записей ТМ: {count}',
+    tmxExportEmpty: 'В ТМ пока нет записей для экспорта',
   },
 }

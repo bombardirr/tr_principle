@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
+import type { TmMatch } from '@/types/tm'
 import type { Segment } from '@/types/project'
 import IconButton from './IconButton.vue'
 import EditorGlyph from './EditorGlyph.vue'
@@ -11,6 +12,7 @@ import { resolveSegmentKinds, type SegmentKind } from '@/utils/segmentKind'
 const props = defineProps<{
   segment: Segment
   active?: boolean
+  tmMatch?: TmMatch | null
 }>()
 
 const emit = defineEmits<{
@@ -19,6 +21,7 @@ const emit = defineEmits<{
   leaveEmpty: []
   resetTarget: []
   activate: []
+  applyTm: []
 }>()
 
 const { t, locale } = useI18n()
@@ -59,6 +62,22 @@ function onResetClick() {
   nextTick(() => {
     targetEditor.value?.sync()
     targetEditor.value?.blur()
+  })
+}
+
+const tmHint = computed(() => {
+  if (!props.tmMatch || filled.value) return ''
+  const pct = Math.round(props.tmMatch.score * 100)
+  return props.tmMatch.kind === 'exact'
+    ? t('editor.tmApplyExact')
+    : t('editor.tmApplyFuzzy', { pct })
+})
+
+function onApplyTmClick() {
+  emit('applyTm')
+  nextTick(() => {
+    targetEditor.value?.sync()
+    targetEditor.value?.focus()
   })
 }
 </script>
@@ -112,6 +131,15 @@ function onResetClick() {
           @click="onResetClick"
         >
           <EditorGlyph name="reset" />
+        </IconButton>
+        <IconButton
+          v-if="tmMatch && !filled"
+          class="tm-btn"
+          :title="tmHint"
+          @mousedown.prevent
+          @click="onApplyTmClick"
+        >
+          <EditorGlyph name="tm" />
         </IconButton>
       </div>
 
@@ -242,6 +270,10 @@ $toolbar-col-width: 2rem;
 
 .mid-toolbar :deep(.icon-btn.active) {
   color: var(--accent);
+}
+
+.mid-toolbar :deep(.tm-btn) {
+  color: var(--ok);
 }
 
 .pane {

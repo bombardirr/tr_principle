@@ -67,5 +67,13 @@ export default {
     previewRefresh: 'Refresh preview',
     previewRefreshHint: 'Update the preview with your current translations',
     leaseBlocked: 'This project is open in another tab. View only here.',
+    tmApplyExact: 'Insert exact TM match',
+    tmApplyFuzzy: 'Insert fuzzy TM match ({pct}%)',
+    exportTmx: 'Export TM (TMX)',
+    exportTmxHint: 'Download translation memory as TMX',
+    importTmx: 'Import TM (TMX)',
+    importTmxHint: 'Merge entries from a TMX file into local TM',
+    tmxImported: 'Imported {count} TM entries',
+    tmxExportEmpty: 'No TM entries to export yet',
   },
 }
