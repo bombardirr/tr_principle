@@ -29,6 +29,7 @@ lerna-debug.log*
 # Environment files
 .env
 .env.local
+.env.prod
 .env.development.local
 .env.test.local
 .env.production.local
@@ -39,3 +40,6 @@ lerna-debug.log*
 # OS files
 Thumbs.db
 desktop.ini
+
+# GitHub Actions runner (если случайно создали внутри репо — не коммитить)
+actions-runner/

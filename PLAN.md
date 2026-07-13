@@ -17,8 +17,9 @@
 ### Сейчас / ближайшее (полировка A)
 
 - [ ] Ручной чеклист в Word на реальных файлах
-- [ ] Статический деплой (мини-ПК / любой хостинг)
-  - nginx: `add_header X-Robots-Tag "noindex, nofollow, noarchive, nosnippet" always;` (вместе с `robots.txt` и meta в `index.html`)
+- [x] Статический деплой (мини-ПК / любой хостинг) — Docker + CI, см. `docker-compose.prod.yml`, `deploy/CURSOR_MINI_PC.txt`
+  - стек **appzac**, контейнер `appzac-prod-web`, NPM → `http://appzac-prod-web:80` (домен: appzac.ru)
+  - nginx: `add_header X-Robots-Tag "noindex, nofollow, noarchive, nosnippet" always;` (в `deploy/nginx.conf`)
 - [ ] Мелкий UX по результатам тестов
 
 ### Фаза B: Translation Memory

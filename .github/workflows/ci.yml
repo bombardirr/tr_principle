@@ -1,0 +1,92 @@
+# PR: build + test. Push / workflow_dispatch на main → деплой на self-hosted (мини-ПК).
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+run-name: >-
+  ${{ github.event_name == 'pull_request'
+      && github.event.pull_request.title
+      || github.event.head_commit.message
+      || 'CI' }}
+
+concurrency:
+  group: appzac-${{ github.ref }}
+  cancel-in-progress: ${{ !(github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')) }}
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Test
+        run: npm test
+
+  deploy-prod:
+    needs: [check]
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: [self-hosted]
+    environment: production
+    steps:
+      - name: prod — проверка каталога и git
+        run: |
+          set -euo pipefail
+          ROOT=/home/ag/projects/tr_principle
+          if [ ! -d "$ROOT" ]; then
+            echo "::error::Нет каталога $ROOT на self-hosted runner (см. deploy/CURSOR_MINI_PC.txt)."
+            exit 1
+          fi
+          cd "$ROOT"
+          git fetch origin main
+          git checkout main
+          git reset --hard origin/main
+
+      - name: prod — проверка .env.prod
+        working-directory: /home/ag/projects/tr_principle
+        run: |
+          set -euo pipefail
+          if [ ! -f .env.prod ]; then
+            echo "::error::На сервере нет .env.prod — скопируйте из .env.prod.example"
+            exit 1
+          fi
+
+      - name: prod — сеть Docker
+        run: docker network create proxy_net || true
+
+      - name: prod — сборка и запуск
+        working-directory: /home/ag/projects/tr_principle
+        run: |
+          set -euo pipefail
+          docker compose --env-file .env.prod -p appzac -f docker-compose.prod.yml up -d --build --remove-orphans
+
+      - name: prod — healthcheck
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 30); do
+            if docker exec appzac-prod-web wget -qO- http://127.0.0.1/ >/dev/null 2>&1; then
+              echo "OK"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "::error::Контейнер appzac-prod-web не отвечает на :80"
+          exit 1

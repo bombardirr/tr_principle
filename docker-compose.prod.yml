@@ -1,0 +1,29 @@
+# Прод на мини-ПК за NPM (как disput / ei / bb).
+# Подготовка (один раз): docker network create proxy_net
+#
+# Рядом с этим файлом — .env.prod (не в git). См. .env.prod.example
+#
+#   docker compose --env-file .env.prod -p appzac -f docker-compose.prod.yml up -d --build --remove-orphans
+#
+# NPM: Proxy Host → http://appzac-prod-web:80
+#   (имя контейнера = ${STACK_NAME}-web, по умолчанию appzac-prod-web)
+
+services:
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ${STACK_NAME:-appzac-prod}-web
+    restart: unless-stopped
+    networks:
+      - proxy_net
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+networks:
+  proxy_net:
+    external: true
