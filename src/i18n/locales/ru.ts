@@ -67,5 +67,6 @@ export default {
     previewLoading: 'Собираем документ…',
     previewRefresh: 'Обновить превью',
     previewRefreshHint: 'Обновить предпросмотр по текущим переводам',
+    leaseBlocked: 'Проект открыт в другой вкладке. Здесь доступен только просмотр.',
   },
 }

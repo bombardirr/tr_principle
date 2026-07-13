@@ -12,6 +12,7 @@ import { packProjectFile } from '@/storage/projectFile'
 import IconButton from '@/components/IconButton.vue'
 import EditorGlyph from '@/components/EditorGlyph.vue'
 import TooltipWrap from '@/components/TooltipWrap.vue'
+import { useProjectLease } from '@/composables/useProjectLease'
 import {
   countDoneSegments,
   finalizeSegmentStatus,
@@ -42,6 +43,7 @@ const previewToken = ref(0)
 let previewTimer: ReturnType<typeof setTimeout> | null = null
 let pageScrollSaveTimer: ReturnType<typeof setTimeout> | null = null
 const activeSegmentId = ref<string | null>(null)
+const projectLease = useProjectLease(() => props.id)
 
 const done = computed(() =>
   record.value ? countDoneSegments(record.value.segments) : 0,
@@ -100,7 +102,7 @@ function setSaveError(e: unknown) {
 }
 
 async function persistNow(): Promise<void> {
-  if (!record.value) return
+  if (!record.value || projectLease.blocked.value) return
   clearSaveTimer()
   await saveProject(record.value)
   for (const s of record.value.segments) {
@@ -160,6 +162,7 @@ function onBeforeUnload(e: BeforeUnloadEvent) {
 const PAGE_SCROLL_OPTS: AddEventListenerOptions = { passive: true }
 
 onMounted(() => {
+  projectLease.start()
   void load()
   window.addEventListener('scroll', onPageScroll, PAGE_SCROLL_OPTS)
   window.addEventListener('beforeunload', onBeforeUnload)
@@ -176,7 +179,7 @@ onUnmounted(() => {
   void persistScroll()
   clearSaveTimer()
   if (previewTimer) clearTimeout(previewTimer)
-  if (record.value && !allSaved.value) {
+  if (record.value && !allSaved.value && projectLease.isLeader.value) {
     void saveProject(record.value).catch(() => {})
   }
 })
@@ -195,7 +198,7 @@ function patchSegment(segId: string, patch: Partial<Segment>) {
 }
 
 function scheduleSave() {
-  if (!record.value) return
+  if (!record.value || projectLease.blocked.value) return
   allSaved.value = false
   notice.value = ''
   clearSaveTimer()
@@ -213,7 +216,7 @@ function scheduleSave() {
 }
 
 function updateTarget(seg: Segment, value: string) {
-  if (!record.value) return
+  if (!record.value || projectLease.blocked.value) return
   notice.value = ''
   patchSegment(seg.id, {
     target: value,
@@ -223,21 +226,21 @@ function updateTarget(seg: Segment, value: string) {
 }
 
 function copySource(seg: Segment) {
-  if (!record.value) return
+  if (!record.value || projectLease.blocked.value) return
   notice.value = ''
   patchSegment(seg.id, { target: seg.source, status: 'draft' })
   scheduleSave()
 }
 
 function leaveEmpty(seg: Segment) {
-  if (!record.value) return
+  if (!record.value || projectLease.blocked.value) return
   notice.value = ''
   patchSegment(seg.id, { target: '', status: 'done' })
   scheduleSave()
 }
 
 function resetTarget(seg: Segment) {
-  if (!record.value) return
+  if (!record.value || projectLease.blocked.value) return
   notice.value = ''
   patchSegment(seg.id, { target: '', status: 'empty' })
   scheduleSave()
@@ -438,7 +441,14 @@ async function goBack() {
     <p v-else-if="notice" class="notice">{{ notice }}</p>
     <p v-if="total === 0" class="notice">{{ t('projects.emptyDoc') }}</p>
 
-    <div class="editor-layout" :class="{ 'with-preview': previewEnabled }">
+    <p v-if="!projectLease.isLeader.value" class="lease-notice" role="status">
+      {{ t('editor.leaseBlocked') }}
+    </p>
+
+    <div
+      class="editor-layout"
+      :class="{ 'with-preview': previewEnabled, 'editor-readonly': projectLease.blocked.value }"
+    >
       <div class="editor-main">
         <SegmentRow
           v-for="seg in record.segments"
@@ -698,6 +708,22 @@ h1.doc-title {
   gap: 0.45rem;
   min-width: 0;
   width: 100%;
+}
+
+.lease-notice {
+  margin: 0 0 0.75rem;
+  padding: 0.65rem 0.85rem;
+  border-radius: 8px;
+  background: rgba(212, 168, 90, 0.14);
+  border: 1px solid rgba(212, 168, 90, 0.35);
+  color: var(--text);
+  font-size: 0.9rem;
+}
+
+.editor-layout.editor-readonly {
+  pointer-events: none;
+  opacity: 0.62;
+  user-select: none;
 }
 
 @media (max-width: 1100px) {

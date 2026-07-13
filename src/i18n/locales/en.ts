@@ -66,5 +66,6 @@ export default {
     previewLoading: 'Building document…',
     previewRefresh: 'Refresh preview',
     previewRefreshHint: 'Update the preview with your current translations',
+    leaseBlocked: 'This project is open in another tab. View only here.',
   },
 }
