@@ -1,4 +1,4 @@
-const TAG_RE = /\{(\d+)\}/g
+export const TAG_RE = /\{(\d+)\}/g
 
 /** Build tagged source from format spans. Single span → plain text (no tags). */
 export function buildTaggedText(spanTexts: string[]): string {

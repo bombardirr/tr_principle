@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, shallowRef, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, shallowRef, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import SegmentRow from '@/components/SegmentRow.vue'
 import DocxPreviewPanel from '@/components/DocxPreviewPanel.vue'
 import { buildTranslatedDocx, downloadBlob } from '@/docx/exportDocx'
 import { getProject, saveProject } from '@/storage/idb'
+import { readEditorScroll, restoreWindowScroll, writeEditorScroll } from '@/storage/editorScroll'
 import { packProjectFile } from '@/storage/projectFile'
 import type { ProjectRecord, Segment } from '@/types/project'
 
@@ -30,6 +31,8 @@ const previewEnabled = ref(
 )
 const previewToken = ref(0)
 let previewTimer: ReturnType<typeof setTimeout> | null = null
+let pageScrollSaveTimer: ReturnType<typeof setTimeout> | null = null
+const activeSegmentId = ref<string | null>(null)
 
 const done = computed(
   () => record.value?.segments.filter((s) => s.target.trim() !== '').length ?? 0,
@@ -70,9 +73,38 @@ async function persistNow(): Promise<void> {
   if (!record.value) return
   clearSaveTimer()
   await saveProject(record.value)
-  record.value = withNormalizedRecord(record.value)
+  for (const s of record.value.segments) {
+    s.status = s.target.trim() ? 'done' : 'empty'
+  }
   allSaved.value = true
   error.value = ''
+}
+
+async function persistScroll() {
+  writeEditorScroll(props.id, {
+    pageY: window.scrollY,
+    activeSegmentId: activeSegmentId.value,
+  })
+}
+
+function scheduleScrollPersist() {
+  if (pageScrollSaveTimer) clearTimeout(pageScrollSaveTimer)
+  pageScrollSaveTimer = setTimeout(() => {
+    void persistScroll()
+  }, 200)
+}
+
+function onPageScroll() {
+  scheduleScrollPersist()
+}
+
+async function restorePageScroll() {
+  const snap = readEditorScroll(props.id)
+  if (!snap) return
+  if (snap.activeSegmentId) activeSegmentId.value = snap.activeSegmentId
+  await nextTick()
+  restoreWindowScroll(snap.pageY)
+  window.setTimeout(() => restoreWindowScroll(snap.pageY), 150)
 }
 
 async function load() {
@@ -87,21 +119,31 @@ async function load() {
     return
   }
   record.value = withNormalizedRecord(found)
+  await restorePageScroll()
 }
 
 function onBeforeUnload(e: BeforeUnloadEvent) {
+  void persistScroll()
   if (!allSaved.value) e.preventDefault()
 }
 
+const PAGE_SCROLL_OPTS: AddEventListenerOptions = { passive: true }
+
 onMounted(() => {
-  load()
+  void load()
+  window.addEventListener('scroll', onPageScroll, PAGE_SCROLL_OPTS)
   window.addEventListener('beforeunload', onBeforeUnload)
 })
 
-watch(() => props.id, load)
+watch(() => props.id, () => {
+  void load()
+})
 
 onUnmounted(() => {
+  window.removeEventListener('scroll', onPageScroll, PAGE_SCROLL_OPTS)
   window.removeEventListener('beforeunload', onBeforeUnload)
+  if (pageScrollSaveTimer) clearTimeout(pageScrollSaveTimer)
+  void persistScroll()
   clearSaveTimer()
   if (previewTimer) clearTimeout(previewTimer)
   if (record.value && !allSaved.value) {
@@ -154,6 +196,13 @@ function copySource(seg: Segment) {
   scheduleSave()
 }
 
+function clearTarget(seg: Segment) {
+  if (!record.value) return
+  notice.value = ''
+  patchSegment(seg.id, { target: '', status: 'draft' })
+  scheduleSave()
+}
+
 async function withSaving<T>(fn: () => Promise<T>): Promise<T | undefined> {
   saving.value = true
   try {
@@ -165,6 +214,11 @@ async function withSaving<T>(fn: () => Promise<T>): Promise<T | undefined> {
   } finally {
     saving.value = false
   }
+}
+
+function activateSegment(segId: string) {
+  activeSegmentId.value = segId
+  scheduleScrollPersist()
 }
 
 function schedulePreviewRefresh() {
@@ -224,12 +278,13 @@ async function goBack() {
       saving.value = false
     }
   }
+  await persistScroll()
   await router.push('/')
 }
 </script>
 
 <template>
-  <section v-if="record">
+  <section v-if="record" class="editor-page">
     <div class="toolbar">
       <button type="button" class="ghost" @click="goBack">{{ t('editor.back') }}</button>
       <h1>{{ record.meta.name }}</h1>
@@ -276,14 +331,19 @@ async function goBack() {
           v-for="seg in record.segments"
           :key="seg.id"
           :segment="seg"
+          :active="activeSegmentId === seg.id"
           @update-target="updateTarget(seg, $event)"
           @copy-source="copySource(seg)"
+          @clear-target="clearTarget(seg)"
+          @activate="activateSegment(seg.id)"
         />
       </div>
       <DocxPreviewPanel
         v-if="previewEnabled"
+        :project-id="props.id"
         :record="record"
         :refresh-token="previewToken"
+        :active-segment-id="activeSegmentId"
       />
     </div>
   </section>
@@ -292,6 +352,11 @@ async function goBack() {
 </template>
 
 <style scoped lang="scss">
+.editor-page {
+  width: 100%;
+  max-width: none;
+}
+
 .toolbar {
   display: flex;
   flex-wrap: wrap;
@@ -302,7 +367,7 @@ async function goBack() {
   top: 0;
   z-index: 2;
   padding: 0.65rem 0;
-  background: var(--bg-grad);
+  background: var(--bg);
 }
 
 h1 {
@@ -388,14 +453,24 @@ button.ghost {
   grid-template-columns: 1fr;
   gap: 1rem;
   align-items: start;
+  width: 100%;
+}
+
+.editor-layout:not(.with-preview) {
+  justify-items: center;
+}
+
+.editor-layout:not(.with-preview) .editor-main {
+  width: min(100%, 72rem);
 }
 
 .editor-layout.with-preview {
-  grid-template-columns: minmax(0, 1.15fr) minmax(280px, 0.85fr);
+  grid-template-columns: 1fr 1fr;
 }
 
 .editor-main {
   min-width: 0;
+  width: 100%;
 }
 
 button.toggle.active {

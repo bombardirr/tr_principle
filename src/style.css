@@ -53,6 +53,11 @@ html[data-theme="dark"] {
   --filled-border: rgba(91, 159, 212, 0.45);
   --saved-border: rgba(125, 190, 138, 0.4);
   --dirty-border: rgba(212, 168, 90, 0.45);
+  --target-filled-bg: rgba(125, 190, 138, 0.14);
+  --target-filled-border: rgba(125, 190, 138, 0.42);
+  --preview-desk: linear-gradient(168deg, #1a2433 0%, #1f3044 42%, #172636 100%);
+  --preview-page-shadow: 0 4px 18px rgba(0, 0, 0, 0.32), 0 0 0 1px rgba(91, 159, 212, 0.1);
+  --preview-hit-bg: rgba(91, 159, 212, 0.2);
 }
 
 html[data-theme="light"] {
@@ -83,4 +88,9 @@ html[data-theme="light"] {
   --filled-border: rgba(44, 95, 138, 0.35);
   --saved-border: rgba(47, 90, 47, 0.35);
   --dirty-border: rgba(138, 106, 47, 0.45);
+  --target-filled-bg: #e6f2e8;
+  --target-filled-border: rgba(47, 90, 47, 0.32);
+  --preview-desk: linear-gradient(168deg, #edf3fa 0%, #e0ecf7 40%, #d4e3f2 100%);
+  --preview-page-shadow: 0 4px 20px rgba(44, 95, 138, 0.14), 0 0 0 1px rgba(44, 95, 138, 0.08);
+  --preview-hit-bg: rgba(44, 95, 138, 0.14);
 }

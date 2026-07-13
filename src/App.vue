@@ -1,11 +1,14 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
+import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { setLocale } from '@/i18n'
 import { getTheme, toggleTheme, type Theme } from '@/theme'
 
 const { t, locale } = useI18n()
+const route = useRoute()
 const theme = ref<Theme>('dark')
+const isEditorRoute = computed(() => route.name === 'editor')
 
 onMounted(() => {
   theme.value = getTheme()
@@ -34,7 +37,7 @@ function onToggleTheme() {
         </button>
       </div>
     </header>
-    <main class="main">
+    <main class="main" :class="{ 'main--wide': isEditorRoute }">
       <router-view />
     </main>
   </div>
@@ -55,7 +58,6 @@ function onToggleTheme() {
   justify-content: space-between;
   gap: 1rem;
   padding: 0.85rem 1.5rem;
-  border-bottom: 1px solid var(--border);
   background: var(--topbar);
   backdrop-filter: blur(8px);
 }
@@ -91,5 +93,10 @@ function onToggleTheme() {
   max-width: 1200px;
   width: 100%;
   margin: 0 auto;
+}
+
+.main--wide {
+  max-width: none;
+  padding-inline: clamp(1rem, 2.5vw, 2rem);
 }
 </style>
