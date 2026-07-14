@@ -41,6 +41,15 @@ jobs:
       - name: Test
         run: npm test
 
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.26.x"
+          cache-dependency-path: api/go.sum
+
+      - name: API unit tests
+        working-directory: api
+        run: go test ./...
+
   deploy-prod:
     needs: [check]
     if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
@@ -68,25 +77,48 @@ jobs:
             echo "::error::На сервере нет .env.prod — скопируйте из .env.prod.example"
             exit 1
           fi
+          TMP_ENV="$(mktemp)"
+          sed '1s/^\xEF\xBB\xBF//' .env.prod | tr -d '\r' > "$TMP_ENV"
+          for key in POSTGRES_USER POSTGRES_PASSWORD POSTGRES_DB DATABASE_URL JWT_SECRET CORS_ORIGIN; do
+            if ! grep -qE "^[[:space:]]*(export[[:space:]]+)?${key}[[:space:]]*=[[:space:]]*[^[:space:]#]" "$TMP_ENV"; then
+              echo "::error::В .env.prod нужна непустая строка ${key}=... (см. .env.prod.example)."
+              rm -f "$TMP_ENV"
+              exit 1
+            fi
+          done
+          rm -f "$TMP_ENV"
 
       - name: prod — сеть Docker
         run: docker network create proxy_net || true
 
-      - name: prod — сборка и запуск
+      - name: prod — БД и ожидание pg_isready
+        working-directory: /home/ag/projects/tr_principle
+        run: |
+          set -euo pipefail
+          docker compose --env-file .env.prod -p appzac -f docker-compose.prod.yml up -d db
+          for i in $(seq 1 45); do
+            docker compose --env-file .env.prod -p appzac -f docker-compose.prod.yml exec -T db sh -c 'pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB"' && break
+            sleep 2
+          done
+          docker compose --env-file .env.prod -p appzac -f docker-compose.prod.yml exec -T db sh -c 'pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB"'
+
+      - name: prod — сборка и запуск (api применяет миграции при старте)
         working-directory: /home/ag/projects/tr_principle
         run: |
           set -euo pipefail
           docker compose --env-file .env.prod -p appzac -f docker-compose.prod.yml up -d --build --remove-orphans
 
-      - name: prod — healthcheck
+      - name: prod — healthcheck web + api
         run: |
           set -euo pipefail
-          for i in $(seq 1 30); do
-            if docker exec appzac-prod-web wget -qO- http://127.0.0.1/ >/dev/null 2>&1; then
+          for i in $(seq 1 40); do
+            if docker exec appzac-prod-web wget -qO- http://127.0.0.1/ >/dev/null 2>&1 \
+              && docker exec appzac-prod-api wget -qO- http://127.0.0.1:8080/api/health >/dev/null 2>&1; then
               echo "OK"
               exit 0
             fi
             sleep 2
           done
-          echo "::error::Контейнер appzac-prod-web не отвечает на :80"
+          echo "::error::web или api не отвечают"
+          docker compose --env-file /home/ag/projects/tr_principle/.env.prod -p appzac -f /home/ag/projects/tr_principle/docker-compose.prod.yml ps || true
           exit 1

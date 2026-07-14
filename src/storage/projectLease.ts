@@ -1,3 +1,5 @@
+import { scopedKey } from '@/storage/scope'
+
 export interface ProjectLease {
   tabId: string
   token: string
@@ -13,7 +15,7 @@ export type LeaseBroadcast =
   | { type: 'lease-changed'; projectId: string; tabId: string; action: 'acquired' | 'released' }
 
 function leaseKey(projectId: string): string {
-  return `appzac-project-lease:${projectId}`
+  return scopedKey(`appzac-project-lease:${projectId}`)
 }
 
 export function getTabId(): string {

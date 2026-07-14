@@ -7,6 +7,7 @@ import {
   renewLease,
   tryClaimLease,
 } from '@/storage/projectLease'
+import { setStorageAccountId } from '@/storage/scope'
 
 const PROJECT = 'proj-1'
 const TAB_A = 'tab-a'
@@ -15,11 +16,13 @@ const TAB_B = 'tab-b'
 describe('projectLease', () => {
   beforeEach(() => {
     localStorage.clear()
+    setStorageAccountId('00000000-0000-4000-8000-000000000001')
     vi.useFakeTimers()
     vi.setSystemTime(new Date('2026-07-13T12:00:00Z'))
   })
 
   afterEach(() => {
+    setStorageAccountId(null)
     vi.useRealTimers()
   })
 

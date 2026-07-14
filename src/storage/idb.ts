@@ -2,6 +2,7 @@ import { openDB, type DBSchema, type IDBPDatabase } from 'idb'
 import type { ProjectMeta, ProjectRecord } from '@/types/project'
 import { countDoneSegments } from '@/utils/segmentStatus'
 import { copyArrayBuffer } from '@/utils/buffer'
+import { onStorageAccountChange, scopedDbName } from '@/storage/scope'
 
 interface CatDb extends DBSchema {
   projects: {
@@ -11,14 +12,19 @@ interface CatDb extends DBSchema {
   }
 }
 
-const DB_NAME = 'translation-tool'
+const DB_BASE = 'translation-tool'
 const DB_VERSION = 1
 
 let dbPromise: Promise<IDBPDatabase<CatDb>> | null = null
 
+onStorageAccountChange(() => {
+  dbPromise = null
+})
+
 function getDb() {
   if (!dbPromise) {
-    dbPromise = openDB<CatDb>(DB_NAME, DB_VERSION, {
+    const name = scopedDbName(DB_BASE)
+    dbPromise = openDB<CatDb>(name, DB_VERSION, {
       upgrade(db) {
         const store = db.createObjectStore('projects', { keyPath: 'meta.id' })
         store.createIndex('by-updated', 'meta.updatedAt')

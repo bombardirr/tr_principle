@@ -6,6 +6,69 @@ export default {
     themeDark: 'dark',
     themeLight: 'light',
   },
+  auth: {
+    logout: 'Log out',
+  },
+  landing: {
+    headline: 'Translate DOCX in the browser — markup stays intact.',
+    support: 'Local-first CAT with translation memory. Sign in to open your projects.',
+    login: 'Sign in',
+    register: 'Create account',
+    loginTitle: 'Sign in',
+    registerTitle: 'Create account',
+    loginField: 'Login',
+    passwordField: 'Password',
+    back: 'Back',
+    features: {
+      docx: {
+        title: 'DOCX round-trip',
+        text: 'Import, translate, export — formatting tags stay in place.',
+      },
+      tm: {
+        title: 'Translation memory',
+        text: 'Exact and fragment matches as you work, segment by segment.',
+      },
+      local: {
+        title: 'Local-first',
+        text: 'Projects live in your browser. Your account unlocks the workspace.',
+      },
+      preview: {
+        title: 'Live preview',
+        text: 'See the document layout beside the editor while you translate.',
+      },
+    },
+    flow: {
+      title: 'How it works',
+      open: {
+        title: 'Open a DOCX',
+        text: 'Drop in a document and get sentence-level segments ready to translate.',
+      },
+      translate: {
+        title: 'Translate with help',
+        text: 'Reuse TM hits, keep tags intact, check progress as you go.',
+      },
+      export: {
+        title: 'Export cleanly',
+        text: 'Download the translated DOCX or a project backup when you need it.',
+      },
+    },
+    privacy: {
+      title: 'Your space',
+      browser: {
+        title: 'Stays on the device',
+        text: 'Projects and TM cache live in your browser storage for this account.',
+      },
+      account: {
+        title: 'Sign-in to work',
+        text: 'The landing is the front door — the editor opens only after you log in.',
+      },
+      sync: {
+        title: 'Cloud later',
+        text: 'Cloud TM and backups are on the roadmap; local work already runs today.',
+      },
+    },
+    scrollHint: 'Scroll for more',
+  },
   projects: {
     title: 'Projects',
     empty: 'No projects yet. Upload a DOCX to start.',

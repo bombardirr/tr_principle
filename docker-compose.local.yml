@@ -1,0 +1,40 @@
+# Local stack: Postgres + API
+#   docker compose -f docker-compose.local.yml up --build
+#
+# SPA: npm run dev (Vite proxies /api → :8080)
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: appzac
+      POSTGRES_PASSWORD: appzac
+      POSTGRES_DB: appzac
+    ports:
+      - "55432:5432"
+    volumes:
+      - appzac_pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U appzac -d appzac"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  api:
+    build:
+      context: ./api
+      dockerfile: Dockerfile
+    environment:
+      DATABASE_URL: postgres://appzac:appzac@db:5432/appzac?sslmode=disable
+      JWT_SECRET: local-dev-jwt-secret-change-me
+      HTTP_ADDR: ":8080"
+      CORS_ORIGIN: http://localhost:5173
+      MIGRATIONS_DIR: /app/migrations
+    ports:
+      - "8080:8080"
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  appzac_pg:

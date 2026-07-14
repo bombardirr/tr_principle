@@ -3,6 +3,7 @@ import type { Segment } from '@/types/project'
 import type { TmUnit } from '@/types/tm'
 import { isSegmentDone } from '@/utils/segmentStatus'
 import { tmLookupKey } from '@/tm/normalize'
+import { onStorageAccountChange, scopedDbName } from '@/storage/scope'
 
 interface TmDb extends DBSchema {
   units: {
@@ -12,14 +13,19 @@ interface TmDb extends DBSchema {
   }
 }
 
-const DB_NAME = 'appzac-tm'
+const DB_BASE = 'appzac-tm'
 const DB_VERSION = 1
 
 let dbPromise: Promise<IDBPDatabase<TmDb>> | null = null
 
+onStorageAccountChange(() => {
+  dbPromise = null
+})
+
 function getDb() {
   if (!dbPromise) {
-    dbPromise = openDB<TmDb>(DB_NAME, DB_VERSION, {
+    const name = scopedDbName(DB_BASE)
+    dbPromise = openDB<TmDb>(name, DB_VERSION, {
       upgrade(db) {
         const store = db.createObjectStore('units', { keyPath: 'id' })
         store.createIndex('by-source-key', 'sourceKey')

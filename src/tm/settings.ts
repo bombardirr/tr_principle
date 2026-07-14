@@ -1,3 +1,5 @@
+import { getStorageAccountId, scopedKey } from '@/storage/scope'
+
 export type TmPunctuationMode = 'strict' | 'soft'
 
 export interface TmSettings {
@@ -7,7 +9,7 @@ export interface TmSettings {
   autoSaveToTm: boolean
 }
 
-const STORAGE_KEY = 'appzac-tm-settings'
+const STORAGE_BASE = 'appzac-tm-settings'
 
 export const TM_SETTINGS_DEFAULT: TmSettings = {
   punctuationMode: 'soft',
@@ -16,10 +18,15 @@ export const TM_SETTINGS_DEFAULT: TmSettings = {
   autoSaveToTm: false,
 }
 
+function storageKey(): string {
+  if (!getStorageAccountId()) return STORAGE_BASE
+  return scopedKey(STORAGE_BASE)
+}
+
 export function readTmSettings(): TmSettings {
   if (typeof localStorage === 'undefined') return { ...TM_SETTINGS_DEFAULT }
   try {
-    const raw = localStorage.getItem(STORAGE_KEY)
+    const raw = localStorage.getItem(storageKey())
     if (!raw) return { ...TM_SETTINGS_DEFAULT }
     const parsed = JSON.parse(raw) as Partial<TmSettings>
     return {
@@ -41,5 +48,5 @@ export function readTmSettings(): TmSettings {
 
 export function writeTmSettings(settings: TmSettings): void {
   if (typeof localStorage === 'undefined') return
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(settings))
+  localStorage.setItem(storageKey(), JSON.stringify(settings))
 }

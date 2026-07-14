@@ -750,7 +750,7 @@ async function goBack() {
     }
   }
   await persistScroll()
-  await router.push('/')
+  await router.push({ name: 'projects' })
 }
 </script>
 

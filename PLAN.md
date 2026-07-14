@@ -103,10 +103,9 @@
 
 Референс по духу (не копипаст): `disput`, `peerling` — спокойные анимации, бренд-первый экран, наш визуальный язык (IBM Plex / тема appzac).
 
-- [ ] **Лендинг** с входом/регистрацией: one composition, приятные motion (2–3 осознанных), не dashboard
-- [ ] Гостевой режим (как сейчас) + CTA «войти / создать аккаунт»
-- [ ] `users`: `login`, `password_hash`, `session_version`, `is_admin`, `telegram_id` (nullable)
-- [ ] Register / login / me / logout; JWT + claim `sv`
+- [x] **Лендинг** — только презентация + вход/регистрация (auth-first; **без гостевого CAT**)
+- [x] `users`: UUID `id`, `login`, `password_hash`, `session_version`, `is_admin`, `telegram_id` (nullable)
+- [x] Register / login / me / logout; JWT + claim `sv`; IndexedDB scoped by opaque UUID
 - [ ] Admin promote через SQL/CLI
 
 #### 2) Сброс пароля через Telegram (без почты)
@@ -163,15 +162,15 @@
 
 #### Клиент
 
-- [ ] Лендинг + auth UI (см. выше); привязка Telegram; сброс пароля
+- [x] Лендинг + auth UI (auth-first, без гостя); привязка Telegram — позже
 - [ ] TM sync после login + при автосейве
 - [ ] Баннер offline; позже outbox
 - [ ] Feature flags; admin = Pro
 
 #### Docker
 
-- [ ] `docker-compose.local.yml` — postgres + api
-- [ ] `.env.local.example` — `DATABASE_URL`, `JWT_SECRET`, `TELEGRAM_BOT_TOKEN`, `VITE_API_BASE`
+- [x] `docker-compose.local.yml` — postgres + api
+- [x] `.env.local.example` — `DATABASE_URL`, `JWT_SECRET`, `CORS_ORIGIN`, `VITE_API_BASE`
 - [ ] Prod: web + api + db; webhook на HTTPS; обновить `deploy/CURSOR_MINI_PC.txt`
 
 ---
@@ -201,15 +200,14 @@
 
 ## Порядок реализации (актуальный)
 
-1. **Модель sentence-сегментов + ТМ UX** ← сейчас (спека → реализация)
-2. **Auth API** — Go + Postgres + docker local, JWT + `session_version`
-3. Telegram: link + password reset
-4. **Лендинг + auth UI** (анимации, стиль appzac; вдохновение disput / peerling)
-5. **Облачная TM** sync (MVP)
-6. Project lock + backup
-7. Prod + security pass
-8. B2 p2 (context / tags / concordance / audit) — по словарю выше
-9. Глоссарий; форматы; MT; multi-TM; SRX; админка ТМ
+1. **Модель sentence-сегментов + ТМ UX** ✓
+2. **Auth API + лендинг (auth-first)** ✓
+3. Telegram: link + password reset ← сейчас
+4. **Облачная TM** sync (MVP)
+5. Project lock + backup
+6. Prod + security pass
+7. B2 p2 (context / tags / concordance / audit) — по словарю выше
+8. Глоссарий; форматы; MT; multi-TM; SRX; админка ТМ
 
 ---
 
