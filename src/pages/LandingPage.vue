@@ -40,7 +40,7 @@ const title = computed(() =>
 
 const activePanel = computed(() => Math.round(panelProgress.value))
 
-function panelStyle(index: number) {
+function panelStyle(index: number): Record<string, string> {
   const d = panelProgress.value - index
   const abs = Math.abs(d)
   const opacity = Math.max(0, 1 - abs * 1.15)
@@ -50,7 +50,8 @@ function panelStyle(index: number) {
     opacity: String(opacity),
     transform: `translateY(${y}px)`,
     visibility: visible ? 'visible' : 'hidden',
-    pointerEvents: abs < 0.45 ? 'auto' : 'none',
+    // kebab-case avoids CSSProperties PointerEvents union vs plain string
+    'pointer-events': abs < 0.45 ? 'auto' : 'none',
   }
 }
 
