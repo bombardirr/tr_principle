@@ -94,7 +94,15 @@ const tmCoveragePct = computed(() => {
   const opts = tmMatchOptions()
   let hit = 0
   for (const seg of record.value.segments) {
-    if (findTmMatches(tmUnits.value, seg.source, record.value.meta.sourceLang, record.value.meta.targetLang, opts).length) {
+    if (
+      findTmMatches(
+        tmUnits.value,
+        seg.source,
+        record.value.meta.sourceLang,
+        record.value.meta.targetLang,
+        { ...opts, ...segmentNeighbors(seg) },
+      ).length
+    ) {
       hit++
     }
   }
@@ -549,6 +557,21 @@ function tmMatchOptions() {
   }
 }
 
+/** Prev/next segment sources (document order) — used for 101% context match. */
+function segmentNeighbors(seg: Segment): {
+  contextBefore?: string
+  contextAfter?: string
+} {
+  if (!record.value) return {}
+  const segs = record.value.segments
+  const i = segs.findIndex((s) => s.id === seg.id)
+  if (i < 0) return {}
+  return {
+    contextBefore: segs[i - 1]?.source,
+    contextAfter: segs[i + 1]?.source,
+  }
+}
+
 function matchesFor(seg: Segment): TmMatch[] {
   if (!record.value) return []
   return findTmMatches(
@@ -556,7 +579,7 @@ function matchesFor(seg: Segment): TmMatch[] {
     seg.source,
     record.value.meta.sourceLang,
     record.value.meta.targetLang,
-    tmMatchOptions(),
+    { ...tmMatchOptions(), ...segmentNeighbors(seg) },
   )
 }
 

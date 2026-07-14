@@ -18,7 +18,7 @@ export interface TmUnit {
   contextAfter?: string
 }
 
-export type TmMatchKind = 'exact' | 'fuzzy' | 'fragment'
+export type TmMatchKind = 'context' | 'exact' | 'fuzzy' | 'fragment'
 
 export interface TmMatch {
   target: string
@@ -39,4 +39,8 @@ export interface TmMatchOptions {
   punctuationMode?: 'strict' | 'soft'
   fuzzyMinScore?: number
   enableFragments?: boolean
+  /** Previous segment source (document order) for 101% context match. */
+  contextBefore?: string
+  /** Next segment source (document order) for 101% context match. */
+  contextAfter?: string
 }

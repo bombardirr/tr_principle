@@ -182,6 +182,7 @@ export default {
     cloudBackupHint: 'Сохранить проект в облако',
     cloudBackupOk: 'Проект сохранён в облако',
     cloudBackupFail: 'Не удалось сохранить в облако',
+    tmApplyContext: 'Вставить контекстное совпадение из ТМ (101%)',
     tmApplyExact: 'Вставить точное совпадение из ТМ',
     tmApplyFuzzy: 'Вставить нечёткое совпадение из ТМ ({pct}%)',
     tmApplyFragmentExact: 'Точное совпадение фразы внутри сегмента',

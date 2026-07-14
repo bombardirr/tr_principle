@@ -181,6 +181,7 @@ export default {
     cloudBackupHint: 'Save project to the cloud',
     cloudBackupOk: 'Project saved to the cloud',
     cloudBackupFail: 'Could not save to the cloud',
+    tmApplyContext: 'Insert context TM match (101%)',
     tmApplyExact: 'Insert exact TM match',
     tmApplyFuzzy: 'Insert fuzzy TM match ({pct}%)',
     tmApplyFragmentExact: 'Insert exact TM match from sentence in segment',

@@ -54,13 +54,58 @@ function isExactSource(
   )
 }
 
+function neighborsEqual(a?: string | null, b?: string | null): boolean {
+  return normalizeTmSource(a ?? '') === normalizeTmSource(b ?? '')
+}
+
+/** Exact source + same prev/next neighbors as when the TU was saved → 101%. */
+export function isContextMatch(
+  unit: TmUnit,
+  contextBefore?: string,
+  contextAfter?: string,
+): boolean {
+  // Legacy / fragment TUs without stored neighbors stay plain exact.
+  if (unit.contextBefore == null && unit.contextAfter == null) return false
+  return (
+    neighborsEqual(unit.contextBefore, contextBefore) &&
+    neighborsEqual(unit.contextAfter, contextAfter)
+  )
+}
+
+function toExactOrContextMatch(
+  unit: TmUnit,
+  contextBefore?: string,
+  contextAfter?: string,
+): TmMatch {
+  if (isContextMatch(unit, contextBefore, contextAfter)) {
+    return {
+      target: unit.target,
+      kind: 'context',
+      score: 1.01,
+      ...matchMeta(unit),
+    }
+  }
+  return {
+    target: unit.target,
+    kind: 'exact',
+    score: 1,
+    ...matchMeta(unit),
+  }
+}
+
 function pickBestExact(
   needle: string,
   hits: TmUnit[],
   punctuationMode: TmPunctuationMode,
+  contextBefore?: string,
+  contextAfter?: string,
 ): TmMatch | null {
   if (!hits.length) return null
   const ranked = [...hits].sort((a, b) => {
+    const aCtx = isContextMatch(a, contextBefore, contextAfter) ? 1 : 0
+    const bCtx = isContextMatch(b, contextBefore, contextAfter) ? 1 : 0
+    if (bCtx !== aCtx) return bCtx - aCtx
+
     const aLiteral = normalizeTmSource(needle) === normalizeTmSource(a.source) ? 1 : 0
     const bLiteral = normalizeTmSource(needle) === normalizeTmSource(b.source) ? 1 : 0
     if (bLiteral !== aLiteral) return bLiteral - aLiteral
@@ -73,7 +118,7 @@ function pickBestExact(
 
     return b.updatedAt.localeCompare(a.updatedAt)
   })
-  return { target: ranked[0]!.target, kind: 'exact', score: 1 }
+  return toExactOrContextMatch(ranked[0]!, contextBefore, contextAfter)
 }
 
 /** Prefer TU whose trailing punctuation closest to the needle (for soft-mode ties). */
@@ -96,13 +141,15 @@ function findExactForNeedle(
   targetLang: string | undefined,
   punctuationMode: TmPunctuationMode,
   extras?: Partial<TmMatch>,
+  contextBefore?: string,
+  contextAfter?: string,
 ): TmMatch | null {
   const hits = units.filter(
     (unit) =>
       langsMatch(unit, sourceLang, targetLang) &&
       isExactSource(needle, unit, punctuationMode),
   )
-  const exact = pickBestExact(needle, hits, punctuationMode)
+  const exact = pickBestExact(needle, hits, punctuationMode, contextBefore, contextAfter)
   if (!exact) return null
   return extras ? { ...exact, ...extras } : exact
 }
@@ -143,6 +190,8 @@ function findMatchForNeedle(
   fuzzyMinScore: number,
   matchKind: TmMatch['kind'],
   matchedFragment?: string,
+  contextBefore?: string,
+  contextAfter?: string,
 ): TmMatch | null {
   const exact = findExactForNeedle(
     units,
@@ -151,13 +200,19 @@ function findMatchForNeedle(
     targetLang,
     punctuationMode,
     matchedFragment ? { matchedFragment } : undefined,
+    matchedFragment ? undefined : contextBefore,
+    matchedFragment ? undefined : contextAfter,
   )
   if (exact) {
-    return {
-      ...exact,
-      kind: matchedFragment ? 'fragment' : 'exact',
-      matchedFragment,
+    if (matchedFragment) {
+      return {
+        ...exact,
+        kind: 'fragment',
+        matchedFragment,
+        score: 1,
+      }
     }
+    return exact
   }
   return findFuzzyForNeedle(
     units,
@@ -175,6 +230,8 @@ function betterMatch(a: TmMatch | null, b: TmMatch | null): TmMatch | null {
   if (!b) return a
   if (b.score > a.score) return b
   if (b.score < a.score) return a
+  if (a.kind === 'context') return a
+  if (b.kind === 'context') return b
   if (a.kind === 'exact') return a
   if (b.kind === 'exact') return b
   return a
@@ -207,12 +264,9 @@ export function findTmMatches(
   for (const unit of units) {
     if (!langsMatch(unit, sourceLang, targetLang)) continue
     if (isExactSource(source, unit, punctuationMode)) {
-      results.push({
-        target: unit.target,
-        kind: 'exact',
-        score: 1,
-        ...matchMeta(unit),
-      })
+      results.push(
+        toExactOrContextMatch(unit, options?.contextBefore, options?.contextAfter),
+      )
       continue
     }
     const score = similarity(
@@ -231,6 +285,8 @@ export function findTmMatches(
 
   return results.sort((a, b) => {
     if (b.score !== a.score) return b.score - a.score
+    if (a.kind === 'context' && b.kind !== 'context') return -1
+    if (b.kind === 'context' && a.kind !== 'context') return 1
     if (a.kind === 'exact' && b.kind !== 'exact') return -1
     if (b.kind === 'exact' && a.kind !== 'exact') return 1
     return (b.updatedAt ?? '').localeCompare(a.updatedAt ?? '')
@@ -242,10 +298,19 @@ export function findExactTmMatch(
   source: string,
   sourceLang?: string,
   targetLang?: string,
-  options?: Pick<TmMatchOptions, 'punctuationMode'>,
+  options?: Pick<TmMatchOptions, 'punctuationMode' | 'contextBefore' | 'contextAfter'>,
 ): TmMatch | null {
   const punctuationMode = options?.punctuationMode ?? 'strict'
-  return findExactForNeedle(units, source, sourceLang, targetLang, punctuationMode)
+  return findExactForNeedle(
+    units,
+    source,
+    sourceLang,
+    targetLang,
+    punctuationMode,
+    undefined,
+    options?.contextBefore,
+    options?.contextAfter,
+  )
 }
 
 export function findTmMatch(
@@ -267,13 +332,16 @@ export function findTmMatch(
     punctuationMode,
     fuzzyMinScore,
     'fuzzy',
+    undefined,
+    options?.contextBefore,
+    options?.contextAfter,
   )
 
   const wholeNormalized = normalizeTmForMatch(source, punctuationMode)
   const shouldTryFragments =
     enableFragments &&
     splitTmFragments(source).length > 1 &&
-    (!best || best.kind !== 'exact')
+    (!best || (best.kind !== 'exact' && best.kind !== 'context'))
 
   if (shouldTryFragments) {
     for (const fragment of splitTmFragments(source)) {

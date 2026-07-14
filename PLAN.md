@@ -42,7 +42,7 @@
 **B2 p2 — после auth + облачной TM** (перед стартом — словарь ниже)
 
 - [x] Настраиваемый порог fuzzy (дефолт 75%, слайдер 50–100%)
-- [ ] Context match (101%)
+- [x] Context match (101%)
 - [ ] Штраф за теги
 - [ ] Match metadata в UI
 - [ ] Segment edit audit

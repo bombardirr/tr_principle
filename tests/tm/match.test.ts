@@ -32,7 +32,8 @@ describe('tm match', () => {
       'en',
       { punctuationMode: 'strict' },
     )
-    expect(match).toEqual({ target: 'Привет', kind: 'exact', score: 1 })
+    expect(match).toMatchObject({ target: 'Привет', kind: 'exact', score: 1 })
+    expect(match?.unitId).toBe('u1')
   })
 
   it('prefers newest exact hit', () => {
@@ -171,5 +172,88 @@ describe('tm match', () => {
     )
     expect(matches).toHaveLength(2)
     expect(matches.map((m) => m.target)).toEqual(["I'm Artem.", 'I am Artem.'])
+  })
+
+  it('marks 101% context match when neighbors match', () => {
+    const matches = findTmMatches(
+      [
+        unit('Click Next.', 'Нажмите «Далее».', {
+          id: 'ctx',
+          contextBefore: 'Open the wizard.',
+          contextAfter: 'Confirm the choice.',
+          updatedAt: '2026-01-01T00:00:00.000Z',
+        }),
+        unit('Click Next.', 'Жмите Далее.', {
+          id: 'plain',
+          contextBefore: 'Something else.',
+          contextAfter: 'Other.',
+          updatedAt: '2026-02-01T00:00:00.000Z',
+        }),
+      ],
+      'Click Next.',
+      'ru',
+      'en',
+      {
+        punctuationMode: 'strict',
+        contextBefore: 'Open the wizard.',
+        contextAfter: 'Confirm the choice.',
+      },
+    )
+    expect(matches[0]?.kind).toBe('context')
+    expect(matches[0]?.score).toBe(1.01)
+    expect(matches[0]?.target).toBe('Нажмите «Далее».')
+    expect(matches[1]?.kind).toBe('exact')
+    expect(matches[1]?.score).toBe(1)
+  })
+
+  it('keeps plain exact when TU has no stored neighbors', () => {
+    const matches = findTmMatches(
+      [
+        unit('Click Next.', 'Жмите Далее.', {
+          id: 'plain',
+          updatedAt: '2026-02-01T00:00:00.000Z',
+        }),
+      ],
+      'Click Next.',
+      'ru',
+      'en',
+      {
+        punctuationMode: 'strict',
+        contextBefore: 'Before.',
+        contextAfter: 'After.',
+      },
+    )
+    expect(matches[0]?.kind).toBe('exact')
+    expect(matches[0]?.score).toBe(1)
+  })
+
+  it('prefers context match in findTmMatch', () => {
+    const match = findTmMatch(
+      [
+        unit('Click Next.', 'Wrong.', {
+          id: 'a',
+          contextBefore: 'A',
+          contextAfter: 'B',
+          updatedAt: '2026-03-01T00:00:00.000Z',
+        }),
+        unit('Click Next.', 'Right.', {
+          id: 'b',
+          contextBefore: 'Before.',
+          contextAfter: 'After.',
+          updatedAt: '2026-01-01T00:00:00.000Z',
+        }),
+      ],
+      'Click Next.',
+      'ru',
+      'en',
+      {
+        punctuationMode: 'strict',
+        contextBefore: 'Before.',
+        contextAfter: 'After.',
+      },
+    )
+    expect(match?.kind).toBe('context')
+    expect(match?.target).toBe('Right.')
+    expect(match?.score).toBe(1.01)
   })
 })

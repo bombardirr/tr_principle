@@ -91,6 +91,7 @@ const tmTitle = computed(() => {
     return t('editor.tmOverwriteHint')
   }
   const pct = Math.round(props.tmMatch.score * 100)
+  if (props.tmMatch.kind === 'context') return t('editor.tmApplyContext')
   if (props.tmMatch.kind === 'exact') return t('editor.tmApplyExact')
   if (props.tmMatch.kind === 'fragment') {
     return props.tmMatch.score >= 1
