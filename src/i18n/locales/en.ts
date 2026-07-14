@@ -52,7 +52,7 @@ export default {
     settingsCancel: 'Cancel',
     resegmentTitle: 'Re-segment project?',
     resegmentHint:
-      'This project still uses paragraph segments. Split them into sentences so TM and the editor work as intended.',
+      'Re-split the project into sentences. Dates like 30.03.2026 stay inside one sentence — broken date pieces are merged back.',
     resegmentWarn:
       'Existing translations are remapped when possible. If sentence counts don’t match, the whole translation stays on the first sentence — check those paragraphs.',
     resegmentConfirm: 'Re-segment',
@@ -102,9 +102,9 @@ export default {
     tmReapplyHint: 'Re-apply from TM (confirmation required)',
     tmPunctSoftHint: 'TM: ignore trailing punctuation (soft match)',
     tmPunctStrictHint: 'TM: strict punctuation (click to soften)',
-    tmAutoSaveOnHint: 'TM autosave on — confirmed segments go to memory',
-    tmAutoSaveOffHint: 'TM autosave off — use ✓ on segment to save to memory',
-    tmCommitHint: 'Save this composite translation to TM',
+    tmAutoSaveOnHint: 'TM autosave on — only new/edited segments write to memory',
+    tmAutoSaveOffHint: 'TM autosave off — save segments to memory with the button next to the variants badge',
+    tmCommitHint: 'Save this segment to translation memory (differs from current TM)',
     tmCommitted: 'Segment saved to translation memory',
     exportTmx: 'Export TM (TMX)',
     exportTmxHint: 'Download translation memory as TMX',

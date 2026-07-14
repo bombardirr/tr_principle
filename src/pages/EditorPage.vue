@@ -18,6 +18,7 @@ import { useProjectLease } from '@/composables/useProjectLease'
 import { useTmSettings } from '@/composables/useTmSettings'
 import { findTmMatches } from '@/tm/match'
 import { findLangPairPreset, langPairLabel } from '@/tm/langPairs'
+import { tmLookupKey } from '@/tm/normalize'
 import { projectNeedsResegment, resegmentParagraphs } from '@/tm/resegment'
 import { exportTmx, parseTmx } from '@/tm/tmx'
 import {
@@ -33,7 +34,7 @@ import {
   normalizeSegmentStatus,
 } from '@/utils/segmentStatus'
 import type { ProjectRecord, Segment } from '@/types/project'
-import { SEGMENT_SCHEMA_SENTENCE } from '@/types/project'
+import { SEGMENT_SCHEMA_DATE_SAFE } from '@/types/project'
 import type { TmMatch, TmUnit } from '@/types/tm'
 
 const props = defineProps<{ id: string }>()
@@ -64,6 +65,22 @@ const { settings: tmSettings, togglePunctuationMode: toggleTmPunctuation, toggle
   useTmSettings()
 const tmUnits = shallowRef<TmUnit[]>([])
 const tmImportInput = ref<HTMLInputElement | null>(null)
+/** Segment ids changed while TM autosave is on — written on next persist only. */
+const tmAutosaveIds = ref(new Set<string>())
+
+function markTmAutosave(segId: string) {
+  if (!tmSettings.value.autoSaveToTm) return
+  const next = new Set(tmAutosaveIds.value)
+  next.add(segId)
+  tmAutosaveIds.value = next
+}
+
+function clearTmAutosave(segId: string) {
+  if (!tmAutosaveIds.value.has(segId)) return
+  const next = new Set(tmAutosaveIds.value)
+  next.delete(segId)
+  tmAutosaveIds.value = next
+}
 
 const done = computed(() =>
   record.value ? countTranslatedSegments(record.value.segments) : 0,
@@ -108,7 +125,9 @@ const resegmentOpen = ref(false)
 const resegmentDeferred = ref(false)
 const thresholdOpen = ref(false)
 
-const needsResegment = computed(() => projectNeedsResegment(record.value?.meta))
+const needsResegment = computed(() =>
+  projectNeedsResegment(record.value?.meta, record.value?.segments),
+)
 
 const thresholdPct = computed(() => {
   const score = record.value?.meta.fuzzyMinScore ?? tmSettings.value.fuzzyMinScore ?? 1
@@ -219,7 +238,7 @@ function confirmResegment() {
     ...record.value,
     meta: {
       ...record.value.meta,
-      segmentSchemaVersion: SEGMENT_SCHEMA_SENTENCE,
+      segmentSchemaVersion: SEGMENT_SCHEMA_DATE_SAFE,
       segmentCount: segments.length,
     },
     segments,
@@ -299,13 +318,15 @@ async function persistNow(): Promise<void> {
   }
 
   await saveProject(record.value)
-  if (tmSettings.value.autoSaveToTm) {
-    const segmentsForTm = record.value.segments.filter((s) => !s.tmSavePending)
-    await recordDoneSegmentsInTm(segmentsForTm, {
+  if (tmSettings.value.autoSaveToTm && tmAutosaveIds.value.size) {
+    const onlyIds = [...tmAutosaveIds.value]
+    await recordDoneSegmentsInTm(record.value.segments, {
       sourceLang: record.value.meta.sourceLang,
       targetLang: record.value.meta.targetLang,
       projectId: record.value.meta.id,
+      onlyIds,
     })
+    tmAutosaveIds.value = new Set()
     tmUnits.value = await listTmUnits()
   }
   allSaved.value = true
@@ -429,6 +450,7 @@ function updateTarget(seg: Segment, value: string) {
     updatedBy: 'local',
     updatedAt: new Date().toISOString(),
   })
+  markTmAutosave(seg.id)
   scheduleSave()
 }
 
@@ -448,6 +470,7 @@ function copySource(seg: Segment) {
     updatedBy: 'local',
     updatedAt: new Date().toISOString(),
   })
+  markTmAutosave(seg.id)
   scheduleSave()
 }
 
@@ -459,6 +482,7 @@ function copySourceById(segId: string) {
 function leaveEmpty(seg: Segment) {
   if (!record.value || projectLease.blocked.value) return
   notice.value = ''
+  clearTmAutosave(seg.id)
   patchSegment(seg.id, {
     target: '',
     status: 'done',
@@ -478,6 +502,7 @@ function leaveEmptyById(segId: string) {
 function resetTarget(seg: Segment) {
   if (!record.value || projectLease.blocked.value) return
   notice.value = ''
+  clearTmAutosave(seg.id)
   patchSegment(seg.id, {
     target: '',
     status: 'empty',
@@ -528,6 +553,17 @@ function matchesFor(seg: Segment): TmMatch[] {
   )
 }
 
+/** Show “save to TM” only when target is non-empty and not already stored for this source. */
+function needsTmSave(seg: Segment): boolean {
+  if (!record.value || !seg.target.trim()) return false
+  const key = tmLookupKey(
+    seg.source,
+    record.value.meta.sourceLang,
+    record.value.meta.targetLang,
+  )
+  return !tmUnits.value.some((u) => u.sourceKey === key && u.target === seg.target)
+}
+
 const tmHintSegmentIds = computed(() => {
   if (!record.value) return []
   return record.value.segments
@@ -547,6 +583,30 @@ function applyTmMatch(segId: string, match: TmMatch) {
     updatedAt: new Date().toISOString(),
   })
   scheduleSave()
+}
+
+async function saveSegmentToTmById(segId: string) {
+  if (!record.value || projectLease.blocked.value) return
+  const seg = record.value.segments.find((s) => s.id === segId)
+  if (!seg || !seg.target.trim()) return
+
+  const status = finalizeSegmentStatus({ ...seg, status: seg.target.trim() ? 'done' : seg.status })
+  patchSegment(segId, { status })
+  const segments = record.value.segments.map((s) =>
+    s.id === segId ? { ...s, status } : s,
+  )
+  try {
+    await recordDoneSegmentsInTm(segments, {
+      sourceLang: record.value.meta.sourceLang,
+      targetLang: record.value.meta.targetLang,
+      projectId: record.value.meta.id,
+      onlyIds: [segId],
+    })
+    clearTmAutosave(segId)
+    tmUnits.value = await listTmUnits()
+  } catch (e) {
+    setSaveError(e)
+  }
 }
 
 async function exportTmxFile() {
@@ -626,7 +686,9 @@ function deactivateEditor() {
 
 function onEditorPointerDown(e: PointerEvent) {
   const target = e.target
-  if (target instanceof Element && target.closest('.target-pane')) return
+  if (!(target instanceof Element)) return
+  // Keep the row active when using mid-toolbar or TM controls above the target.
+  if (target.closest('.target-pane, .mid-toolbar, .meta-target, .tm-picker')) return
   deactivateEditor()
 }
 
@@ -865,11 +927,13 @@ async function goBack() {
           :display-index="i + 1"
           :active-segment-id="activeSegmentId"
           :matches-for="matchesFor"
+          :needs-tm-save="needsTmSave"
           @update-target="updateTargetById"
           @copy-source="copySourceById"
           @leave-empty="leaveEmptyById"
           @reset-target="resetTargetById"
           @apply-tm="(id, match) => applyTmMatch(id, match)"
+          @save-to-tm="saveSegmentToTmById"
           @activate="activateSegment"
         />
       </div>

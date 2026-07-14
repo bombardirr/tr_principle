@@ -377,26 +377,47 @@ onBeforeUnmount(() => {
     text-decoration-color 0.15s ease;
 }
 
-.docx-host :deep(p.appzac-preview-done) {
+/* Keep marker spans layout-neutral so Word run styles stay intact. */
+.docx-host :deep(span.appzac-preview-seg) {
+  display: inline;
+  margin: 0;
+  border: 0;
+  font: inherit;
+  letter-spacing: inherit;
+  color: inherit;
+  vertical-align: baseline;
+}
+
+.docx-host :deep(.appzac-preview-done) {
   background: var(--preview-done-bg);
 }
 
-.docx-host :deep(p.appzac-preview-tm) {
+.docx-host :deep(.appzac-preview-tm) {
   text-decoration: underline;
   text-decoration-color: var(--preview-tm-underline);
-  text-underline-offset: 0.14em;
+  text-underline-offset: 0.28em;
   text-decoration-thickness: 1.5px;
+  text-decoration-skip-ink: none;
 }
 
-.docx-host :deep(p.appzac-preview-tm:hover) {
+/* Gaps between neighbouring sentence underlines (not on whole-paragraph fallback). */
+.docx-host :deep(span.appzac-preview-tm) {
+  padding-inline: 0.14em;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+
+.docx-host :deep(.appzac-preview-tm:hover) {
   text-decoration-color: var(--preview-tm-underline-hover);
 }
 
-.docx-host :deep(p.appzac-preview-hit) {
+.docx-host :deep(.appzac-preview-hit) {
   background: var(--preview-hit-bg);
 }
 
-.docx-host :deep([data-appzac-segment-id]:not(.appzac-preview-tm):not(.appzac-preview-done):hover) {
+.docx-host :deep(
+  [data-appzac-segment-id]:not(.appzac-preview-tm):not(.appzac-preview-done):hover
+) {
   background: var(--preview-hit-bg);
 }
 </style>

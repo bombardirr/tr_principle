@@ -104,14 +104,21 @@ export async function recordDoneSegmentsInTm(
     targetLang?: string
     projectId?: string
     actor?: string
+    /** If set, only these segment ids are written (still uses full list for context). */
+    onlyIds?: Iterable<string>
   },
 ): Promise<void> {
+  const only = options?.onlyIds ? new Set(options.onlyIds) : null
   const ordered = [...segments]
   for (let i = 0; i < ordered.length; i++) {
     const segment = ordered[i]!
+    if (only && !only.has(segment.id)) continue
     if (!isSegmentDone(segment)) continue
     await upsertTmFromSegment(segment, {
-      ...options,
+      sourceLang: options?.sourceLang,
+      targetLang: options?.targetLang,
+      projectId: options?.projectId,
+      actor: options?.actor,
       contextBefore: ordered[i - 1]?.source,
       contextAfter: ordered[i + 1]?.source,
     })

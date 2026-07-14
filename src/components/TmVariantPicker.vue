@@ -91,6 +91,7 @@ function toggleContext(id: string | undefined) {
   display: inline-flex;
   flex: 0 0 auto;
   align-items: center;
+  height: 1.5rem;
 }
 
 .tm-badge {
@@ -103,7 +104,8 @@ function toggleContext(id: string | undefined) {
   font-variant-numeric: tabular-nums;
   padding: 0;
   cursor: pointer;
-  line-height: 1.2;
+  line-height: 1.5rem;
+  height: 1.5rem;
   white-space: nowrap;
 }
 

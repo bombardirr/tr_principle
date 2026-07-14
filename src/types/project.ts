@@ -60,4 +60,6 @@ export interface ProjectRecord {
 }
 
 export const SEGMENT_SCHEMA_SENTENCE = 2
+/** Sentence schema + date-safe splitter (no shredding of 30.03.2026). */
+export const SEGMENT_SCHEMA_DATE_SAFE = 3
 export const SEGMENT_SCHEMA_PARAGRAPH = 1

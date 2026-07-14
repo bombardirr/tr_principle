@@ -117,4 +117,54 @@ describe('previewHighlight', () => {
     expect(resolvePreviewSegmentClick(paragraph.firstChild!)).toBe('seg-1')
     expect(resolvePreviewSegmentClick(host)).toBeNull()
   })
+
+  it('splits multi-sentence paragraphs into per-sentence highlight targets', () => {
+    const dom = new JSDOM(
+      '<div id="host"><p>We like you. We really like you. We like you</p></div>',
+    )
+    const host = dom.window.document.getElementById('host')!
+    const segments: Segment[] = [
+      {
+        ...seg('1', 'Вы нам нравитесь.'),
+        paragraphKey: 'document:0',
+        sentenceIndex: 0,
+        target: 'We like you.',
+        status: 'done',
+      },
+      {
+        ...seg('2', 'Вы нам реально нравитесь.'),
+        paragraphKey: 'document:0',
+        sentenceIndex: 1,
+        paraIndex: 0,
+        target: 'We really like you.',
+        status: 'empty',
+      },
+      {
+        ...seg('3', 'Вы нам нравитесь'),
+        paragraphKey: 'document:0',
+        sentenceIndex: 2,
+        paraIndex: 0,
+        target: 'We like you',
+        status: 'empty',
+      },
+    ]
+
+    const map = indexPreviewSegments(host, segments)
+    expect(map.get('1')).not.toBe(map.get('2'))
+    expect(map.get('2')).not.toBe(map.get('3'))
+    expect(map.get('1')?.textContent?.trim()).toBe('We like you.')
+    expect(map.get('2')?.textContent?.trim()).toBe('We really like you.')
+
+    highlightPreviewSegment(host, map, segments, '2', {
+      scroll: false,
+      tmSegmentIds: new Set(['2', '3']),
+    })
+
+    expect(map.get('1')?.classList.contains(PREVIEW_DONE_CLASS)).toBe(true)
+    expect(map.get('2')?.classList.contains(PREVIEW_HIT_CLASS)).toBe(true)
+    expect(map.get('2')?.classList.contains(PREVIEW_TM_CLASS)).toBe(true)
+    expect(map.get('3')?.classList.contains(PREVIEW_TM_CLASS)).toBe(true)
+    expect(map.get('1')?.classList.contains(PREVIEW_HIT_CLASS)).toBe(false)
+    expect(resolvePreviewSegmentClick(map.get('2')!)).toBe('2')
+  })
 })

@@ -16,6 +16,7 @@ const props = defineProps<{
   displayIndex?: number
   activeSegmentId?: string | null
   matchesFor: (seg: Segment) => TmMatch[]
+  needsTmSave: (seg: Segment) => boolean
 }>()
 
 const emit = defineEmits<{
@@ -25,6 +26,7 @@ const emit = defineEmits<{
   resetTarget: [segId: string]
   activate: [segId: string]
   applyTm: [segId: string, match: TmMatch]
+  saveToTm: [segId: string]
 }>()
 
 const { t, locale } = useI18n()
@@ -98,6 +100,15 @@ function onPick(seg: Segment, match: TmMatch) {
     editors.value[seg.id]?.focus()
   })
 }
+
+function canSaveToTm(seg: Segment | undefined) {
+  return Boolean(seg && props.needsTmSave(seg))
+}
+
+function onSaveToTm() {
+  if (!activeSeg.value || !canSaveToTm(activeSeg.value)) return
+  emit('saveToTm', activeSeg.value.id)
+}
 </script>
 
 <template>
@@ -123,11 +134,20 @@ function onPick(seg: Segment, match: TmMatch) {
           :matches="matchesFor(activeSeg)"
           @pick="onPick(activeSeg, $event)"
         />
+        <IconButton
+          v-if="canSaveToTm(activeSeg)"
+          class="tm-save-btn"
+          :title="t('editor.tmCommitHint')"
+          @mousedown.prevent
+          @click="onSaveToTm"
+        >
+          <EditorGlyph name="tm-commit" />
+        </IconButton>
       </div>
     </div>
 
     <div class="segment-workspace">
-      <div class="pane source-pane">
+      <div class="pane source-pane" :class="{ filled: sorted[0] && filled(sorted[0]) }">
         <div
           v-for="seg in sorted"
           :key="`src-${seg.id}`"
@@ -161,7 +181,10 @@ function onPick(seg: Segment, match: TmMatch) {
         </IconButton>
       </div>
 
-      <div class="pane target-pane">
+      <div
+        class="pane target-pane"
+        :class="{ filled: sorted[0] && filled(sorted[0]) }"
+      >
         <div
           v-for="seg in sorted"
           :key="`tgt-${seg.id}`"
@@ -209,15 +232,21 @@ $toolbar-col-width: 2rem;
   align-items: center;
   margin-bottom: 0.45rem;
   font-size: 0.8rem;
+  /* Keep row height stable when badge / TM-save appear */
+  min-height: 1.5rem;
 }
 
 .meta-source,
 .meta-target {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
   gap: 0.45rem;
   min-width: 0;
+  min-height: 1.5rem;
+}
+
+.meta-source {
+  flex-wrap: wrap;
 }
 
 .meta-mid {
@@ -226,7 +255,19 @@ $toolbar-col-width: 2rem;
 }
 
 .meta-target {
+  flex-wrap: nowrap;
   justify-content: flex-start;
+}
+
+.tm-save-btn {
+  margin-left: auto;
+  flex: 0 0 auto;
+}
+
+.tm-save-btn :deep(.icon-btn),
+.meta-target :deep(.icon-btn) {
+  width: 1.5rem;
+  height: 1.5rem;
 }
 
 .seg-id {
@@ -323,6 +364,10 @@ $toolbar-col-width: 2rem;
 
 .target-pane {
   cursor: text;
+}
+
+.pane.filled {
+  background: var(--target-filled-bg);
 }
 
 .slot {

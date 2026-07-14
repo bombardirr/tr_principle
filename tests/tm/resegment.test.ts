@@ -81,4 +81,43 @@ describe('resegmentParagraphs', () => {
       target: 'Привет.',
     })
   })
+
+  it('merges date-shredded pieces back into one sentence', () => {
+    const { segments } = resegmentParagraphs([
+      para({
+        id: '51',
+        paragraphKey: 'document:55',
+        paraIndex: 55,
+        sentenceIndex: 0,
+        source:
+          'Просим Вас вернуть данное уведомление с соответствующими подписями в отдел управления персоналом в срок до 30.',
+      }),
+      para({
+        id: '52',
+        paragraphKey: 'document:55',
+        paraIndex: 55,
+        sentenceIndex: 1,
+        source: '03.',
+      }),
+      para({
+        id: '53',
+        paragraphKey: 'document:55',
+        paraIndex: 55,
+        sentenceIndex: 2,
+        source: '2026 г.',
+      }),
+      para({
+        id: '54',
+        paragraphKey: 'document:55',
+        paraIndex: 55,
+        sentenceIndex: 3,
+        source:
+          'для подготовки приказа об отпуске, а также для своевременного и полного расчета компенсации за предоставляемый отпуск.',
+      }),
+    ])
+    expect(segments).toHaveLength(1)
+    expect(segments[0]!.source).toBe(
+      'Просим Вас вернуть данное уведомление с соответствующими подписями в отдел управления персоналом в срок до 30.03.2026 г. для подготовки приказа об отпуске, а также для своевременного и полного расчета компенсации за предоставляемый отпуск.',
+    )
+  })
 })

@@ -1,14 +1,30 @@
 import {
-  SEGMENT_SCHEMA_SENTENCE,
+  SEGMENT_SCHEMA_DATE_SAFE,
   type ProjectMeta,
   type Segment,
 } from '@/types/project'
 import { isIntentionallyEmpty } from '@/utils/segmentStatus'
-import { paragraphKeyOf, splitTaggedSentences } from './sentences'
+import { joinSentenceTargets, paragraphKeyOf, splitTaggedSentences } from './sentences'
 
-export function projectNeedsResegment(meta: ProjectMeta | null | undefined): boolean {
+export function projectNeedsResegment(
+  meta: ProjectMeta | null | undefined,
+  segments?: Segment[] | null,
+): boolean {
   if (!meta) return false
-  return (meta.segmentSchemaVersion ?? 1) < SEGMENT_SCHEMA_SENTENCE
+  if ((meta.segmentSchemaVersion ?? 1) < SEGMENT_SCHEMA_DATE_SAFE) return true
+  return Boolean(segments && segmentsLookDateShredded(segments))
+}
+
+/** Tiny leftover pieces from date dots being treated as sentence ends. */
+export function segmentsLookDateShredded(segments: Segment[]): boolean {
+  return segments.some((s) => {
+    const t = s.source.replace(/\{[^}]*\}/g, '').trim()
+    return (
+      /^\d{1,2}\.$/u.test(t) ||
+      /^\d{1,2}\.\d{1,2}\.$/u.test(t) ||
+      /^\d{4}\s*г\.?$/iu.test(t)
+    )
+  })
 }
 
 /** Map a paragraph-level target onto sentence slots. */
@@ -32,30 +48,64 @@ export function mapTargetToSentences(
   }
 }
 
+/**
+ * Reassemble a paragraph that was wrongly cut on date dots: "30."+"03."+"2026 г.".
+ */
+export function joinParagraphPieces(parts: string[]): string {
+  return parts.reduce((acc, raw) => {
+    const t = raw.trim()
+    if (!t) return acc
+    if (!acc) return t
+    // Glue date fragments without injecting spaces: 30. + 03. + 2026
+    if (/\d\.$/u.test(acc) && /^\d/u.test(t)) return acc + t
+    const needSpace = !/\s$/u.test(acc) && !/^[.,;:!?…»"'”)\]]/u.test(t)
+    return acc + (needSpace ? ' ' : '') + t
+  }, '')
+}
+
 export interface ResegmentResult {
   segments: Segment[]
   ambiguousCount: number
 }
 
 /**
- * Split legacy paragraph segments into sentence segments.
- * Existing targets are remapped 1:1 when sentence counts match; otherwise
- * the whole target stays on the first slot (caller should warn).
+ * Regroup by paragraph, merge pieces, then sentence-split with date-safe rules.
+ * Fixes legacy paragraph projects and date-shredded sentence projects.
  */
 export function resegmentParagraphs(segments: Segment[]): ResegmentResult {
+  const groups = new Map<string, Segment[]>()
+  for (const seg of segments) {
+    const pKey = seg.paragraphKey || paragraphKeyOf(seg.storyKey, seg.paraIndex)
+    const list = groups.get(pKey) ?? []
+    list.push(seg)
+    groups.set(pKey, list)
+  }
+
   const out: Segment[] = []
   let ambiguousCount = 0
 
-  for (const seg of segments) {
-    const pKey = seg.paragraphKey || paragraphKeyOf(seg.storyKey, seg.paraIndex)
-    const sources = splitTaggedSentences(seg.source)
-    const parts = sources.length ? sources : [seg.source]
-    const paragraphSpans = seg.paragraphSpans?.length
-      ? seg.paragraphSpans
-      : seg.spans
-    const { targets, ambiguous } = mapTargetToSentences(parts, seg.target)
+  for (const group of groups.values()) {
+    const sorted = [...group].sort((a, b) => a.sentenceIndex - b.sentenceIndex)
+    const head = sorted[0]!
+    const pKey = head.paragraphKey || paragraphKeyOf(head.storyKey, head.paraIndex)
+    const fullSource = joinParagraphPieces(sorted.map((s) => s.source))
+    const fullTarget = joinParagraphPieces(sorted.map((s) => s.target))
+    const intentionalEmpty =
+      sorted.length === 1
+        ? isIntentionallyEmpty(head)
+        : sorted.every(isIntentionallyEmpty)
+
+    const sources = splitTaggedSentences(fullSource)
+    const parts = sources.length ? sources : [fullSource]
+    const paragraphSpans = head.paragraphSpans?.length
+      ? head.paragraphSpans
+      : head.spans
+
+    const { targets, ambiguous } = mapTargetToSentences(
+      parts,
+      intentionalEmpty ? '' : fullTarget || joinSentenceTargets(sorted.map((s) => s.target)),
+    )
     if (ambiguous) ambiguousCount++
-    const intentionalEmpty = isIntentionallyEmpty(seg)
 
     parts.forEach((source, sentenceIndex) => {
       const target = targets[sentenceIndex] ?? ''
@@ -63,14 +113,12 @@ export function resegmentParagraphs(segments: Segment[]): ResegmentResult {
       if (intentionalEmpty && sentenceIndex === 0) {
         status = 'done'
       } else if (target.trim()) {
-        status = seg.status === 'draft' ? 'draft' : 'done'
-      } else if (intentionalEmpty && sentenceIndex > 0) {
-        status = 'empty'
+        status = sorted.some((s) => s.status === 'draft') ? 'draft' : 'done'
       }
 
       out.push({
-        ...seg,
-        id: `${seg.id}-${sentenceIndex}`,
+        ...head,
+        id: `${head.id}-${sentenceIndex}`,
         paragraphKey: pKey,
         sentenceIndex,
         source,
@@ -83,7 +131,6 @@ export function resegmentParagraphs(segments: Segment[]): ResegmentResult {
     })
   }
 
-  // Stable sequential ids for the editor list.
   return {
     segments: out.map((seg, i) => ({ ...seg, id: String(i + 1) })),
     ambiguousCount,
