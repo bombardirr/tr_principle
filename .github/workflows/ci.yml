@@ -102,13 +102,13 @@ jobs:
           done
           docker compose --env-file .env.prod -p appzac -f docker-compose.prod.yml exec -T db sh -c 'pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB"'
 
-      - name: prod — сборка и запуск (app: миграции + SPA)
+      - name: "prod — сборка и запуск (app: миграции + SPA)"
         working-directory: /home/ag/projects/tr_principle
         run: |
           set -euo pipefail
           docker compose --env-file .env.prod -p appzac -f docker-compose.prod.yml up -d --build --remove-orphans
 
-      - name: prod — healthcheck app
+      - name: "prod — healthcheck app"
         run: |
           set -euo pipefail
           for i in $(seq 1 45); do
