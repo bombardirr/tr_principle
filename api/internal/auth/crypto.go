@@ -3,11 +3,11 @@ package auth
 import (
 	"errors"
 	"fmt"
-	"regexp"
 	"strings"
 	"time"
 	"unicode/utf8"
 
+	"github.com/bombardirr/tr_principle/api/internal/emailvalidate"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
@@ -15,15 +15,13 @@ import (
 
 var (
 	ErrInvalidCredentials = errors.New("invalid credentials")
-	ErrLoginTaken         = errors.New("login taken")
+	ErrEmailTaken         = errors.New("email taken")
 	ErrValidation         = errors.New("validation failed")
 	ErrUnauthorized       = errors.New("unauthorized")
 )
 
-var loginRe = regexp.MustCompile(`^[a-zA-Z0-9_]{3,32}$`)
-
 type Claims struct {
-	Login string `json:"login"`
+	Email string `json:"email"`
 	SV    int    `json:"sv"`
 	jwt.RegisteredClaims
 }
@@ -37,10 +35,10 @@ func NewTokenIssuer(secret []byte, ttl time.Duration) *TokenIssuer {
 	return &TokenIssuer{secret: secret, ttl: ttl}
 }
 
-func (t *TokenIssuer) Issue(userID uuid.UUID, login string, sv int) (string, error) {
+func (t *TokenIssuer) Issue(userID uuid.UUID, email string, sv int) (string, error) {
 	now := time.Now()
 	claims := Claims{
-		Login: login,
+		Email: email,
 		SV:    sv,
 		RegisteredClaims: jwt.RegisteredClaims{
 			Subject:   userID.String(),
@@ -78,13 +76,28 @@ func CheckPassword(hash, password string) bool {
 	return bcrypt.CompareHashAndPassword([]byte(hash), []byte(password)) == nil
 }
 
-func ValidateCredentials(login, password string) error {
-	login = strings.TrimSpace(login)
-	if !loginRe.MatchString(login) {
-		return fmt.Errorf("%w: login must be 3–32 chars [a-zA-Z0-9_]", ErrValidation)
+func ValidateCredentials(email, password string) (string, error) {
+	normalized, err := emailvalidate.NormalizeAndValidate(email)
+	if err != nil {
+		return "", fmt.Errorf("%w: invalid email", ErrValidation)
 	}
 	if utf8.RuneCountInString(password) < 8 {
-		return fmt.Errorf("%w: password must be at least 8 characters", ErrValidation)
+		return "", fmt.Errorf("%w: password must be at least 8 characters", ErrValidation)
 	}
-	return nil
+	return normalized, nil
+}
+
+const maxDisplayNameRunes = 80
+
+func NormalizeDisplayName(raw string) (string, error) {
+	name := strings.TrimSpace(raw)
+	name = strings.ReplaceAll(name, "\n", " ")
+	name = strings.ReplaceAll(name, "\r", " ")
+	for strings.Contains(name, "  ") {
+		name = strings.ReplaceAll(name, "  ", " ")
+	}
+	if utf8.RuneCountInString(name) > maxDisplayNameRunes {
+		return "", fmt.Errorf("%w: display name too long", ErrValidation)
+	}
+	return name, nil
 }

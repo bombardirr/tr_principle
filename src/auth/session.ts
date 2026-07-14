@@ -5,6 +5,7 @@ import {
   getStoredToken,
   login as apiLogin,
   logoutRequest,
+  patchMe,
   register as apiRegister,
   setStoredToken,
   type AuthUser,
@@ -42,14 +43,14 @@ export async function bootstrapAuth() {
   }
 }
 
-export async function register(loginName: string, password: string) {
-  const res = await apiRegister(loginName, password)
+export async function register(email: string, password: string) {
+  const res = await apiRegister(email, password)
   await applySession(res.token, res.user)
   return res.user
 }
 
-export async function login(loginName: string, password: string) {
-  const res = await apiLogin(loginName, password)
+export async function login(email: string, password: string) {
+  const res = await apiLogin(email, password)
   await applySession(res.token, res.user)
   return res.user
 }
@@ -65,6 +66,19 @@ export async function logout() {
   await applySession(null, null)
 }
 
+export async function updateDisplayName(displayName: string) {
+  const next = await patchMe(displayName)
+  user.value = next
+  return next
+}
+
+export function displayLabel(u: AuthUser | null | undefined): string {
+  if (!u) return ''
+  const name = u.display_name?.trim()
+  if (name) return name
+  return u.email
+}
+
 export function useAuth() {
   return {
     user: readonly(user),
@@ -73,5 +87,7 @@ export function useAuth() {
     register,
     login,
     logout,
+    updateDisplayName,
+    displayLabel,
   }
 }

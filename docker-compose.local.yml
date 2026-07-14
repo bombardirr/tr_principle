@@ -1,7 +1,8 @@
 # Local stack: Postgres + API
 #   docker compose -f docker-compose.local.yml up --build
 #
-# SPA: npm run dev (Vite proxies /api → :8080)
+# SPA: npm run dev (Vite proxies /api → :18080)
+# Host :8080 often taken by Cursor — map API to 18080.
 
 services:
   db:
@@ -31,7 +32,7 @@ services:
       CORS_ORIGIN: http://localhost:5173
       MIGRATIONS_DIR: /app/migrations
     ports:
-      - "8080:8080"
+      - "18080:8080"
     depends_on:
       db:
         condition: service_healthy

@@ -28,6 +28,7 @@ func NewRouter(authHandler *auth.Handler, allowedOrigin string) http.Handler {
 		r.Group(func(r chi.Router) {
 			r.Use(authHandler.Middleware)
 			r.Get("/me", authHandler.Me)
+			r.Patch("/me", authHandler.PatchMe)
 			r.Post("/logout", authHandler.Logout)
 		})
 	})
@@ -40,7 +41,7 @@ func cors(origin string) func(http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Access-Control-Allow-Origin", origin)
 			w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type")
-			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PATCH, OPTIONS")
 			if r.Method == http.MethodOptions {
 				w.WriteHeader(http.StatusNoContent)
 				return

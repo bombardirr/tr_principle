@@ -14,7 +14,8 @@ import (
 
 type User struct {
 	ID             uuid.UUID
-	Login          string
+	Email          string
+	DisplayName    string
 	PasswordHash   string
 	SessionVersion int
 	IsAdmin        bool
@@ -28,29 +29,40 @@ func NewStore(pool *pgxpool.Pool) *Store {
 	return &Store{pool: pool}
 }
 
-func (s *Store) CreateUser(ctx context.Context, login, passwordHash string) (User, error) {
+func scanUser(row pgx.Row) (User, error) {
 	var u User
-	err := s.pool.QueryRow(ctx, `
-		INSERT INTO users (login, password_hash)
+	var displayName *string
+	err := row.Scan(&u.ID, &u.Email, &displayName, &u.PasswordHash, &u.SessionVersion, &u.IsAdmin)
+	if err != nil {
+		return User{}, err
+	}
+	if displayName != nil {
+		u.DisplayName = *displayName
+	}
+	return u, nil
+}
+
+func (s *Store) CreateUser(ctx context.Context, email, passwordHash string) (User, error) {
+	u, err := scanUser(s.pool.QueryRow(ctx, `
+		INSERT INTO users (email, password_hash)
 		VALUES ($1, $2)
-		RETURNING id, login, password_hash, session_version, is_admin
-	`, login, passwordHash).Scan(&u.ID, &u.Login, &u.PasswordHash, &u.SessionVersion, &u.IsAdmin)
+		RETURNING id, email, display_name, password_hash, session_version, is_admin
+	`, email, passwordHash))
 	if err != nil {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
-			return User{}, ErrLoginTaken
+			return User{}, ErrEmailTaken
 		}
 		return User{}, err
 	}
 	return u, nil
 }
 
-func (s *Store) FindByLogin(ctx context.Context, login string) (User, error) {
-	var u User
-	err := s.pool.QueryRow(ctx, `
-		SELECT id, login, password_hash, session_version, is_admin
-		FROM users WHERE lower(login) = lower($1)
-	`, login).Scan(&u.ID, &u.Login, &u.PasswordHash, &u.SessionVersion, &u.IsAdmin)
+func (s *Store) FindByEmail(ctx context.Context, email string) (User, error) {
+	u, err := scanUser(s.pool.QueryRow(ctx, `
+		SELECT id, email, display_name, password_hash, session_version, is_admin
+		FROM users WHERE lower(email) = lower($1)
+	`, email))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return User{}, ErrInvalidCredentials
 	}
@@ -58,11 +70,22 @@ func (s *Store) FindByLogin(ctx context.Context, login string) (User, error) {
 }
 
 func (s *Store) FindByID(ctx context.Context, id uuid.UUID) (User, error) {
-	var u User
-	err := s.pool.QueryRow(ctx, `
-		SELECT id, login, password_hash, session_version, is_admin
+	u, err := scanUser(s.pool.QueryRow(ctx, `
+		SELECT id, email, display_name, password_hash, session_version, is_admin
 		FROM users WHERE id = $1
-	`, id).Scan(&u.ID, &u.Login, &u.PasswordHash, &u.SessionVersion, &u.IsAdmin)
+	`, id))
+	if errors.Is(err, pgx.ErrNoRows) {
+		return User{}, ErrUnauthorized
+	}
+	return u, err
+}
+
+func (s *Store) UpdateDisplayName(ctx context.Context, id uuid.UUID, displayName string) (User, error) {
+	u, err := scanUser(s.pool.QueryRow(ctx, `
+		UPDATE users SET display_name = NULLIF(trim($2), '')
+		WHERE id = $1
+		RETURNING id, email, display_name, password_hash, session_version, is_admin
+	`, id, displayName))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return User{}, ErrUnauthorized
 	}

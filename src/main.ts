@@ -1,11 +1,12 @@
 import { createApp } from 'vue'
 import App from './App.vue'
 import router from './router'
-import { i18n } from './i18n'
+import { i18n, syncDocumentTitle } from './i18n'
 import { initTheme } from './theme'
 import './fonts'
 import './style.css'
 
 initTheme()
+syncDocumentTitle()
 
 createApp(App).use(router).use(i18n).mount('#app')

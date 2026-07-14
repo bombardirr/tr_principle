@@ -10,10 +10,11 @@ const router = useRouter()
 const { register, login, isAuthenticated } = useAuth()
 
 const mode = ref<'home' | 'login' | 'register'>('home')
-const loginName = ref('')
+const email = ref('')
 const password = ref('')
 const busy = ref(false)
 const error = ref('')
+const showPassword = ref(false)
 
 const landingRoot = ref<HTMLElement | null>(null)
 /** Continuous panel progress 0 … panels-1 */
@@ -98,16 +99,19 @@ onUnmounted(() => {
 function openLogin() {
   mode.value = 'login'
   error.value = ''
+  showPassword.value = false
 }
 
 function openRegister() {
   mode.value = 'register'
   error.value = ''
+  showPassword.value = false
 }
 
 function backHome() {
   mode.value = 'home'
   error.value = ''
+  showPassword.value = false
 }
 
 function goPanel(i: number) {
@@ -121,16 +125,44 @@ function goPanel(i: number) {
   window.scrollTo({ top: target, behavior: reduceMotion.value ? 'auto' : 'smooth' })
 }
 
+function looksLikeEmail(raw: string): boolean {
+  const v = raw.trim()
+  if (!v || v.length > 254) return false
+  const at = v.lastIndexOf('@')
+  if (at < 1 || at === v.length - 1) return false
+  const domain = v.slice(at + 1)
+  return domain.includes('.') && !domain.startsWith('.') && !domain.endsWith('.')
+}
+
+function validateCreds(): boolean {
+  if (!looksLikeEmail(email.value)) {
+    error.value = t('landing.errorEmail')
+    return false
+  }
+  if (password.value.length < 8) {
+    error.value = t('landing.errorPasswordShort')
+    return false
+  }
+  return true
+}
+
 async function submit() {
-  busy.value = true
   error.value = ''
+  if (!validateCreds()) return
+  busy.value = true
   try {
-    if (mode.value === 'register') await register(loginName.value.trim(), password.value)
-    else await login(loginName.value.trim(), password.value)
+    if (mode.value === 'register') await register(email.value.trim(), password.value)
+    else await login(email.value.trim(), password.value)
     await router.push({ name: 'projects' })
   } catch (e) {
-    error.value =
+    const raw =
       e instanceof ApiError ? e.message : e instanceof Error ? e.message : String(e)
+    if (raw.includes('email taken')) error.value = t('landing.errorEmailTaken')
+    else if (raw.includes('invalid email') || raw.includes('invalid credentials'))
+      error.value =
+        mode.value === 'login' ? t('landing.errorCredentials') : t('landing.errorEmail')
+    else if (raw.includes('password must')) error.value = t('landing.errorPasswordShort')
+    else error.value = raw
   } finally {
     busy.value = false
   }
@@ -156,31 +188,82 @@ async function submit() {
           </button>
         </div>
 
-        <form v-else class="auth-form" @submit.prevent="submit">
+        <form
+          v-else
+          class="auth-form"
+          autocomplete="off"
+          novalidate
+          @submit.prevent="submit"
+        >
+          <div class="error-slot" aria-live="polite">
+            <p v-if="error" class="error" role="alert" :title="error">{{ error }}</p>
+          </div>
           <label>
-            <span>{{ t('landing.loginField') }}</span>
+            <span>{{ t('landing.emailField') }}</span>
             <input
-              v-model="loginName"
-              name="login"
-              autocomplete="username"
-              required
-              minlength="3"
-              maxlength="32"
-              pattern="[A-Za-z0-9_]+"
+              v-model="email"
+              name="email"
+              type="email"
+              inputmode="email"
+              autocomplete="email"
+              autocapitalize="off"
+              spellcheck="false"
+              maxlength="254"
+              @input="error = ''"
             />
           </label>
           <label>
             <span>{{ t('landing.passwordField') }}</span>
-            <input
-              v-model="password"
-              type="password"
-              name="password"
-              :autocomplete="mode === 'register' ? 'new-password' : 'current-password'"
-              required
-              minlength="8"
-            />
+            <div class="password-row">
+              <input
+                v-model="password"
+                :type="showPassword ? 'text' : 'password'"
+                name="appzac-password"
+                :autocomplete="mode === 'register' ? 'new-password' : 'current-password'"
+                maxlength="128"
+                @input="error = ''"
+              />
+              <button
+                type="button"
+                class="password-toggle"
+                :title="showPassword ? t('landing.hidePassword') : t('landing.showPassword')"
+                :aria-label="showPassword ? t('landing.hidePassword') : t('landing.showPassword')"
+                @click="showPassword = !showPassword"
+              >
+                <svg
+                  v-if="!showPassword"
+                  viewBox="0 0 16 16"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.5"
+                  aria-hidden="true"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    d="M1.75 8s2.25-3.75 6.25-3.75S14.25 8 14.25 8s-2.25 3.75-6.25 3.75S1.75 8 1.75 8Z"
+                  />
+                  <circle cx="8" cy="8" r="1.75" />
+                </svg>
+                <svg
+                  v-else
+                  viewBox="0 0 16 16"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.5"
+                  aria-hidden="true"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    d="M1.75 8s2.25-3.75 6.25-3.75S14.25 8 14.25 8s-2.25 3.75-6.25 3.75S1.75 8 1.75 8Z"
+                  />
+                  <circle cx="8" cy="8" r="1.75" />
+                  <path stroke-linecap="round" d="m3.25 12.75 9.5-9.5" />
+                </svg>
+              </button>
+            </div>
           </label>
-          <p v-if="error" class="error">{{ error }}</p>
           <div class="cta">
             <button type="submit" class="primary" :disabled="busy">
               {{ mode === 'register' ? t('landing.register') : t('landing.login') }}
@@ -368,10 +451,76 @@ async function submit() {
 }
 
 .auth-form input {
+  width: 100%;
+  box-sizing: border-box;
   padding: 0.55rem 0.7rem;
   border-radius: 8px;
   border: 1px solid var(--border-strong);
   background: var(--surface);
+}
+
+.password-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.password-row input {
+  padding-right: 2.4rem;
+}
+
+.password-toggle {
+  position: absolute;
+  right: 0.25rem;
+  width: 2rem;
+  height: 2rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.password-toggle:hover {
+  color: var(--text);
+}
+
+.password-toggle svg {
+  width: 1rem;
+  height: 1rem;
+}
+
+.error-slot {
+  height: 2.85rem;
+  flex-shrink: 0;
+  display: flex;
+  align-items: stretch;
+}
+
+.error {
+  margin: 0;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0.45rem 0.7rem;
+  border-radius: 8px;
+  border: 1px solid color-mix(in srgb, var(--danger) 45%, transparent);
+  background: var(--danger-bg);
+  color: var(--danger);
+  font-size: 0.86rem;
+  line-height: 1.3;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.field-hint {
+  font-size: 0.78rem;
+  line-height: 1.35;
+  color: var(--text-faint);
 }
 
 .primary,
@@ -398,12 +547,6 @@ async function submit() {
   background: transparent;
   color: var(--text);
   border-color: var(--border-strong);
-}
-
-.error {
-  margin: 0;
-  color: var(--danger);
-  font-size: 0.9rem;
 }
 
 .panels {

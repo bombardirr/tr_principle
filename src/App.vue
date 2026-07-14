@@ -1,26 +1,50 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { setLocale } from '@/i18n'
 import IconButton from '@/components/IconButton.vue'
+import EditorGlyph from '@/components/EditorGlyph.vue'
 import LocaleToggleLabel from '@/components/LocaleToggleLabel.vue'
 import ThemeToggleGlyph from '@/components/ThemeToggleGlyph.vue'
 import { getTheme, toggleTheme, type Theme } from '@/theme'
-import { useAuth } from '@/auth/session'
+import { displayLabel, useAuth } from '@/auth/session'
+import { ApiError } from '@/auth/api'
 
 const { t, locale } = useI18n()
 const route = useRoute()
 const router = useRouter()
-const { user, isAuthenticated, logout, ready } = useAuth()
+const { user, isAuthenticated, logout, ready, updateDisplayName } = useAuth()
 const theme = ref<Theme>('dark')
 const isEditorRoute = computed(() => route.name === 'editor')
 const isLanding = computed(() => route.name === 'landing')
 const brandTo = computed(() => (isAuthenticated.value ? '/projects' : '/'))
+const headerName = computed(() => displayLabel(user.value))
+
+const settingsOpen = ref(false)
+const settingsRoot = ref<HTMLElement | null>(null)
+const nameDraft = ref('')
+const settingsBusy = ref(false)
+const settingsError = ref('')
+const settingsSaved = ref(false)
 
 onMounted(() => {
   theme.value = getTheme()
+  document.addEventListener('pointerdown', onDocPointer, true)
+  document.addEventListener('keydown', onDocKey)
 })
+
+onUnmounted(() => {
+  document.removeEventListener('pointerdown', onDocPointer, true)
+  document.removeEventListener('keydown', onDocKey)
+})
+
+watch(
+  () => user.value?.display_name,
+  (v) => {
+    if (!settingsOpen.value) nameDraft.value = v ?? ''
+  },
+)
 
 function onToggleTheme() {
   theme.value = toggleTheme()
@@ -30,7 +54,47 @@ function onToggleLocale() {
   setLocale(locale.value === 'ru' ? 'en' : 'ru')
 }
 
+function openSettings() {
+  nameDraft.value = user.value?.display_name ?? ''
+  settingsError.value = ''
+  settingsSaved.value = false
+  settingsOpen.value = true
+}
+
+function closeSettings() {
+  settingsOpen.value = false
+  settingsError.value = ''
+  settingsSaved.value = false
+}
+
+function onDocPointer(e: PointerEvent) {
+  if (!settingsOpen.value) return
+  const el = settingsRoot.value
+  if (el && e.target instanceof Node && !el.contains(e.target)) closeSettings()
+}
+
+function onDocKey(e: KeyboardEvent) {
+  if (e.key === 'Escape' && settingsOpen.value) closeSettings()
+}
+
+async function saveDisplayName() {
+  settingsBusy.value = true
+  settingsError.value = ''
+  settingsSaved.value = false
+  try {
+    await updateDisplayName(nameDraft.value)
+    settingsSaved.value = true
+    await nextTick()
+  } catch (e) {
+    settingsError.value =
+      e instanceof ApiError ? e.message : e instanceof Error ? e.message : String(e)
+  } finally {
+    settingsBusy.value = false
+  }
+}
+
 async function onLogout() {
+  closeSettings()
   await logout()
   await router.push({ name: 'landing' })
 }
@@ -43,8 +107,44 @@ async function onLogout() {
       <div id="app-header-center" class="header-center" />
       <div class="top-actions">
         <template v-if="ready && isAuthenticated && !isLanding">
-          <span class="account" :title="user?.login">{{ user?.login }}</span>
-          <button type="button" class="text-btn" @click="onLogout">{{ t('auth.logout') }}</button>
+          <span class="account" :title="user?.email">{{ headerName }}</span>
+          <div ref="settingsRoot" class="settings-wrap">
+            <IconButton
+              :title="t('auth.settings')"
+              ghost
+              @click="settingsOpen ? closeSettings() : openSettings()"
+            >
+              <EditorGlyph name="settings" />
+            </IconButton>
+            <div v-if="settingsOpen" class="settings-pop" role="dialog" :aria-label="t('auth.settingsTitle')">
+              <p class="settings-title">{{ t('auth.settingsTitle') }}</p>
+              <label class="settings-field">
+                <span>{{ t('auth.displayName') }}</span>
+                <input
+                  v-model="nameDraft"
+                  type="text"
+                  maxlength="80"
+                  :placeholder="t('auth.displayNamePlaceholder')"
+                  @keydown.enter.prevent="saveDisplayName"
+                />
+                <span class="settings-hint">{{ t('auth.displayNameHint') }}</span>
+              </label>
+              <p class="settings-email">
+                <span>{{ t('auth.email') }}</span>
+                {{ user?.email }}
+              </p>
+              <p v-if="settingsError" class="settings-error">{{ settingsError }}</p>
+              <p v-else-if="settingsSaved" class="settings-ok">{{ t('auth.save') }} ✓</p>
+              <div class="settings-actions">
+                <button type="button" class="primary" :disabled="settingsBusy" @click="saveDisplayName">
+                  {{ t('auth.save') }}
+                </button>
+                <button type="button" class="ghost danger" :disabled="settingsBusy" @click="onLogout">
+                  {{ t('auth.logout') }}
+                </button>
+              </div>
+            </div>
+          </div>
         </template>
         <IconButton :title="t('app.themeHint')" ghost @click="onToggleTheme">
           <ThemeToggleGlyph :light="theme === 'light'" />
@@ -120,8 +220,8 @@ async function onLogout() {
 }
 
 .account {
-  max-width: 8rem;
-  margin-right: 0.35rem;
+  max-width: 12rem;
+  margin-right: 0.15rem;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -129,18 +229,113 @@ async function onLogout() {
   color: var(--text-muted);
 }
 
-.text-btn {
-  margin-right: 0.25rem;
-  padding: 0.25rem 0.45rem;
-  border: none;
-  background: transparent;
-  color: var(--text-muted);
-  cursor: pointer;
-  font-size: 0.85rem;
+.settings-wrap {
+  position: relative;
 }
 
-.text-btn:hover {
+.settings-pop {
+  position: absolute;
+  top: calc(100% + 0.4rem);
+  right: 0;
+  z-index: 40;
+  width: min(20rem, calc(100vw - 2rem));
+  padding: 0.9rem 1rem 1rem;
+  border-radius: 10px;
+  border: 1px solid var(--border-strong);
+  background: var(--surface);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
+}
+
+.settings-title {
+  margin: 0 0 0.75rem;
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.settings-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}
+
+.settings-field input {
+  padding: 0.5rem 0.65rem;
+  border-radius: 8px;
+  border: 1px solid var(--border-strong);
+  background: var(--bg);
   color: var(--text);
+}
+
+.settings-hint {
+  font-size: 0.75rem;
+  color: var(--text-faint);
+}
+
+.settings-email {
+  margin: 0.75rem 0 0;
+  font-size: 0.78rem;
+  color: var(--text-faint);
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  word-break: break-all;
+}
+
+.settings-email span {
+  color: var(--text-muted);
+}
+
+.settings-error {
+  margin: 0.55rem 0 0;
+  font-size: 0.82rem;
+  color: var(--danger);
+}
+
+.settings-ok {
+  margin: 0.55rem 0 0;
+  font-size: 0.82rem;
+  color: var(--ok);
+}
+
+.settings-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.85rem;
+}
+
+.settings-actions .primary,
+.settings-actions .ghost {
+  border-radius: 8px;
+  padding: 0.45rem 0.85rem;
+  cursor: pointer;
+  border: 1px solid transparent;
+  font-size: 0.88rem;
+}
+
+.settings-actions .primary {
+  background: var(--accent);
+  color: var(--accent-text);
+  border-color: var(--accent-strong);
+}
+
+.settings-actions .ghost {
+  background: transparent;
+  color: var(--text);
+  border-color: var(--border-strong);
+}
+
+.settings-actions .ghost.danger {
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 40%, var(--border-strong));
+}
+
+.settings-actions .primary:disabled,
+.settings-actions .ghost:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 .main {

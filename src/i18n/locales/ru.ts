@@ -1,6 +1,6 @@
 export default {
   app: {
-    name: 'appzac',
+    name: 'аппзац',
     themeHint: 'Тема оформления',
     langHint: 'Язык интерфейса',
     themeDark: 'тёмная',
@@ -8,6 +8,13 @@ export default {
   },
   auth: {
     logout: 'Выйти',
+    settings: 'Настройки',
+    settingsTitle: 'Аккаунт',
+    displayName: 'Имя',
+    displayNameHint: 'Показывается в шапке вместо email.',
+    displayNamePlaceholder: 'Имя или ФИО',
+    save: 'Сохранить',
+    email: 'Email',
   },
   landing: {
     headline: 'Перевод DOCX в браузере — разметка на месте.',
@@ -16,8 +23,14 @@ export default {
     register: 'Создать аккаунт',
     loginTitle: 'Вход',
     registerTitle: 'Регистрация',
-    loginField: 'Логин',
+    emailField: 'Email',
     passwordField: 'Пароль',
+    showPassword: 'Показать пароль',
+    hidePassword: 'Скрыть пароль',
+    errorEmail: 'Укажите корректный email.',
+    errorEmailTaken: 'Этот email уже зарегистрирован.',
+    errorCredentials: 'Неверный email или пароль.',
+    errorPasswordShort: 'Пароль не короче 8 символов.',
     back: 'Назад',
     features: {
       docx: {

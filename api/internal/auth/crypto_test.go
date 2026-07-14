@@ -8,14 +8,18 @@ import (
 )
 
 func TestValidateCredentials(t *testing.T) {
-	if err := ValidateCredentials("ab", "password1"); err == nil {
-		t.Fatal("expected short login to fail")
+	if _, err := ValidateCredentials("ab", "password1"); err == nil {
+		t.Fatal("expected bad email to fail")
 	}
-	if err := ValidateCredentials("user_ok", "short"); err == nil {
+	if _, err := ValidateCredentials("joe@yandex.ru", "short"); err == nil {
 		t.Fatal("expected short password to fail")
 	}
-	if err := ValidateCredentials("user_ok", "password1"); err != nil {
-		t.Fatalf("valid creds: %v", err)
+	email, err := ValidateCredentials("Joe.Falange@Yandex.ru", "password1")
+	if err != nil {
+		t.Fatalf("valid email: %v", err)
+	}
+	if email != "joe.falange@yandex.ru" {
+		t.Fatalf("normalize: %q", email)
 	}
 }
 
@@ -35,7 +39,7 @@ func TestPasswordHashRoundtrip(t *testing.T) {
 func TestTokenRoundtrip(t *testing.T) {
 	issuer := NewTokenIssuer([]byte("test-secret-key-32bytes-minimum!!"), time.Hour)
 	id := uuid.New()
-	token, err := issuer.Issue(id, "alice", 3)
+	token, err := issuer.Issue(id, "alice@example.com", 3)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -43,7 +47,7 @@ func TestTokenRoundtrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if claims.Subject != id.String() || claims.Login != "alice" || claims.SV != 3 {
+	if claims.Subject != id.String() || claims.Email != "alice@example.com" || claims.SV != 3 {
 		t.Fatalf("claims=%+v", claims)
 	}
 }

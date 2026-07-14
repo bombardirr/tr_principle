@@ -25,6 +25,7 @@
   "homepage": "https://github.com/bombardirr/tr_principle#readme",
   "dependencies": {
     "@fontsource/ibm-plex-sans": "^5.2.8",
+    "@lucide/vue": "^1.24.0",
     "docx-preview": "^0.4.0",
     "idb": "^8.0.3",
     "jszip": "^3.10.1",

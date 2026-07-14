@@ -104,7 +104,7 @@
 Референс по духу (не копипаст): `disput`, `peerling` — спокойные анимации, бренд-первый экран, наш визуальный язык (IBM Plex / тема appzac).
 
 - [x] **Лендинг** — только презентация + вход/регистрация (auth-first; **без гостевого CAT**)
-- [x] `users`: UUID `id`, `login`, `password_hash`, `session_version`, `is_admin`, `telegram_id` (nullable)
+- [x] `users`: UUID `id`, `email`, `password_hash`, `session_version`, `is_admin`, `telegram_id` (nullable)
 - [x] Register / login / me / logout; JWT + claim `sv`; IndexedDB scoped by opaque UUID
 - [ ] Admin promote через SQL/CLI
 

@@ -35,7 +35,7 @@ func TestAuthFlow(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, _ = pool.Exec(ctx, `DELETE FROM users WHERE login LIKE 'test_%'`)
+	_, _ = pool.Exec(ctx, `DELETE FROM users WHERE email LIKE 'test_%@example.com'`)
 
 	handler := &auth.Handler{
 		Store:   auth.NewStore(pool),
@@ -45,12 +45,12 @@ func TestAuthFlow(t *testing.T) {
 	srv := httptest.NewServer(httpapi.NewRouter(handler, "http://localhost"))
 	t.Cleanup(srv.Close)
 
-	login := "test_user_" + time.Now().Format("150405") + fmt.Sprintf("%03d", time.Now().Nanosecond()%1000)
-	regBody := map[string]string{"login": login, "password": "password1"}
+	email := fmt.Sprintf("test_%s@example.com", time.Now().Format("150405.000000000"))
+	regBody := map[string]string{"email": email, "password": "password1"}
 	token := mustAuth(t, srv.URL+"/api/auth/register", regBody)
 
 	me := mustGET(t, srv.URL+"/api/auth/me", token)
-	if me["login"] != login {
+	if me["email"] != email {
 		t.Fatalf("me=%v", me)
 	}
 

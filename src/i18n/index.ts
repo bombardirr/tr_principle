@@ -14,4 +14,10 @@ export const i18n = createI18n({
 export function setLocale(locale: 'ru' | 'en') {
   ;(i18n.global.locale as unknown as { value: string }).value = locale
   localStorage.setItem('ui-locale', locale)
+  syncDocumentTitle()
+}
+
+export function syncDocumentTitle() {
+  if (typeof document === 'undefined') return
+  document.title = String(i18n.global.t('app.name'))
 }

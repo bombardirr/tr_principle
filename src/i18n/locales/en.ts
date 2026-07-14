@@ -8,6 +8,13 @@ export default {
   },
   auth: {
     logout: 'Log out',
+    settings: 'Settings',
+    settingsTitle: 'Account',
+    displayName: 'Display name',
+    displayNameHint: 'Shown in the header instead of your email.',
+    displayNamePlaceholder: 'Name or full name',
+    save: 'Save',
+    email: 'Email',
   },
   landing: {
     headline: 'Translate DOCX in the browser — markup stays intact.',
@@ -16,8 +23,14 @@ export default {
     register: 'Create account',
     loginTitle: 'Sign in',
     registerTitle: 'Create account',
-    loginField: 'Login',
+    emailField: 'Email',
     passwordField: 'Password',
+    showPassword: 'Show password',
+    hidePassword: 'Hide password',
+    errorEmail: 'Enter a valid email address.',
+    errorEmailTaken: 'This email is already registered.',
+    errorCredentials: 'Wrong email or password.',
+    errorPasswordShort: 'Password must be at least 8 characters.',
     back: 'Back',
     features: {
       docx: {

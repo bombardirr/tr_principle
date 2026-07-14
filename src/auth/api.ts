@@ -2,7 +2,8 @@ const TOKEN_KEY = 'appzac-auth-token'
 
 export type AuthUser = {
   id: string
-  login: string
+  email: string
+  display_name: string
   is_admin: boolean
 }
 
@@ -61,18 +62,18 @@ export async function apiFetch<T>(
   return data as T
 }
 
-export async function register(login: string, password: string) {
+export async function register(email: string, password: string) {
   return apiFetch<{ token: string; user: AuthUser }>('/api/auth/register', {
     method: 'POST',
-    body: JSON.stringify({ login, password }),
+    body: JSON.stringify({ email, password }),
     token: null,
   })
 }
 
-export async function login(loginName: string, password: string) {
+export async function login(email: string, password: string) {
   return apiFetch<{ token: string; user: AuthUser }>('/api/auth/login', {
     method: 'POST',
-    body: JSON.stringify({ login: loginName, password }),
+    body: JSON.stringify({ email, password }),
     token: null,
   })
 }
@@ -83,4 +84,11 @@ export async function fetchMe(token?: string) {
 
 export async function logoutRequest() {
   return apiFetch<{ ok: boolean }>('/api/auth/logout', { method: 'POST' })
+}
+
+export async function patchMe(displayName: string) {
+  return apiFetch<AuthUser>('/api/auth/me', {
+    method: 'PATCH',
+    body: JSON.stringify({ display_name: displayName }),
+  })
 }

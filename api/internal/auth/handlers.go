@@ -15,19 +15,20 @@ type contextKey string
 const userContextKey contextKey = "authUser"
 
 type PublicUser struct {
-	ID      string `json:"id"`
-	Login   string `json:"login"`
-	IsAdmin bool   `json:"is_admin"`
+	ID          string `json:"id"`
+	Email       string `json:"email"`
+	DisplayName string `json:"display_name"`
+	IsAdmin     bool   `json:"is_admin"`
 }
 
 type Handler struct {
-	Store    *Store
-	Tokens   *TokenIssuer
-	Limiter  *RateLimiter
+	Store   *Store
+	Tokens  *TokenIssuer
+	Limiter *RateLimiter
 }
 
 type credsBody struct {
-	Login    string `json:"login"`
+	Email    string `json:"email"`
 	Password string `json:"password"`
 }
 
@@ -45,7 +46,8 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid json")
 		return
 	}
-	if err := ValidateCredentials(body.Login, body.Password); err != nil {
+	email, err := ValidateCredentials(body.Email, body.Password)
+	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
@@ -54,9 +56,9 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "server error")
 		return
 	}
-	user, err := h.Store.CreateUser(r.Context(), strings.TrimSpace(body.Login), hash)
-	if errors.Is(err, ErrLoginTaken) {
-		writeError(w, http.StatusConflict, "login taken")
+	user, err := h.Store.CreateUser(r.Context(), email, hash)
+	if errors.Is(err, ErrEmailTaken) {
+		writeError(w, http.StatusConflict, "email taken")
 		return
 	}
 	if err != nil {
@@ -75,7 +77,12 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid json")
 		return
 	}
-	user, err := h.Store.FindByLogin(r.Context(), strings.TrimSpace(body.Login))
+	email, err := ValidateCredentials(body.Email, body.Password)
+	if err != nil {
+		writeError(w, http.StatusUnauthorized, "invalid credentials")
+		return
+	}
+	user, err := h.Store.FindByEmail(r.Context(), email)
 	if err != nil || !CheckPassword(user.PasswordHash, body.Password) {
 		writeError(w, http.StatusUnauthorized, "invalid credentials")
 		return
@@ -96,6 +103,32 @@ func (h *Handler) Me(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, toPublic(user))
+}
+
+func (h *Handler) PatchMe(w http.ResponseWriter, r *http.Request) {
+	user, ok := UserFromContext(r.Context())
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	var body struct {
+		DisplayName string `json:"display_name"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid json")
+		return
+	}
+	name, err := NormalizeDisplayName(body.DisplayName)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	updated, err := h.Store.UpdateDisplayName(r.Context(), user.ID, name)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "server error")
+		return
+	}
+	writeJSON(w, http.StatusOK, toPublic(updated))
 }
 
 func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
@@ -144,7 +177,7 @@ func UserFromContext(ctx context.Context) (User, bool) {
 }
 
 func (h *Handler) writeToken(w http.ResponseWriter, user User) {
-	token, err := h.Tokens.Issue(user.ID, user.Login, user.SessionVersion)
+	token, err := h.Tokens.Issue(user.ID, user.Email, user.SessionVersion)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "server error")
 		return
@@ -165,7 +198,12 @@ func (h *Handler) rateOK(w http.ResponseWriter, r *http.Request) bool {
 }
 
 func toPublic(u User) PublicUser {
-	return PublicUser{ID: u.ID.String(), Login: u.Login, IsAdmin: u.IsAdmin}
+	return PublicUser{
+		ID:          u.ID.String(),
+		Email:       u.Email,
+		DisplayName: u.DisplayName,
+		IsAdmin:     u.IsAdmin,
+	}
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {
