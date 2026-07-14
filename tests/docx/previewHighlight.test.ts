@@ -24,6 +24,8 @@ function seg(
     storyKey: 'document',
     storyFile: 'word/document.xml',
     paraIndex: 0,
+    paragraphKey: `document:${id}`,
+    sentenceIndex: 0,
     source,
     target,
     status,

@@ -17,9 +17,9 @@
 
 ## Граница MVP (целевая)
 
-В MVP входят: **DOCX round-trip**, **аккаунт**, **облачная TM** (одна на пользователя, sync с локальным кэшем), **бэкап проекта**, Telegram-сброс пароля.
+В MVP входят: **sentence-сегменты + CAT-like TM UX**, **DOCX round-trip**, **аккаунт**, **облачная TM**, **бэкап**, Telegram-сброс пароля; атрибуция TU + просмотр контекста в пикере.
 
-Не в MVP (после): другие форматы документов (XLIFF…), MT, multi-TM, SRX, полный sync проектов, глоссарий TBX.
+Не в MVP (после): другие форматы (XLIFF…), MT, multi-TM, SRX, полный sync проектов, глоссарий TBX, админка ТМ, полный audit timeline.
 
 ---
 
@@ -79,12 +79,31 @@
 
 ---
 
-### Фаза D-lite / MVP-cloud ← **следующий этап**
+### Перед D-lite: модель сегментов / ТМ как у CAT ← **сейчас**
+
+Спека: [`docs/superpowers/specs/2026-07-14-sentence-tm-ux-design.md`](docs/superpowers/specs/2026-07-14-sentence-tm-ux-design.md)
+
+- [x] Sentence-сегменты на импорте (`paragraphKey` + `sentenceIndex`); экспорт склеивает абзац
+- [x] `findTmMatches` + multi-variant upsert; attribution/context на TU
+- [x] ParagraphBlock + TmVariantPicker (бейдж → список); mid-toolbar без ТМ
+- [x] Шапка: TM coverage + done %; дефолт fuzzy 100%, autosave TM off
+- [x] Первый open — попап языковой пары + порог
+- [x] Миграция: «Пересегментировать?»
+- [ ] Пороги/пара в meta проекта из попапа; убрать лишние ТМ-кнопки в тулбаре
+- [ ] Админка ТМ — после MVP
+
+---
+
+### Фаза D-lite / MVP-cloud ← после модели сегментов / ТМ UX
 
 **Цель:** аккаунт → облачная TM → lock/backup. Без SMTP.
 
-#### 1) Auth
+#### 1) Auth + лендинг (не голый login)
 
+Референс по духу (не копипаст): `disput`, `peerling` — спокойные анимации, бренд-первый экран, наш визуальный язык (IBM Plex / тема appzac).
+
+- [ ] **Лендинг** с входом/регистрацией: one composition, приятные motion (2–3 осознанных), не dashboard
+- [ ] Гостевой режим (как сейчас) + CTA «войти / создать аккаунт»
 - [ ] `users`: `login`, `password_hash`, `session_version`, `is_admin`, `telegram_id` (nullable)
 - [ ] Register / login / me / logout; JWT + claim `sv`
 - [ ] Admin promote через SQL/CLI
@@ -143,7 +162,7 @@
 
 #### Клиент
 
-- [ ] Login/register; привязка Telegram; сброс пароля
+- [ ] Лендинг + auth UI (см. выше); привязка Telegram; сброс пароля
 - [ ] TM sync после login + при автосейве
 - [ ] Баннер offline; позже outbox
 - [ ] Feature flags; admin = Pro
@@ -180,14 +199,15 @@
 
 ## Порядок реализации (актуальный)
 
-1. **Auth** ← сейчас: Go API, Postgres, docker local, register/login, JWT + `session_version`
-2. Telegram: link + password reset
-3. SPA: login/register + привязка TG
-4. **Облачная TM** sync (MVP)
-5. Project lock + backup
-6. Prod + security pass
-7. B2 p2 (context / tags / concordance / audit) — по словарю выше
-8. Глоссарий; форматы; MT; multi-TM; SRX
+1. **Модель sentence-сегментов + ТМ UX** ← сейчас (спека → реализация)
+2. **Auth API** — Go + Postgres + docker local, JWT + `session_version`
+3. Telegram: link + password reset
+4. **Лендинг + auth UI** (анимации, стиль appzac; вдохновение disput / peerling)
+5. **Облачная TM** sync (MVP)
+6. Project lock + backup
+7. Prod + security pass
+8. B2 p2 (context / tags / concordance / audit) — по словарю выше
+9. Глоссарий; форматы; MT; multi-TM; SRX; админка ТМ
 
 ---
 

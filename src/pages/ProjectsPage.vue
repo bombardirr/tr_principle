@@ -51,6 +51,7 @@ async function onDocxSelected(e: Event) {
         updatedAt: now,
         segmentCount: opened.segments.length,
         doneCount: 0,
+        segmentSchemaVersion: 2,
       },
       segments: opened.segments,
       docx: opened.zipBytes,

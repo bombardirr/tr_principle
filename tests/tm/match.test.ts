@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { findTmMatch, buildTmApplyTarget } from '@/tm/match'
+import { findTmMatch, buildTmApplyTarget, findTmMatches } from '@/tm/match'
 import { tmLookupKey } from '@/tm/normalize'
 import type { TmUnit } from '@/types/tm'
 
@@ -47,6 +47,7 @@ describe('tm match', () => {
   it('finds fuzzy match above threshold in strict mode', () => {
     const match = findTmMatch([unit('Hello world', 'Привет мир')], 'Hello worl', 'ru', 'en', {
       punctuationMode: 'strict',
+      fuzzyMinScore: 0.85,
     })
     expect(match?.kind).toBe('fuzzy')
     expect(match?.score).toBeGreaterThanOrEqual(0.85)
@@ -149,5 +150,26 @@ describe('tm match', () => {
     expect(target).toBe(
       'We like you. Вы нам реально нравитесь. We like you.',
     )
+  })
+
+  it('lists all exact variants for picker', () => {
+    const matches = findTmMatches(
+      [
+        unit(S1, 'I am Artem.', {
+          id: 'a',
+          updatedAt: '2026-01-01T00:00:00.000Z',
+        }),
+        unit(S1, "I'm Artem.", {
+          id: 'b',
+          updatedAt: '2026-02-01T00:00:00.000Z',
+        }),
+      ],
+      S1,
+      'ru',
+      'en',
+      { punctuationMode: 'soft', fuzzyMinScore: 1 },
+    )
+    expect(matches).toHaveLength(2)
+    expect(matches.map((m) => m.target)).toEqual(["I'm Artem.", 'I am Artem.'])
   })
 })

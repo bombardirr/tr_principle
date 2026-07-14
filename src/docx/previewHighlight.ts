@@ -1,5 +1,6 @@
 import { TAG_RE } from './tags'
 import type { Segment } from '@/types/project'
+import { joinSentenceTargets } from '@/tm/sentences'
 import { isSegmentDone } from '@/utils/segmentStatus'
 
 export { isSegmentDone } from '@/utils/segmentStatus'
@@ -51,21 +52,33 @@ export function indexPreviewSegments(
   const used = new Set<HTMLElement>()
   const map = new Map<string, HTMLElement>()
 
+  const groups = new Map<string, Segment[]>()
   for (const segment of segments) {
-    const needle = normalizePreviewText(segmentDisplayText(segment))
+    const key = segment.paragraphKey || segment.id
+    const list = groups.get(key) ?? []
+    list.push(segment)
+    groups.set(key, list)
+  }
+
+  const orderedGroups = [...groups.values()]
+
+  for (const group of orderedGroups) {
+    const sorted = [...group].sort((a, b) => a.sentenceIndex - b.sentenceIndex)
+    const joined = joinSentenceTargets(sorted.map(segmentDisplayText))
+    const needle = normalizePreviewText(joined)
     const hit = findParagraphMatch(paragraphs, needle, used)
     if (!hit) continue
     used.add(hit)
-    map.set(segment.id, hit)
+    for (const segment of sorted) map.set(segment.id, hit)
   }
 
-  const unmapped = segments.filter((segment) => !map.has(segment.id))
+  const unmappedGroups = orderedGroups.filter((g) => !g.every((s) => map.has(s.id)))
   const unused = paragraphs.filter((paragraph) => !used.has(paragraph))
-  for (let i = 0; i < unmapped.length && i < unused.length; i++) {
-    const segment = unmapped[i]!
+  for (let i = 0; i < unmappedGroups.length && i < unused.length; i++) {
+    const group = unmappedGroups[i]!
     const hit = unused[i]!
     used.add(hit)
-    map.set(segment.id, hit)
+    for (const segment of group) map.set(segment.id, hit)
   }
 
   return map

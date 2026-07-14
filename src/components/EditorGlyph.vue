@@ -17,6 +17,7 @@ defineProps<{
     | 'tm'
     | 'tm-strike'
     | 'tm-commit'
+    | 'percent'
     | 'import'
     | 'theme'
     | 'trash'
@@ -209,6 +210,11 @@ defineProps<{
         stroke-width="1.35"
         d="m10.35 4.2 0.55 0.55 1.35-1.35"
       />
+    </g>
+    <g v-else-if="name === 'percent'">
+      <circle cx="5" cy="5" r="1.35" />
+      <circle cx="11" cy="11" r="1.35" />
+      <path stroke-linecap="round" d="m12 4-8 8" />
     </g>
     <g v-else-if="name === 'import'">
       <path

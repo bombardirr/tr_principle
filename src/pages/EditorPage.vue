@@ -3,7 +3,9 @@ import { computed, nextTick, onMounted, onUnmounted, ref, shallowRef, watch } fr
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import MarqueeText from '@/components/MarqueeText.vue'
-import SegmentRow from '@/components/SegmentRow.vue'
+import ParagraphBlock from '@/components/ParagraphBlock.vue'
+import ProjectSettingsDialog from '@/components/ProjectSettingsDialog.vue'
+import ResegmentDialog from '@/components/ResegmentDialog.vue'
 import DocxPreviewPanel from '@/components/DocxPreviewPanel.vue'
 import { buildTranslatedDocx, downloadBlob } from '@/docx/exportDocx'
 import { getProject, saveProject } from '@/storage/idb'
@@ -14,24 +16,24 @@ import EditorGlyph from '@/components/EditorGlyph.vue'
 import TooltipWrap from '@/components/TooltipWrap.vue'
 import { useProjectLease } from '@/composables/useProjectLease'
 import { useTmSettings } from '@/composables/useTmSettings'
-import { findTmMatch, buildTmApplyTarget } from '@/tm/match'
+import { findTmMatches } from '@/tm/match'
+import { findLangPairPreset, langPairLabel } from '@/tm/langPairs'
+import { projectNeedsResegment, resegmentParagraphs } from '@/tm/resegment'
 import { exportTmx, parseTmx } from '@/tm/tmx'
 import {
   listTmUnits,
   recordDoneSegmentsInTm,
   importTmUnits,
-  upsertTmFromSegment,
   deleteTmForSegmentSource,
 } from '@/storage/tmIdb'
-import { isCompositeSegment } from '@/tm/fragments'
 import {
   countTranslatedSegments,
   finalizeSegmentStatus,
-  isSegmentDone,
   isSegmentTranslated,
   normalizeSegmentStatus,
 } from '@/utils/segmentStatus'
 import type { ProjectRecord, Segment } from '@/types/project'
+import { SEGMENT_SCHEMA_SENTENCE } from '@/types/project'
 import type { TmMatch, TmUnit } from '@/types/tm'
 
 const props = defineProps<{ id: string }>()
@@ -67,6 +69,169 @@ const done = computed(() =>
   record.value ? countTranslatedSegments(record.value.segments) : 0,
 )
 const total = computed(() => record.value?.segments.length ?? 0)
+
+const tmCoveragePct = computed(() => {
+  if (!record.value?.segments.length) return 0
+  const opts = tmMatchOptions()
+  let hit = 0
+  for (const seg of record.value.segments) {
+    if (findTmMatches(tmUnits.value, seg.source, record.value.meta.sourceLang, record.value.meta.targetLang, opts).length) {
+      hit++
+    }
+  }
+  return Math.round((hit / record.value.segments.length) * 100)
+})
+
+const donePct = computed(() =>
+  total.value ? Math.round((done.value / total.value) * 100) : 0,
+)
+
+const langPairTitle = computed(() => {
+  const meta = record.value?.meta
+  if (!meta?.sourceLang || !meta?.targetLang || !findLangPairPreset(meta.sourceLang, meta.targetLang)) {
+    return t('editor.langPairChoose')
+  }
+  return langPairLabel(meta.sourceLang, meta.targetLang)
+})
+
+const needsProjectSettings = computed(() => {
+  const meta = record.value?.meta
+  if (!meta) return false
+  if (!meta.settingsConfirmedAt) return true
+  if (!meta.sourceLang || !meta.targetLang) return true
+  return !findLangPairPreset(meta.sourceLang, meta.targetLang)
+})
+
+const settingsOpen = ref(false)
+const settingsMode = ref<'first' | 'edit'>('first')
+const resegmentOpen = ref(false)
+const resegmentDeferred = ref(false)
+const thresholdOpen = ref(false)
+
+const needsResegment = computed(() => projectNeedsResegment(record.value?.meta))
+
+const thresholdPct = computed(() => {
+  const score = record.value?.meta.fuzzyMinScore ?? tmSettings.value.fuzzyMinScore ?? 1
+  return Math.round(score * 100)
+})
+
+function toggleThresholdSlider() {
+  thresholdOpen.value = !thresholdOpen.value
+}
+
+function setThresholdPct(pct: number) {
+  if (!record.value || projectLease.blocked.value) return
+  const clamped = Math.min(100, Math.max(50, pct))
+  record.value = {
+    ...record.value,
+    meta: {
+      ...record.value.meta,
+      fuzzyMinScore: clamped / 100,
+    },
+  }
+}
+
+function onThresholdInput(event: Event) {
+  const raw = Number((event.target as HTMLInputElement).value)
+  setThresholdPct(Number.isFinite(raw) ? raw : 100)
+}
+
+/** Persist threshold quietly — not through text autosave UX. */
+async function onThresholdChange(event: Event) {
+  onThresholdInput(event)
+  if (!record.value || projectLease.blocked.value) return
+  try {
+    await saveProject(record.value)
+  } catch (e) {
+    setSaveError(e)
+  }
+}
+
+watch(
+  () => props.id,
+  () => {
+    resegmentDeferred.value = false
+  },
+)
+
+watch(
+  () =>
+    [
+      record.value?.meta.id,
+      needsResegment.value,
+      resegmentDeferred.value,
+      needsProjectSettings.value,
+    ] as const,
+  () => {
+    if (needsResegment.value && !resegmentDeferred.value) {
+      resegmentOpen.value = true
+      settingsOpen.value = false
+      return
+    }
+    resegmentOpen.value = false
+    if (needsProjectSettings.value) {
+      settingsMode.value = 'first'
+      settingsOpen.value = true
+    }
+  },
+  { immediate: true },
+)
+
+function openProjectSettings() {
+  settingsMode.value = needsProjectSettings.value ? 'first' : 'edit'
+  settingsOpen.value = true
+}
+
+function closeProjectSettings() {
+  if (settingsMode.value === 'first' && needsProjectSettings.value) return
+  settingsOpen.value = false
+}
+
+function saveProjectSettings(payload: {
+  sourceLang: string
+  targetLang: string
+  fuzzyMinScore: number
+}) {
+  if (!record.value || projectLease.blocked.value) return
+  record.value = {
+    ...record.value,
+    meta: {
+      ...record.value.meta,
+      sourceLang: payload.sourceLang,
+      targetLang: payload.targetLang,
+      fuzzyMinScore: payload.fuzzyMinScore,
+      settingsConfirmedAt: new Date().toISOString(),
+    },
+  }
+  settingsOpen.value = false
+  scheduleSave()
+}
+
+function deferResegment() {
+  resegmentDeferred.value = true
+  resegmentOpen.value = false
+}
+
+function confirmResegment() {
+  if (!record.value || projectLease.blocked.value) return
+  const { segments, ambiguousCount } = resegmentParagraphs(record.value.segments)
+  record.value = {
+    ...record.value,
+    meta: {
+      ...record.value.meta,
+      segmentSchemaVersion: SEGMENT_SCHEMA_SENTENCE,
+      segmentCount: segments.length,
+    },
+    segments,
+  }
+  resegmentOpen.value = false
+  resegmentDeferred.value = false
+  notice.value =
+    ambiguousCount > 0
+      ? t('editor.resegmentAmbiguous', { n: ambiguousCount })
+      : t('editor.resegmentDone')
+  scheduleSave()
+}
 
 const displayName = computed(() => {
   const name = record.value?.meta.name ?? ''
@@ -253,44 +418,81 @@ function scheduleSave() {
   }, SAVE_IDLE_MS)
 }
 
-function clearTmSavePending(patch: Partial<Segment> = {}): Partial<Segment> {
-  return { ...patch, tmSavePending: false }
-}
-
 function updateTarget(seg: Segment, value: string) {
   if (!record.value || projectLease.blocked.value) return
   notice.value = ''
-  patchSegment(
-    seg.id,
-    clearTmSavePending({
-      target: value,
-      status: value.trim() ? 'draft' : seg.status === 'done' ? 'draft' : 'empty',
-    }),
-  )
+  patchSegment(seg.id, {
+    target: value,
+    status: value.trim() ? 'draft' : seg.status === 'done' ? 'draft' : 'empty',
+    tmSavePending: false,
+    origin: 'manual',
+    updatedBy: 'local',
+    updatedAt: new Date().toISOString(),
+  })
   scheduleSave()
+}
+
+function updateTargetById(segId: string, value: string) {
+  const seg = record.value?.segments.find((s) => s.id === segId)
+  if (seg) updateTarget(seg, value)
 }
 
 function copySource(seg: Segment) {
   if (!record.value || projectLease.blocked.value) return
   notice.value = ''
-  patchSegment(seg.id, clearTmSavePending({ target: seg.source, status: 'draft' }))
+  patchSegment(seg.id, {
+    target: seg.source,
+    status: 'draft',
+    tmSavePending: false,
+    origin: 'copy-source',
+    updatedBy: 'local',
+    updatedAt: new Date().toISOString(),
+  })
   scheduleSave()
+}
+
+function copySourceById(segId: string) {
+  const seg = record.value?.segments.find((s) => s.id === segId)
+  if (seg) copySource(seg)
 }
 
 function leaveEmpty(seg: Segment) {
   if (!record.value || projectLease.blocked.value) return
   notice.value = ''
-  // Mark done only — do not touch TM (same source may still be needed elsewhere).
-  patchSegment(seg.id, clearTmSavePending({ target: '', status: 'done' }))
+  patchSegment(seg.id, {
+    target: '',
+    status: 'done',
+    tmSavePending: false,
+    origin: 'leave-empty',
+    updatedBy: 'local',
+    updatedAt: new Date().toISOString(),
+  })
   scheduleSave()
+}
+
+function leaveEmptyById(segId: string) {
+  const seg = record.value?.segments.find((s) => s.id === segId)
+  if (seg) leaveEmpty(seg)
 }
 
 function resetTarget(seg: Segment) {
   if (!record.value || projectLease.blocked.value) return
   notice.value = ''
-  patchSegment(seg.id, clearTmSavePending({ target: '', status: 'empty' }))
+  patchSegment(seg.id, {
+    target: '',
+    status: 'empty',
+    tmSavePending: false,
+    origin: 'reset',
+    updatedBy: 'local',
+    updatedAt: new Date().toISOString(),
+  })
   void removeSegmentFromTm(seg)
   scheduleSave()
+}
+
+function resetTargetById(segId: string) {
+  const seg = record.value?.segments.find((s) => s.id === segId)
+  if (seg) resetTarget(seg)
 }
 
 async function removeSegmentFromTm(seg: Segment) {
@@ -309,78 +511,42 @@ async function removeSegmentFromTm(seg: Segment) {
 function tmMatchOptions() {
   return {
     punctuationMode: tmSettings.value.punctuationMode,
-    fuzzyMinScore: tmSettings.value.fuzzyMinScore,
-    enableFragments: tmSettings.value.enableFragments,
+    fuzzyMinScore:
+      record.value?.meta.fuzzyMinScore ?? tmSettings.value.fuzzyMinScore,
+    enableFragments: false,
   }
 }
 
-function tmLookupFor(seg: Segment): TmMatch | null {
-  if (!record.value) return null
-  const opts = tmMatchOptions()
-  const match = findTmMatch(
+function matchesFor(seg: Segment): TmMatch[] {
+  if (!record.value) return []
+  return findTmMatches(
     tmUnits.value,
     seg.source,
     record.value.meta.sourceLang,
     record.value.meta.targetLang,
-    opts,
+    tmMatchOptions(),
   )
-  if (!match) return null
-  const applyTarget =
-    buildTmApplyTarget(
-      tmUnits.value,
-      seg.source,
-      record.value.meta.sourceLang,
-      record.value.meta.targetLang,
-      opts,
-    ) ?? match.target
-  return { ...match, target: applyTarget }
-}
-
-function tmMatchFor(seg: Segment): TmMatch | null {
-  return tmLookupFor(seg)
 }
 
 const tmHintSegmentIds = computed(() => {
   if (!record.value) return []
   return record.value.segments
-    .filter((seg) => tmLookupFor(seg) !== null && !isSegmentTranslated(seg))
+    .filter((seg) => matchesFor(seg).length > 0 && !isSegmentTranslated(seg))
     .map((seg) => seg.id)
 })
 
-function applyTm(seg: Segment) {
-  const match = tmLookupFor(seg)
-  if (!record.value || !match || projectLease.blocked.value) return
+function applyTmMatch(segId: string, match: TmMatch) {
+  if (!record.value || projectLease.blocked.value) return
   notice.value = ''
-  patchSegment(seg.id, {
+  patchSegment(segId, {
     target: match.target,
     status: 'draft',
-    tmSavePending: isCompositeSegment(seg.source),
+    tmSavePending: false,
+    origin: 'tm',
+    updatedBy: match.unitId ? `tm:${match.unitId}` : 'tm',
+    updatedAt: new Date().toISOString(),
   })
   scheduleSave()
-}
-
-async function commitSegmentToTm(seg: Segment) {
-  if (!record.value || projectLease.blocked.value) return
-  const current = record.value.segments.find((s) => s.id === seg.id)
-  if (!current?.tmSavePending || !current.target.trim()) return
-
-  const finalized = { ...current, status: finalizeSegmentStatus(current) }
-  if (!isSegmentDone(finalized)) return
-
-  try {
-    await upsertTmFromSegment(finalized, {
-      sourceLang: record.value.meta.sourceLang,
-      targetLang: record.value.meta.targetLang,
-      projectId: record.value.meta.id,
-    })
-    patchSegment(seg.id, { tmSavePending: false, status: finalized.status })
-    tmUnits.value = await listTmUnits()
-    notice.value = t('editor.tmCommitted')
-    error.value = ''
-    scheduleSave()
-  } catch (e) {
-    setSaveError(e)
-  }
 }
 
 async function exportTmxFile() {
@@ -552,6 +718,41 @@ async function goBack() {
             </TooltipWrap>
             <TooltipWrap
               as="span"
+              class="coverage"
+              :text="t('editor.tmCoverageHint', { tm: tmCoveragePct, done: donePct })"
+            >
+              TM {{ tmCoveragePct }}% · {{ donePct }}%
+            </TooltipWrap>
+            <TooltipWrap as="span" class="lang-pair-wrap" :text="t('editor.langPairHint')">
+              <button type="button" class="lang-pair" @click="openProjectSettings">
+                {{ langPairTitle }}
+              </button>
+            </TooltipWrap>
+            <span class="threshold-wrap">
+              <IconButton
+                :title="t('editor.thresholdHint')"
+                :active="thresholdOpen"
+                @click="toggleThresholdSlider"
+              >
+                <EditorGlyph name="percent" />
+              </IconButton>
+              <div v-if="thresholdOpen" class="threshold-slider" role="group" :aria-label="t('editor.thresholdLabel')">
+                <input
+                  class="threshold-range"
+                  type="range"
+                  min="50"
+                  max="100"
+                  step="1"
+                  :value="thresholdPct"
+                  :disabled="projectLease.blocked.value"
+                  @input="onThresholdInput"
+                  @change="onThresholdChange"
+                />
+                <span class="threshold-pct">{{ thresholdPct }}%</span>
+              </div>
+            </span>
+            <TooltipWrap
+              as="span"
               class="save-indicator"
               :class="savePhase"
               :text="saveStatusTitle"
@@ -657,19 +858,19 @@ async function goBack() {
       :class="{ 'with-preview': previewEnabled, 'editor-readonly': projectLease.blocked.value }"
     >
       <div class="editor-main">
-        <SegmentRow
-          v-for="seg in record.segments"
+        <ParagraphBlock
+          v-for="(seg, i) in record.segments"
           :key="seg.id"
-          :segment="seg"
-          :active="activeSegmentId === seg.id"
-          :tm-match="tmMatchFor(seg)"
-          @update-target="updateTarget(seg, $event)"
-          @copy-source="copySource(seg)"
-          @leave-empty="leaveEmpty(seg)"
-          @reset-target="resetTarget(seg)"
-          @apply-tm="applyTm(seg)"
-          @commit-tm="commitSegmentToTm(seg)"
-          @activate="activateSegment(seg.id)"
+          :segments="[seg]"
+          :display-index="i + 1"
+          :active-segment-id="activeSegmentId"
+          :matches-for="matchesFor"
+          @update-target="updateTargetById"
+          @copy-source="copySourceById"
+          @leave-empty="leaveEmptyById"
+          @reset-target="resetTargetById"
+          @apply-tm="(id, match) => applyTmMatch(id, match)"
+          @activate="activateSegment"
         />
       </div>
       <DocxPreviewPanel
@@ -682,6 +883,21 @@ async function goBack() {
         @select-segment="onPreviewSelectSegment"
       />
     </div>
+
+    <ProjectSettingsDialog
+      :open="settingsOpen"
+      :mode="settingsMode"
+      :source-lang="record.meta.sourceLang"
+      :target-lang="record.meta.targetLang"
+      :fuzzy-min-score="record.meta.fuzzyMinScore"
+      @close="closeProjectSettings"
+      @save="saveProjectSettings"
+    />
+    <ResegmentDialog
+      :open="resegmentOpen"
+      @later="deferResegment"
+      @confirm="confirmResegment"
+    />
   </section>
   <p v-else-if="error" class="error">{{ error }}</p>
   <p v-else>…</p>
@@ -761,6 +977,76 @@ h1.doc-title {
   align-items: center;
   gap: 0.35rem;
   flex: 0 0 auto;
+}
+
+.coverage,
+.lang-pair-wrap {
+  flex: 0 0 auto;
+  font-size: 0.68rem;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.lang-pair {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  font: inherit;
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.lang-pair:hover {
+  color: var(--accent);
+}
+
+.threshold-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  z-index: 30;
+}
+
+.threshold-slider {
+  position: absolute;
+  top: calc(100% + 0.35rem);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-width: 9rem;
+  padding: 0.45rem 0.55rem;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+}
+
+.threshold-range {
+  width: 6rem;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.threshold-pct {
+  flex: 0 0 2.5rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+  text-align: right;
 }
 
 .save-indicator {

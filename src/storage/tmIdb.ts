@@ -53,7 +53,14 @@ export async function deleteTmForSegmentSource(
 
 export async function upsertTmFromSegment(
   segment: Segment,
-  options?: { sourceLang?: string; targetLang?: string; projectId?: string },
+  options?: {
+    sourceLang?: string
+    targetLang?: string
+    projectId?: string
+    actor?: string
+    contextBefore?: string
+    contextAfter?: string
+  },
 ): Promise<void> {
   if (!isSegmentDone(segment)) return
   // Empty confirmed segments are local-only; never write or erase TM for them.
@@ -68,28 +75,46 @@ export async function upsertTmFromSegment(
 
   const db = await getDb()
   const existing = await db.getAllFromIndex('units', 'by-source-key', sourceKey)
+  const sameTarget = existing.find((u) => u.target === segment.target)
   const now = new Date().toISOString()
+  const actor = options?.actor ?? 'local'
+  const prev = sameTarget
   const row: TmUnit = {
-    id: existing[0]?.id ?? crypto.randomUUID(),
+    id: prev?.id ?? crypto.randomUUID(),
     source: segment.source,
     target: segment.target,
     sourceKey,
     sourceLang: options?.sourceLang,
     targetLang: options?.targetLang,
-    createdAt: existing[0]?.createdAt ?? now,
+    createdAt: prev?.createdAt ?? now,
     updatedAt: now,
     projectId: options?.projectId,
+    createdBy: prev?.createdBy ?? actor,
+    updatedBy: actor,
+    contextBefore: options?.contextBefore ?? prev?.contextBefore,
+    contextAfter: options?.contextAfter ?? prev?.contextAfter,
   }
   await db.put('units', row)
 }
 
 export async function recordDoneSegmentsInTm(
   segments: Segment[],
-  options?: { sourceLang?: string; targetLang?: string; projectId?: string },
+  options?: {
+    sourceLang?: string
+    targetLang?: string
+    projectId?: string
+    actor?: string
+  },
 ): Promise<void> {
-  for (const segment of segments) {
+  const ordered = [...segments]
+  for (let i = 0; i < ordered.length; i++) {
+    const segment = ordered[i]!
     if (!isSegmentDone(segment)) continue
-    await upsertTmFromSegment(segment, options)
+    await upsertTmFromSegment(segment, {
+      ...options,
+      contextBefore: ordered[i - 1]?.source,
+      contextAfter: ordered[i + 1]?.source,
+    })
   }
 }
 

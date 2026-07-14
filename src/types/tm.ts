@@ -8,6 +8,12 @@ export interface TmUnit {
   createdAt: string
   updatedAt: string
   projectId?: string
+  createdBy?: string
+  updatedBy?: string
+  /** Previous sentence source at save time (document order). */
+  contextBefore?: string
+  /** Next sentence source at save time. */
+  contextAfter?: string
 }
 
 export type TmMatchKind = 'exact' | 'fuzzy' | 'fragment'
@@ -18,6 +24,13 @@ export interface TmMatch {
   score: number
   /** Source fragment that produced the match (fragment mode). */
   matchedFragment?: string
+  unitId?: string
+  createdBy?: string
+  updatedBy?: string
+  createdAt?: string
+  updatedAt?: string
+  contextBefore?: string
+  contextAfter?: string
 }
 
 export interface TmMatchOptions {

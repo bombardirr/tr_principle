@@ -180,6 +180,63 @@ function betterMatch(a: TmMatch | null, b: TmMatch | null): TmMatch | null {
   return a
 }
 
+function matchMeta(unit: TmUnit): Partial<TmMatch> {
+  return {
+    unitId: unit.id,
+    createdBy: unit.createdBy,
+    updatedBy: unit.updatedBy,
+    createdAt: unit.createdAt,
+    updatedAt: unit.updatedAt,
+    contextBefore: unit.contextBefore,
+    contextAfter: unit.contextAfter,
+  }
+}
+
+/** All units at/above threshold for a (sentence) source — for picker UI. */
+export function findTmMatches(
+  units: TmUnit[],
+  source: string,
+  sourceLang?: string,
+  targetLang?: string,
+  options?: TmMatchOptions,
+): TmMatch[] {
+  const punctuationMode = options?.punctuationMode ?? TM_SETTINGS_DEFAULT.punctuationMode
+  const fuzzyMinScore = options?.fuzzyMinScore ?? TM_SETTINGS_DEFAULT.fuzzyMinScore
+  const results: TmMatch[] = []
+
+  for (const unit of units) {
+    if (!langsMatch(unit, sourceLang, targetLang)) continue
+    if (isExactSource(source, unit, punctuationMode)) {
+      results.push({
+        target: unit.target,
+        kind: 'exact',
+        score: 1,
+        ...matchMeta(unit),
+      })
+      continue
+    }
+    const score = similarity(
+      normalizeTmForMatch(source, punctuationMode),
+      normalizeTmForMatch(unit.source, punctuationMode),
+    )
+    if (score >= fuzzyMinScore) {
+      results.push({
+        target: unit.target,
+        kind: 'fuzzy',
+        score,
+        ...matchMeta(unit),
+      })
+    }
+  }
+
+  return results.sort((a, b) => {
+    if (b.score !== a.score) return b.score - a.score
+    if (a.kind === 'exact' && b.kind !== 'exact') return -1
+    if (b.kind === 'exact' && a.kind !== 'exact') return 1
+    return (b.updatedAt ?? '').localeCompare(a.updatedAt ?? '')
+  })
+}
+
 export function findExactTmMatch(
   units: TmUnit[],
   source: string,

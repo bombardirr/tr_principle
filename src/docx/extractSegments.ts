@@ -1,5 +1,6 @@
 import type { RunSpan, Segment } from '@/types/project'
 import { buildTaggedText } from './tags'
+import { paragraphKeyOf, splitTaggedSentences } from '@/tm/sentences'
 import {
   allParagraphsLoose,
   collectRunsWithT,
@@ -51,7 +52,6 @@ function mergeMinorSpans(spans: RunSpan[]): RunSpan[] {
       continue
     }
     if (prev && isMinorSpanText(prev.text) && !isMinorSpanText(span.text)) {
-      // leading punctuation → glue onto following text span
       span.text = prev.text + span.text
       span.runIndices = [...prev.runIndices, ...span.runIndices]
       out[out.length - 1] = span
@@ -81,19 +81,32 @@ export function extractSegmentsFromStories(stories: StoryFile[]): Segment[] {
       const plain = spans.map((s) => s.text).join('')
       if (!plain.trim()) return
 
-      const source = buildTaggedText(spans.map((s) => s.text))
-      segments.push({
-        id: String(seq++),
-        storyKey: story.key,
-        storyFile: story.path,
-        paraIndex,
-        source,
-        target: '',
-        status: 'empty',
-        inTable: isInsideTable(para),
-        inTextbox: isInsideTextbox(para),
-        inCaption: isCaptionParagraph(para),
-        spans,
+      const fullSource = buildTaggedText(spans.map((s) => s.text))
+      const sentences = splitTaggedSentences(fullSource)
+      const pKey = paragraphKeyOf(story.key, paraIndex)
+      const paragraphSpans = spans.map((sp) => ({
+        runIndices: [...sp.runIndices],
+        fingerprint: sp.fingerprint,
+        text: sp.text,
+      }))
+
+      sentences.forEach((sentenceSource, sentenceIndex) => {
+        segments.push({
+          id: String(seq++),
+          storyKey: story.key,
+          storyFile: story.path,
+          paraIndex,
+          paragraphKey: pKey,
+          sentenceIndex,
+          source: sentenceSource,
+          target: '',
+          status: 'empty',
+          inTable: isInsideTable(para),
+          inTextbox: isInsideTextbox(para),
+          inCaption: isCaptionParagraph(para),
+          spans: sentenceIndex === 0 ? paragraphSpans : [],
+          paragraphSpans,
+        })
       })
     })
   }

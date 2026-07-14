@@ -7,6 +7,8 @@ function seg(partial: Partial<Segment> & Pick<Segment, 'id'>): Segment {
     storyKey: 'document',
     storyFile: 'word/document.xml',
     paraIndex: 0,
+    paragraphKey: `document:0`,
+    sentenceIndex: 0,
     source: '',
     target: '',
     status: 'empty',
