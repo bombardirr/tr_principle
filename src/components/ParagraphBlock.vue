@@ -130,12 +130,11 @@ function onSaveToTm() {
       <div class="meta-mid" aria-hidden="true" />
       <div class="meta-target">
         <TmVariantPicker
-          v-if="activeSeg"
-          :matches="matchesFor(activeSeg)"
-          @pick="onPick(activeSeg, $event)"
+          :matches="activeSeg ? matchesFor(activeSeg) : []"
+          @pick="activeSeg && onPick(activeSeg, $event)"
         />
         <IconButton
-          v-if="canSaveToTm(activeSeg)"
+          v-show="canSaveToTm(activeSeg)"
           class="tm-save-btn"
           :title="t('editor.tmCommitHint')"
           @mousedown.prevent

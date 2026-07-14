@@ -6,23 +6,29 @@ import { openDocx, DocxError } from '@/docx/openDocx'
 import {
   createProjectId,
   deleteProject,
+  getProject,
   listProjects,
   saveProject,
 } from '@/storage/idb'
 import { unpackProjectFile } from '@/storage/projectFile'
+import { resegmentParagraphs } from '@/tm/resegment'
+import { SEGMENT_SCHEMA_DATE_SAFE } from '@/types/project'
 import IconButton from '@/components/IconButton.vue'
 import EditorGlyph from '@/components/EditorGlyph.vue'
 import type { ProjectMeta } from '@/types/project'
+
+type PendingAction = { type: 'delete' | 'resegment'; id: string }
 
 const { t } = useI18n()
 const router = useRouter()
 
 const projects = ref<ProjectMeta[]>([])
 const error = ref('')
+const notice = ref('')
 const busy = ref(false)
 const docxInput = ref<HTMLInputElement | null>(null)
 const projectInput = ref<HTMLInputElement | null>(null)
-const pendingDeleteId = ref<string | null>(null)
+const pending = ref<PendingAction | null>(null)
 
 async function refresh() {
   projects.value = await listProjects()
@@ -38,6 +44,7 @@ async function onDocxSelected(e: Event) {
 
   busy.value = true
   error.value = ''
+  notice.value = ''
   try {
     const opened = await openDocx(file)
     const now = new Date().toISOString()
@@ -51,7 +58,7 @@ async function onDocxSelected(e: Event) {
         updatedAt: now,
         segmentCount: opened.segments.length,
         doneCount: 0,
-        segmentSchemaVersion: 3,
+        segmentSchemaVersion: SEGMENT_SCHEMA_DATE_SAFE,
       },
       segments: opened.segments,
       docx: opened.zipBytes,
@@ -75,9 +82,9 @@ async function onProjectFileSelected(e: Event) {
 
   busy.value = true
   error.value = ''
+  notice.value = ''
   try {
     const record = await unpackProjectFile(file)
-    // new id if colliding? keep id from file
     await saveProject(record)
     await router.push({ name: 'editor', params: { id: record.meta.id } })
   } catch (err) {
@@ -87,18 +94,47 @@ async function onProjectFileSelected(e: Event) {
   }
 }
 
-function requestDelete(id: string) {
-  pendingDeleteId.value = id
+function requestAction(type: PendingAction['type'], id: string) {
+  pending.value = { type, id }
 }
 
-function cancelDelete() {
-  pendingDeleteId.value = null
+function cancelPending() {
+  pending.value = null
+}
+
+function isPending(type: PendingAction['type'], id: string) {
+  return pending.value?.type === type && pending.value.id === id
 }
 
 async function confirmRemove(meta: ProjectMeta) {
   await deleteProject(meta.id)
-  if (pendingDeleteId.value === meta.id) pendingDeleteId.value = null
+  pending.value = null
   await refresh()
+}
+
+async function confirmResegment(meta: ProjectMeta) {
+  busy.value = true
+  error.value = ''
+  notice.value = ''
+  try {
+    const record = await getProject(meta.id)
+    if (!record) throw new Error('Project not found')
+    const { segments, ambiguousCount } = resegmentParagraphs(record.segments)
+    record.segments = segments
+    record.meta.segmentSchemaVersion = SEGMENT_SCHEMA_DATE_SAFE
+    record.meta.segmentCount = segments.length
+    await saveProject(record)
+    pending.value = null
+    await refresh()
+    notice.value =
+      ambiguousCount > 0
+        ? t('projects.resegmentAmbiguous', { name: meta.name, n: ambiguousCount })
+        : t('projects.resegmentDone', { name: meta.name })
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : String(err)
+  } finally {
+    busy.value = false
+  }
 }
 
 function formatDate(iso: string) {
@@ -139,6 +175,7 @@ function formatDate(iso: string) {
     </div>
 
     <p v-if="error" class="error">{{ t('projects.errorGeneric', { message: error }) }}</p>
+    <p v-else-if="notice" class="notice">{{ notice }}</p>
 
     <p v-if="!projects.length && !busy" class="empty">{{ t('projects.empty') }}</p>
 
@@ -152,27 +189,52 @@ function formatDate(iso: string) {
             {{ t('projects.updated', { date: formatDate(p.updatedAt) }) }}
           </span>
         </router-link>
-        <div class="item-delete" @click.stop>
-          <div v-if="pendingDeleteId === p.id" class="delete-confirm">
+        <div class="item-actions" @click.stop>
+          <template v-if="isPending('resegment', p.id)">
+            <div class="action-confirm">
+              <IconButton
+                :title="t('projects.confirmResegment', { name: p.name })"
+                :disabled="busy"
+                @click="confirmResegment(p)"
+              >
+                <EditorGlyph name="check" />
+              </IconButton>
+              <IconButton :title="t('projects.deleteCancel')" @click="cancelPending">
+                <EditorGlyph name="close" />
+              </IconButton>
+            </div>
+          </template>
+          <template v-else-if="isPending('delete', p.id)">
+            <div class="action-confirm">
+              <IconButton
+                danger
+                :title="t('projects.confirmDelete', { name: p.name })"
+                @click="confirmRemove(p)"
+              >
+                <EditorGlyph name="check" />
+              </IconButton>
+              <IconButton :title="t('projects.deleteCancel')" @click="cancelPending">
+                <EditorGlyph name="close" />
+              </IconButton>
+            </div>
+          </template>
+          <template v-else>
+            <IconButton
+              :title="t('projects.resegment')"
+              :disabled="busy"
+              @click="requestAction('resegment', p.id)"
+            >
+              <EditorGlyph name="resegment" />
+            </IconButton>
             <IconButton
               danger
-              :title="t('projects.confirmDelete', { name: p.name })"
-              @click="confirmRemove(p)"
+              :title="t('projects.delete')"
+              :disabled="busy"
+              @click="requestAction('delete', p.id)"
             >
-              <EditorGlyph name="check" />
+              <EditorGlyph name="trash" />
             </IconButton>
-            <IconButton :title="t('projects.deleteCancel')" @click="cancelDelete">
-              <EditorGlyph name="close" />
-            </IconButton>
-          </div>
-          <IconButton
-            v-else
-            danger
-            :title="t('projects.delete')"
-            @click="requestDelete(p.id)"
-          >
-            <EditorGlyph name="trash" />
-          </IconButton>
+          </template>
         </div>
       </li>
     </ul>
@@ -225,6 +287,11 @@ button.primary {
   border-radius: 8px;
 }
 
+.notice {
+  color: var(--ok);
+  font-size: 0.9rem;
+}
+
 .empty {
   color: var(--text-muted);
 }
@@ -270,11 +337,14 @@ button.primary {
   color: var(--text-muted);
 }
 
-.item-delete {
+.item-actions {
   flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.05rem;
 }
 
-.delete-confirm {
+.action-confirm {
   display: inline-flex;
   align-items: center;
   gap: 0.05rem;

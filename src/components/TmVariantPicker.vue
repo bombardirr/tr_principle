@@ -40,11 +40,11 @@ function toggleContext(id: string | undefined) {
 </script>
 
 <template>
-  <div v-if="matches.length" class="tm-picker">
+  <div v-show="matches.length" class="tm-picker">
     <button type="button" class="tm-badge" :title="t('editor.tmVariantsHint')" @click.stop="toggle">
       {{ label }}
     </button>
-    <div v-if="open" class="tm-panel" role="listbox">
+    <div v-show="open" class="tm-panel" role="listbox">
       <button
         v-for="(m, i) in matches"
         :key="m.unitId ?? `${m.target}-${i}`"

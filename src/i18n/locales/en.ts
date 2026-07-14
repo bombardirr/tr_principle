@@ -19,6 +19,11 @@ export default {
     segments: '{done} / {total} segments',
     updated: 'Updated {date}',
     confirmDelete: 'Delete project “{name}”?',
+    resegment: 'Re-segment',
+    confirmResegment: 'Re-segment project “{name}”?',
+    resegmentDone: '“{name}” re-segmented',
+    resegmentAmbiguous:
+      '“{name}” re-segmented. Check paragraphs where the translation could not be split cleanly ({n}).',
     quota: 'Browser storage is full. Save a project backup to keep your work.',
     errorGeneric: 'Error: {message}',
   },

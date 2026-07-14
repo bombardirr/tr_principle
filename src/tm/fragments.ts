@@ -7,15 +7,32 @@ function plainSource(text: string): string {
 const DATE_TOKEN_START = '\uE000'
 const DATE_TOKEN_END = '\uE001'
 
+/** Genitive month names + common abbreviations (period optional). */
+const RU_MONTH =
+  '(?:января|февраля|марта|апреля|мая|июня|июля|августа|сентября|октября|ноября|декабря|янв\\.?|февр?\\.?|мар\\.?|апр\\.?|июн\\.?|июл\\.?|авг\\.?|сент?\\.?|окт\\.?|нояб?\\.?|дек\\.?)'
+
+const EN_MONTH =
+  '(?:January|February|March|April|May|June|July|August|September|October|November|December|Jan\\.?|Feb\\.?|Mar\\.?|Apr\\.?|Jun\\.?|Jul\\.?|Aug\\.?|Sept?\\.?|Oct\\.?|Nov\\.?|Dec\\.?)'
+
+const DAY = '(?:\\d{1,2})'
+const DAY_ORD = '(?:\\d{1,2}(?:st|nd|rd|th)?)'
+const YEAR = '(?:\\d{4}|\\d{2})'
+
 /**
  * Date-like spans that must not be treated as sentence boundaries.
- * Only the numeric date is protected — trailing «г.» / «года» stay outside
- * so a real sentence break after «г.» (before a capital) still works.
+ * Longer / wordy forms first; numeric dotted dates last among relatives.
+ * Trailing «г.» / «года» stay outside so «г. Далее» can still start a sentence.
  */
 const DATE_PATTERNS: RegExp[] = [
+  // 30 March 2026 | 30th of March 2026
+  new RegExp(`\\b${DAY_ORD}(?:\\s+of)?\\s+${EN_MONTH}\\s+${YEAR}`, 'giu'),
+  // March 30, 2026 | Mar. 30th, 2026
+  new RegExp(`\\b${EN_MONTH}\\s+${DAY_ORD},?\\s+${YEAR}`, 'giu'),
+  // 30 марта 2026 | 30 мар. 2026
+  new RegExp(`\\b${DAY}\\s+${RU_MONTH}\\s+${YEAR}`, 'giu'),
   // 30.03.2026 | 1.4.26
   /\b\d{1,2}\.\d{1,2}\.\d{2,4}/giu,
-  // 30/03/2026 or 30-03-2026
+  // 30/03/2026 | 30-03-2026 | 03/30/2026
   /\b\d{1,2}[/-]\d{1,2}[/-]\d{2,4}/giu,
   // 2026-03-30 (ISO)
   /\b\d{4}-\d{1,2}-\d{1,2}/giu,

@@ -16,9 +16,8 @@ defineExpose({ root })
 </script>
 
 <template>
-  <Teleport to="body">
+  <Teleport v-if="visible" to="body">
     <div
-      v-if="visible"
       ref="root"
       class="app-tooltip"
       :class="{ 'app-tooltip--ready': ready }"

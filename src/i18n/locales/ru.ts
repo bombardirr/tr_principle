@@ -19,6 +19,11 @@ export default {
     segments: '{done} / {total} сегментов',
     updated: 'Обновлён {date}',
     confirmDelete: 'Удалить проект «{name}»?',
+    resegment: 'Пересегментировать',
+    confirmResegment: 'Пересегментировать проект «{name}»?',
+    resegmentDone: '«{name}» пересегментирован',
+    resegmentAmbiguous:
+      '«{name}» пересегментирован. Проверьте абзацы, где перевод не удалось разнести чисто ({n}).',
     quota:
       'Не хватает места в браузере. Сохраните копию проекта на диск, чтобы не потерять работу.',
     errorGeneric: 'Ошибка: {message}',

@@ -70,4 +70,26 @@ describe('tm fragments', () => {
       'Срок до 2026-03-30 для сдачи.',
     ])
   })
+
+  it('protects Russian wordy dates including abbreviated months', () => {
+    expect(
+      splitTmFragments('Отпуск с 13 апреля 2026 по 26 апр. 2026 сроком на 14 дней.'),
+    ).toEqual(['Отпуск с 13 апреля 2026 по 26 апр. 2026 сроком на 14 дней.'])
+  })
+
+  it('protects English wordy dates', () => {
+    expect(
+      splitTmFragments('Leave from March 30, 2026 through 26th of April 2026 inclusive.'),
+    ).toEqual(['Leave from March 30, 2026 through 26th of April 2026 inclusive.'])
+    expect(splitTmFragments('Due by 30 Mar. 2026 for filing.')).toEqual([
+      'Due by 30 Mar. 2026 for filing.',
+    ])
+  })
+
+  it('still splits after an English date before a new capital sentence', () => {
+    expect(splitTmFragments('Due by March 30, 2026. Please reply.')).toEqual([
+      'Due by March 30, 2026.',
+      'Please reply.',
+    ])
+  })
 })

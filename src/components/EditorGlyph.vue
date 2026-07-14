@@ -21,6 +21,7 @@ defineProps<{
     | 'import'
     | 'theme'
     | 'trash'
+    | 'resegment'
     | 'check'
     | 'close'
 }>()
@@ -240,6 +241,16 @@ defineProps<{
         fill="currentColor"
         stroke="none"
         d="M8 2.75a5.25 5.25 0 0 1 0 10.5V2.75Z"
+      />
+    </g>
+    <g v-else-if="name === 'resegment'">
+      <path stroke-linecap="round" d="M3 4.5h10" />
+      <path stroke-linecap="round" d="M3 8h6.5" />
+      <path stroke-linecap="round" d="M3 11.5h10" />
+      <path
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        d="M11.25 6.25 13.25 8.25 11.25 10.25"
       />
     </g>
     <g v-else-if="name === 'trash'">
