@@ -183,14 +183,15 @@
 
 ---
 
-## Безопасность (перед prod auth)
+## Безопасность (перед / после prod auth)
 
-- [ ] JWT на защищённых маршрутах; TM/backup только своего `user_id`
-- [ ] Rate limit auth (reset / telegram — когда появятся)
-- [ ] `session_version`; позже `telegram_id` + hash токенов link/reset с TTL
-- [ ] Не логировать bot token / JWT
+- [x] JWT на защищённых маршрутах; TM/lock/backup только своего `user_id`
+- [x] Rate limit auth (login/register); reset/telegram — когда появятся
+- [x] `session_version` на login/logout + middleware; telegram tokens — позже
+- [x] Не логировать JWT / тела бэкапов; токен lock только в JSON body
 - [x] IndexedDB per-user prefix после login
-- [ ] HTTPS; webhook только на свой API (когда будет бот)
+- [x] Лимиты тел (auth/TM/lock/backup), таймауты сервера, `JWT_SECRET` ≥ 32, CSP/headers
+- [ ] HTTPS на NPM (операционно); webhook только на свой API (когда будет бот)
 
 ---
 
@@ -200,8 +201,8 @@
 2. **Auth API + лендинг (auth-first)** ✓
 3. **Облачная TM** sync (MVP) ✓
 4. Project lock + backup ✓
-5. Prod + security pass ← сейчас
-6. Telegram: link + password reset (конец MVP)
+5. Prod + security pass ✓
+6. Telegram: link + password reset (конец MVP) ← дальше
 7. B2 p2 (context / tags / concordance / audit) — по словарю выше
 8. Глоссарий; форматы; MT; multi-TM; SRX; админка ТМ
 
@@ -212,15 +213,8 @@
 ```text
 [Browser SPA]
   ├─ IndexedDB (projects, TM cache)
-  ├─ Tab lease (guest / offline)
+  ├─ Tab lease + cloud lock / backup
   └─ HTTPS → API (JWT + session_version)
          ├─ Postgres (users, tm_units, locks, backups)
          └─ Telegram Bot — позже (link + password reset)
-```
-[Browser SPA]
-  ├─ IndexedDB (projects, TM cache)
-  ├─ Tab lease (guest / offline)
-  └─ HTTPS → API (JWT + session_version)
-         ├─ Postgres (users.telegram_id, tm_units, locks, backups)
-         └─ Telegram Bot (link + password reset)
 ```

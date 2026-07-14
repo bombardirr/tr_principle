@@ -19,9 +19,9 @@ func NewRouter(
 ) http.Handler {
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID)
-	r.Use(middleware.RealIP)
 	r.Use(middleware.Recoverer)
 	r.Use(middleware.Timeout(120 * time.Second))
+	r.Use(securityHeaders)
 	r.Use(cors(allowedOrigin))
 
 	r.Get("/api/health", func(w http.ResponseWriter, _ *http.Request) {

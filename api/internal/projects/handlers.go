@@ -47,6 +47,7 @@ func (h *Handler) ClaimLock(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var body lockBody
+	r.Body = http.MaxBytesReader(w, r.Body, 16<<10)
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid json")
 		return
@@ -83,10 +84,14 @@ func (h *Handler) ReleaseLock(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var body lockBody
-	_ = json.NewDecoder(r.Body).Decode(&body)
-	if body.HolderID == "" {
-		body.HolderID = r.URL.Query().Get("holderId")
-		body.Token = r.URL.Query().Get("token")
+	r.Body = http.MaxBytesReader(w, r.Body, 16<<10)
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid json")
+		return
+	}
+	if body.HolderID == "" || body.Token == "" {
+		writeError(w, http.StatusBadRequest, "holderId and token required")
+		return
 	}
 	if err := h.Store.ReleaseLock(r.Context(), user.ID, projectID, body.HolderID, body.Token); err != nil {
 		if errors.Is(err, ErrLockNotHeld) {

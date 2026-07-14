@@ -45,9 +45,14 @@ func (h *Handler) Push(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusUnauthorized, "unauthorized")
 		return
 	}
+	r.Body = http.MaxBytesReader(w, r.Body, 4<<20) // 4 MiB
 	var body PushRequest
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid json")
+		return
+	}
+	if len(body.Units) > pageSize {
+		writeError(w, http.StatusBadRequest, "too many units")
 		return
 	}
 	for _, unit := range body.Units {

@@ -22,6 +22,9 @@ func FromEnv() (Config, error) {
 	if secret == "" {
 		return Config{}, fmt.Errorf("JWT_SECRET is required")
 	}
+	if len(secret) < 32 {
+		return Config{}, fmt.Errorf("JWT_SECRET must be at least 32 bytes")
+	}
 	dbURL := os.Getenv("DATABASE_URL")
 	if dbURL == "" {
 		return Config{}, fmt.Errorf("DATABASE_URL is required")

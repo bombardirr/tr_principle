@@ -22,9 +22,15 @@
    - Add Proxy Host: appzac.ru (или поддомен)
    - Forward Hostname / IP: appzac-prod-app
    - Forward Port: 8080   ← не 80, отдельного nginx-контейнера нет
-   - SSL по желанию (Let's Encrypt)
+   - SSL: Let's Encrypt + Force SSL / HSTS
+   - Передавать X-Real-IP (по умолчанию NPM делает) — нужен для rate limit auth
    - Доступ можно ограничить Access List
+   - Не публикуйте :8080 наружу без NPM
 
+3b) Секреты
+   - JWT_SECRET ≥ 32 символа (openssl rand -base64 48)
+   - BACKUP_DIR=/data/backups (volume в compose)
+   - CORS_ORIGIN = реальный origin SPA (https://appzac.ru)
 4) Деплой вручную (порядок как в CI)
    cd /home/ag/projects/tr_principle
    git fetch origin main && git checkout main && git reset --hard origin/main

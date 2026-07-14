@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"net"
 	"net/http"
 	"strings"
 
@@ -41,6 +42,7 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 	if !h.rateOK(w, r) {
 		return
 	}
+	r.Body = http.MaxBytesReader(w, r.Body, 16<<10)
 	var body credsBody
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid json")
@@ -72,6 +74,7 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 	if !h.rateOK(w, r) {
 		return
 	}
+	r.Body = http.MaxBytesReader(w, r.Body, 16<<10)
 	var body credsBody
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid json")
@@ -111,6 +114,7 @@ func (h *Handler) PatchMe(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusUnauthorized, "unauthorized")
 		return
 	}
+	r.Body = http.MaxBytesReader(w, r.Body, 16<<10)
 	var body struct {
 		DisplayName string `json:"display_name"`
 	}
@@ -189,12 +193,26 @@ func (h *Handler) rateOK(w http.ResponseWriter, r *http.Request) bool {
 	if h.Limiter == nil {
 		return true
 	}
-	key := r.RemoteAddr
+	key := clientIP(r)
 	if !h.Limiter.Allow(key) {
 		writeError(w, http.StatusTooManyRequests, "rate limited")
 		return false
 	}
 	return true
+}
+
+// Prefer X-Real-IP (NPM); do not trust multi-hop X-Forwarded-For.
+func clientIP(r *http.Request) string {
+	if xri := strings.TrimSpace(r.Header.Get("X-Real-IP")); xri != "" {
+		if ip := net.ParseIP(xri); ip != nil {
+			return ip.String()
+		}
+	}
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		return r.RemoteAddr
+	}
+	return host
 }
 
 func toPublic(u User) PublicUser {
