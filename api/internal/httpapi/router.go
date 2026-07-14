@@ -5,11 +5,12 @@ import (
 	"time"
 
 	"github.com/bombardirr/tr_principle/api/internal/auth"
+	"github.com/bombardirr/tr_principle/api/internal/tm"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 )
 
-func NewRouter(authHandler *auth.Handler, allowedOrigin string) http.Handler {
+func NewRouter(authHandler *auth.Handler, tmHandler *tm.Handler, allowedOrigin string) http.Handler {
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID)
 	r.Use(middleware.RealIP)
@@ -31,6 +32,12 @@ func NewRouter(authHandler *auth.Handler, allowedOrigin string) http.Handler {
 			r.Patch("/me", authHandler.PatchMe)
 			r.Post("/logout", authHandler.Logout)
 		})
+	})
+
+	r.Route("/api/tm", func(r chi.Router) {
+		r.Use(authHandler.Middleware)
+		r.Get("/sync", tmHandler.Pull)
+		r.Post("/sync", tmHandler.Push)
 	})
 
 	return r

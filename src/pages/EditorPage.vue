@@ -27,6 +27,7 @@ import {
   importTmUnits,
   deleteTmForSegmentSource,
 } from '@/storage/tmIdb'
+import { markTmDirty } from '@/tm/sync'
 import {
   countTranslatedSegments,
   finalizeSegmentStatus,
@@ -320,12 +321,13 @@ async function persistNow(): Promise<void> {
   await saveProject(record.value)
   if (tmSettings.value.autoSaveToTm && tmAutosaveIds.value.size) {
     const onlyIds = [...tmAutosaveIds.value]
-    await recordDoneSegmentsInTm(record.value.segments, {
+    const dirty = await recordDoneSegmentsInTm(record.value.segments, {
       sourceLang: record.value.meta.sourceLang,
       targetLang: record.value.meta.targetLang,
       projectId: record.value.meta.id,
       onlyIds,
     })
+    markTmDirty(...dirty)
     tmAutosaveIds.value = new Set()
     tmUnits.value = await listTmUnits()
   }
@@ -523,10 +525,11 @@ function resetTargetById(segId: string) {
 async function removeSegmentFromTm(seg: Segment) {
   if (!record.value) return
   try {
-    await deleteTmForSegmentSource(seg.source, {
+    const dirty = await deleteTmForSegmentSource(seg.source, {
       sourceLang: record.value.meta.sourceLang,
       targetLang: record.value.meta.targetLang,
     })
+    markTmDirty(...dirty)
     tmUnits.value = await listTmUnits()
   } catch (e) {
     setSaveError(e)
@@ -596,12 +599,13 @@ async function saveSegmentToTmById(segId: string) {
     s.id === segId ? { ...s, status } : s,
   )
   try {
-    await recordDoneSegmentsInTm(segments, {
+    const dirty = await recordDoneSegmentsInTm(segments, {
       sourceLang: record.value.meta.sourceLang,
       targetLang: record.value.meta.targetLang,
       projectId: record.value.meta.id,
       onlyIds: [segId],
     })
+    markTmDirty(...dirty)
     clearTmAutosave(segId)
     tmUnits.value = await listTmUnits()
   } catch (e) {
@@ -635,7 +639,8 @@ async function onTmxImportChange(e: Event) {
   try {
     const xml = await file.text()
     const units = parseTmx(xml)
-    const count = await importTmUnits(units)
+    const { count, ids } = await importTmUnits(units)
+    markTmDirty(...ids)
     tmUnits.value = await listTmUnits()
     notice.value = t('editor.tmxImported', { count })
     error.value = ''

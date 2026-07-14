@@ -16,6 +16,7 @@ import (
 	"github.com/bombardirr/tr_principle/api/internal/auth"
 	"github.com/bombardirr/tr_principle/api/internal/db"
 	"github.com/bombardirr/tr_principle/api/internal/httpapi"
+	"github.com/bombardirr/tr_principle/api/internal/tm"
 )
 
 func TestAuthFlow(t *testing.T) {
@@ -42,7 +43,8 @@ func TestAuthFlow(t *testing.T) {
 		Tokens:  auth.NewTokenIssuer([]byte("test-secret-key-32bytes-minimum!!"), time.Hour),
 		Limiter: auth.NewRateLimiter(100, time.Minute),
 	}
-	srv := httptest.NewServer(httpapi.NewRouter(handler, "http://localhost"))
+	tmHandler := &tm.Handler{Store: tm.NewStore(pool)}
+	srv := httptest.NewServer(httpapi.NewRouter(handler, tmHandler, "http://localhost"))
 	t.Cleanup(srv.Close)
 
 	email := fmt.Sprintf("test_%s@example.com", time.Now().Format("150405.000000000"))

@@ -112,11 +112,11 @@
 
 Одна память на `user_id`. Локальный IndexedDB — кэш; сервер — источник правды для аккаунта.
 
-- [ ] Таблица `tm_units` (или blob snapshot + дельта — выбрать при реализации; старт: row-per-unit как локально)
-- [ ] `GET/PUT /api/tm` или sync: pull since `updated_at` + push upserts
-- [ ] Клиент: после login — merge/pull; при записи done — local + queue upload
-- [ ] Офлайн: работа из кэша; при online — sync
-- [ ] Конфликт MVP: побеждает больший `updated_at` (или last-write-wins по unit id)
+- [x] Таблица `tm_units` (row-per-unit)
+- [x] `GET/POST /api/tm/sync` (pull since + push upserts, LWW, tombstones)
+- [x] Клиент: после login — pull/merge; при записи/удалении — dirty push
+- [x] Офлайн: работа из кэша; при online — sync (silent retry)
+- [x] Конфликт MVP: LWW по `updatedAt`
 
 #### 3) Lock + backup проекта
 
@@ -159,7 +159,7 @@
 #### Клиент
 
 - [x] Лендинг + auth UI (auth-first, без гостя); привязка Telegram — позже
-- [ ] TM sync после login + при автосейве
+- [x] TM sync после login + dirty push при записи в ТМ
 - [ ] Баннер offline; позже outbox
 - [ ] Feature flags; admin = Pro
 
@@ -198,8 +198,8 @@
 
 1. **Модель sentence-сегментов + ТМ UX** ✓
 2. **Auth API + лендинг (auth-first)** ✓
-3. **Облачная TM** sync (MVP) ← сейчас
-4. Project lock + backup
+3. **Облачная TM** sync (MVP) ✓
+4. Project lock + backup ← сейчас
 5. Prod + security pass
 6. Telegram: link + password reset (конец MVP)
 7. B2 p2 (context / tags / concordance / audit) — по словарю выше

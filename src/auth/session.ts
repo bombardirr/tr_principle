@@ -11,6 +11,7 @@ import {
   type AuthUser,
 } from '@/auth/api'
 import { setStorageAccountId } from '@/storage/scope'
+import { syncTm } from '@/tm/sync'
 
 const user = ref<AuthUser | null>(null)
 const ready = ref(false)
@@ -20,6 +21,9 @@ async function applySession(token: string | null, next: AuthUser | null) {
   setStoredToken(token)
   user.value = next
   setStorageAccountId(next?.id ?? null)
+  if (next) {
+    void syncTm()
+  }
 }
 
 export async function bootstrapAuth() {

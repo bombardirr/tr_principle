@@ -36,25 +36,51 @@ function getDb() {
   return dbPromise
 }
 
+function isActive(unit: TmUnit): boolean {
+  return !unit.deletedAt
+}
+
+/** Active units only (for matching / UI). */
 export async function listTmUnits(): Promise<TmUnit[]> {
   const db = await getDb()
-  return db.getAllFromIndex('units', 'by-updated')
+  const all = await db.getAllFromIndex('units', 'by-updated')
+  return all.filter(isActive)
+}
+
+export async function getTmUnit(id: string): Promise<TmUnit | undefined> {
+  const db = await getDb()
+  return db.get('units', id)
+}
+
+export async function putTmUnit(unit: TmUnit): Promise<void> {
+  const db = await getDb()
+  await db.put('units', unit)
+}
+
+export async function removeTmUnit(id: string): Promise<void> {
+  const db = await getDb()
+  await db.delete('units', id)
 }
 
 export async function deleteTmForSegmentSource(
   source: string,
   options?: { sourceLang?: string; targetLang?: string },
-): Promise<number> {
+): Promise<string[]> {
   const sourceKey = tmLookupKey(source, options?.sourceLang, options?.targetLang)
   const normalized = sourceKey.split('::')[0]
-  if (!normalized) return 0
+  if (!normalized) return []
 
   const db = await getDb()
   const existing = await db.getAllFromIndex('units', 'by-source-key', sourceKey)
+  const now = new Date().toISOString()
+  const dirty: string[] = []
   for (const unit of existing) {
-    await db.delete('units', unit.id)
+    if (unit.deletedAt) continue
+    const row: TmUnit = { ...unit, deletedAt: now, updatedAt: now }
+    await db.put('units', row)
+    dirty.push(unit.id)
   }
-  return existing.length
+  return dirty
 }
 
 export async function upsertTmFromSegment(
@@ -67,20 +93,22 @@ export async function upsertTmFromSegment(
     contextBefore?: string
     contextAfter?: string
   },
-): Promise<void> {
-  if (!isSegmentDone(segment)) return
+): Promise<string | null> {
+  if (!isSegmentDone(segment)) return null
   // Empty confirmed segments are local-only; never write or erase TM for them.
-  if (!segment.target.trim()) return
+  if (!segment.target.trim()) return null
   const sourceKey = tmLookupKey(
     segment.source,
     options?.sourceLang,
     options?.targetLang,
   )
   const normalized = sourceKey.split('::')[0]
-  if (!normalized) return
+  if (!normalized) return null
 
   const db = await getDb()
-  const existing = await db.getAllFromIndex('units', 'by-source-key', sourceKey)
+  const existing = (await db.getAllFromIndex('units', 'by-source-key', sourceKey)).filter(
+    isActive,
+  )
   const sameTarget = existing.find((u) => u.target === segment.target)
   const now = new Date().toISOString()
   const actor = options?.actor ?? 'local'
@@ -94,6 +122,7 @@ export async function upsertTmFromSegment(
     targetLang: options?.targetLang,
     createdAt: prev?.createdAt ?? now,
     updatedAt: now,
+    deletedAt: null,
     projectId: options?.projectId,
     createdBy: prev?.createdBy ?? actor,
     updatedBy: actor,
@@ -101,6 +130,7 @@ export async function upsertTmFromSegment(
     contextAfter: options?.contextAfter ?? prev?.contextAfter,
   }
   await db.put('units', row)
+  return row.id
 }
 
 export async function recordDoneSegmentsInTm(
@@ -113,14 +143,15 @@ export async function recordDoneSegmentsInTm(
     /** If set, only these segment ids are written (still uses full list for context). */
     onlyIds?: Iterable<string>
   },
-): Promise<void> {
+): Promise<string[]> {
   const only = options?.onlyIds ? new Set(options.onlyIds) : null
   const ordered = [...segments]
+  const dirty: string[] = []
   for (let i = 0; i < ordered.length; i++) {
     const segment = ordered[i]!
     if (only && !only.has(segment.id)) continue
     if (!isSegmentDone(segment)) continue
-    await upsertTmFromSegment(segment, {
+    const id = await upsertTmFromSegment(segment, {
       sourceLang: options?.sourceLang,
       targetLang: options?.targetLang,
       projectId: options?.projectId,
@@ -128,17 +159,20 @@ export async function recordDoneSegmentsInTm(
       contextBefore: ordered[i - 1]?.source,
       contextAfter: ordered[i + 1]?.source,
     })
+    if (id) dirty.push(id)
   }
+  return dirty
 }
 
-export async function importTmUnits(units: TmUnit[]): Promise<number> {
+export async function importTmUnits(units: TmUnit[]): Promise<{ count: number; ids: string[] }> {
   const db = await getDb()
-  let count = 0
+  const ids: string[] = []
   for (const unit of units) {
-    await db.put('units', unit)
-    count++
+    const row: TmUnit = { ...unit, deletedAt: unit.deletedAt ?? null }
+    await db.put('units', row)
+    ids.push(unit.id)
   }
-  return count
+  return { count: ids.length, ids }
 }
 
 export async function clearTmUnits(): Promise<void> {

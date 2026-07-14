@@ -7,6 +7,8 @@ export interface TmUnit {
   targetLang?: string
   createdAt: string
   updatedAt: string
+  /** ISO tombstone; set when unit is soft-deleted for cloud sync. */
+  deletedAt?: string | null
   projectId?: string
   createdBy?: string
   updatedBy?: string
