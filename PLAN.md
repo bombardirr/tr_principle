@@ -106,29 +106,9 @@
 - [x] **Лендинг** — только презентация + вход/регистрация (auth-first; **без гостевого CAT**)
 - [x] `users`: UUID `id`, `email`, `password_hash`, `session_version`, `is_admin`, `telegram_id` (nullable)
 - [x] Register / login / me / logout; JWT + claim `sv`; IndexedDB scoped by opaque UUID
-- [ ] Admin promote через SQL/CLI
+- [ ] Admin promote через SQL/CLI (пока достаточно SQL)
 
-#### 2) Сброс пароля через Telegram (без почты)
-
-**Зачем `telegram_id`:** это не «логин в Telegram», а числовой ID чата пользователя в Telegram (`123456789`). Бот умеет писать **только** в чаты, которые ему известны. Мы один раз связываем аккаунт appzac ↔ этот ID и дальше шлём код сброса туда.
-
-Да, **хранить надо** (в таблице `users`, поле `telegram_id`):
-- без него бот не знает, *кому* из миллионов чатов отправить код, когда в SPA ввели login;
-- храним только числовой id + факт привязки; username Telegram не обязателен;
-- отвязка / смена — в профиле.
-
-Поток:
-1. В профиле: «Привязать Telegram» → ссылка `t.me/bot?start=link_<token>` → бот сохраняет `telegram_id` у пользователя.
-2. «Забыл пароль» → API (по login) находит user → если есть `telegram_id`, шлёт код в этот чат.
-3. Код + новый пароль в SPA.
-
-Если не привязан — сброс только админом.
-
-- [ ] Link / unlink Telegram
-- [ ] password-reset request/confirm + webhook бота
-- [ ] Rate limit; `{ ok: true }` без enumeration
-
-#### 3) Облачная TM (в MVP)
+#### 2) Облачная TM (в MVP) ← сейчас
 
 Одна память на `user_id`. Локальный IndexedDB — кэш; сервер — источник правды для аккаунта.
 
@@ -138,11 +118,26 @@
 - [ ] Офлайн: работа из кэша; при online — sync
 - [ ] Конфликт MVP: побеждает больший `updated_at` (или last-write-wins по unit id)
 
-#### 4) Lock + backup проекта
+#### 3) Lock + backup проекта
 
 - [ ] `project_locks` + heartbeat
 - [ ] Backup `.tcat.zip` API (свой user_id)
 - [ ] Tab-lease остаётся для гостя / офлайн
+
+#### 4) Сброс пароля через Telegram (без почты) — в конце MVP
+
+Отложено: до бота сброс пароля только админом. Поле `telegram_id` в схеме оставляем nullable.
+
+**Зачем `telegram_id`:** числовой ID чата. Бот пишет только в известные чаты; связываем аккаунт ↔ ID, шлём код сброса.
+
+Поток:
+1. В профиле: «Привязать Telegram» → `t.me/bot?start=link_<token>` → бот сохраняет `telegram_id`.
+2. «Забыл пароль» → API → код в Telegram.
+3. Код + новый пароль в SPA.
+
+- [ ] Link / unlink Telegram
+- [ ] password-reset request/confirm + webhook бота
+- [ ] Rate limit; `{ ok: true }` без enumeration
 
 #### Эндпоинты v1 (сжато)
 
@@ -151,14 +146,15 @@
 | POST | `/api/auth/register` | регистрация |
 | POST | `/api/auth/login` | JWT + bump session |
 | GET | `/api/auth/me` | профиль / flags |
+| PATCH | `/api/auth/me` | display_name |
 | POST | `/api/auth/logout` | invalidate |
-| POST | `/api/auth/password-reset/request` | → Telegram |
-| POST | `/api/auth/password-reset/confirm` | новый пароль |
-| POST | `/api/telegram/webhook` | бот |
 | GET/PUT | `/api/tm` (или `/api/tm/sync`) | облачная TM |
 | POST/DELETE | `/api/projects/{id}/lock` | lock |
 | PUT/GET | `/api/projects/{id}/backup` | бэкап |
 | GET | `/api/health` | health |
+| POST | `/api/auth/password-reset/request` | → Telegram (позже) |
+| POST | `/api/auth/password-reset/confirm` | новый пароль (позже) |
+| POST | `/api/telegram/webhook` | бот (позже) |
 
 #### Клиент
 
@@ -171,7 +167,7 @@
 
 - [x] `docker-compose.local.yml` — postgres + api
 - [x] `.env.local.example` — `DATABASE_URL`, `JWT_SECRET`, `CORS_ORIGIN`, `VITE_API_BASE`
-- [ ] Prod: web + api + db; webhook на HTTPS; обновить `deploy/CURSOR_MINI_PC.txt`
+- [x] Prod: один Go-app (SPA+API) + db; webhook HTTPS — когда появится бот
 
 ---
 
@@ -190,11 +186,11 @@
 ## Безопасность (перед prod auth)
 
 - [ ] JWT на защищённых маршрутах; TM/backup только своего `user_id`
-- [ ] Rate limit auth / reset / telegram link
-- [ ] `session_version`; хранить `telegram_id` + hash токенов link/reset с TTL
+- [ ] Rate limit auth (reset / telegram — когда появятся)
+- [ ] `session_version`; позже `telegram_id` + hash токенов link/reset с TTL
 - [ ] Не логировать bot token / JWT
-- [ ] IndexedDB per-user prefix после login
-- [ ] HTTPS; webhook только на свой API
+- [x] IndexedDB per-user prefix после login
+- [ ] HTTPS; webhook только на свой API (когда будет бот)
 
 ---
 
@@ -202,10 +198,10 @@
 
 1. **Модель sentence-сегментов + ТМ UX** ✓
 2. **Auth API + лендинг (auth-first)** ✓
-3. Telegram: link + password reset ← сейчас
-4. **Облачная TM** sync (MVP)
-5. Project lock + backup
-6. Prod + security pass
+3. **Облачная TM** sync (MVP) ← сейчас
+4. Project lock + backup
+5. Prod + security pass
+6. Telegram: link + password reset (конец MVP)
 7. B2 p2 (context / tags / concordance / audit) — по словарю выше
 8. Глоссарий; форматы; MT; multi-TM; SRX; админка ТМ
 
@@ -214,6 +210,13 @@
 ## Архитектура (MVP-cloud)
 
 ```text
+[Browser SPA]
+  ├─ IndexedDB (projects, TM cache)
+  ├─ Tab lease (guest / offline)
+  └─ HTTPS → API (JWT + session_version)
+         ├─ Postgres (users, tm_units, locks, backups)
+         └─ Telegram Bot — позже (link + password reset)
+```
 [Browser SPA]
   ├─ IndexedDB (projects, TM cache)
   ├─ Tab lease (guest / offline)
