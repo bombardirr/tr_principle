@@ -13,6 +13,7 @@ type Config struct {
 	JWTSecret     []byte
 	TokenTTL      time.Duration
 	AllowedOrigin string
+	PublicDir     string
 }
 
 func FromEnv() (Config, error) {
@@ -40,11 +41,16 @@ func FromEnv() (Config, error) {
 	if origin == "" {
 		origin = "http://localhost:5173"
 	}
+	publicDir := os.Getenv("PUBLIC_DIR")
+	if publicDir == "" {
+		publicDir = "public"
+	}
 	return Config{
 		HTTPAddr:      addr,
 		DatabaseURL:   dbURL,
 		JWTSecret:     []byte(secret),
 		TokenTTL:      time.Duration(ttlHours) * time.Hour,
 		AllowedOrigin: origin,
+		PublicDir:     publicDir,
 	}, nil
 }

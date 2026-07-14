@@ -102,23 +102,23 @@ jobs:
           done
           docker compose --env-file .env.prod -p appzac -f docker-compose.prod.yml exec -T db sh -c 'pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB"'
 
-      - name: prod — сборка и запуск (api применяет миграции при старте)
+      - name: prod — сборка и запуск (app: миграции + SPA)
         working-directory: /home/ag/projects/tr_principle
         run: |
           set -euo pipefail
           docker compose --env-file .env.prod -p appzac -f docker-compose.prod.yml up -d --build --remove-orphans
 
-      - name: prod — healthcheck web + api
+      - name: prod — healthcheck app
         run: |
           set -euo pipefail
-          for i in $(seq 1 40); do
-            if docker exec appzac-prod-web wget -qO- http://127.0.0.1/ >/dev/null 2>&1 \
-              && docker exec appzac-prod-api wget -qO- http://127.0.0.1:8080/api/health >/dev/null 2>&1; then
+          for i in $(seq 1 45); do
+            if docker exec appzac-prod-app wget -qO- http://127.0.0.1:8080/api/health >/dev/null 2>&1 \
+              && docker exec appzac-prod-app wget -qO- http://127.0.0.1:8080/ >/dev/null 2>&1; then
               echo "OK"
               exit 0
             fi
             sleep 2
           done
-          echo "::error::web или api не отвечают"
+          echo "::error::appzac-prod-app не отвечает на :8080"
           docker compose --env-file /home/ag/projects/tr_principle/.env.prod -p appzac -f /home/ag/projects/tr_principle/docker-compose.prod.yml ps || true
           exit 1

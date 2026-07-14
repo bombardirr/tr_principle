@@ -45,14 +45,17 @@ func main() {
 		Limiter: auth.NewRateLimiter(30, time.Minute),
 	}
 
+	api := httpapi.NewRouter(handler, cfg.AllowedOrigin)
+	handlerRoot := httpapi.MountSPA(api, cfg.PublicDir)
+
 	srv := &http.Server{
 		Addr:              cfg.HTTPAddr,
-		Handler:           httpapi.NewRouter(handler, cfg.AllowedOrigin),
+		Handler:           handlerRoot,
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 
 	go func() {
-		log.Printf("api listening on %s", cfg.HTTPAddr)
+		log.Printf("app listening on %s (PUBLIC_DIR=%s)", cfg.HTTPAddr, cfg.PublicDir)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatal(err)
 		}

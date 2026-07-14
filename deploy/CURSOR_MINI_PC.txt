@@ -4,25 +4,24 @@
 
 Имена:
   - compose project:  appzac       (-p appzac)
-  - web:  appzac-prod-web   (STACK_NAME=appzac-prod)
-  - api:  appzac-prod-api
+  - app:  appzac-prod-app   (Go: API + SPA, порт 8080)
   - db:   appzac-prod-db
-  - NPM Proxy Host → http://appzac-prod-web:80
+  - NPM Proxy Host → http://appzac-prod-app:8080
   - домен (план): appzac.ru
 
 1) Один раз — окружение
    cd /home/ag/projects/tr_principle
    git clone git@github.com:bombardirr/tr_principle.git .   # если ещё нет
    cp .env.prod.example .env.prod
-   # Заполните POSTGRES_*, DATABASE_URL, JWT_SECRET, CORS_ORIGIN (см. комментарии в example).
+   # Заполните POSTGRES_*, DATABASE_URL, JWT_SECRET, CORS_ORIGIN.
 
 2) Один раз — сеть NPM
    docker network create proxy_net || true
 
 3) NPM (Nginx Proxy Manager)
    - Add Proxy Host: appzac.ru (или поддомен)
-   - Forward Hostname / IP: appzac-prod-web
-   - Forward Port: 80
+   - Forward Hostname / IP: appzac-prod-app
+   - Forward Port: 8080   ← не 80, отдельного nginx-контейнера нет
    - SSL по желанию (Let's Encrypt)
    - Доступ можно ограничить Access List
 
@@ -30,32 +29,16 @@
    cd /home/ag/projects/tr_principle
    git fetch origin main && git checkout main && git reset --hard origin/main
    docker compose --env-file .env.prod -p appzac -f docker-compose.prod.yml up -d db
-   # дождаться healthy, затем:
    docker compose --env-file .env.prod -p appzac -f docker-compose.prod.yml up -d --build --remove-orphans
-   # API при старте сам применяет SQL из api/migrations (таблица schema_migrations).
+   # Старые appzac-prod-web / appzac-prod-api уйдут через --remove-orphans.
 
 5) Проверка
-   docker exec appzac-prod-web wget -qO- http://127.0.0.1/ | head
-   docker exec appzac-prod-api wget -qO- http://127.0.0.1:8080/api/health
+   docker exec appzac-prod-app wget -qO- http://127.0.0.1:8080/api/health
+   docker exec appzac-prod-app wget -qO- http://127.0.0.1:8080/ | head
 
-6) Self-hosted runner (отдельно от репозитория!)
-   Папку раннера НЕ класть в /home/ag/projects/tr_principle — только рядом, как у disput.
-   Рекомендуемый путь: /home/ag/actions-runner-appzac
-
-   На GitHub: tr_principle → Settings → Actions → Runners → New self-hosted runner → Linux x64.
-   На мини-ПК (команды с экрана GitHub, путь свой):
-
-   mkdir -p /home/ag/actions-runner-appzac && cd /home/ag/actions-runner-appzac
-   # скачать, распаковать, затем:
-   ./config.sh --url https://github.com/bombardirr/tr_principle --token <TOKEN>
-   # имя при запросе: agserv-appzac
-   ./run.sh
-   # или установить как systemd-сервис (как у disput)
-
-   В репозитории tr_principle → Settings → Environments → production (без reviewers).
+6) Self-hosted runner — как раньше: /home/ag/actions-runner-appzac (не внутри репо).
 
 7) CI
-   Push в main → check (ubuntu) → deploy-prod (self-hosted):
-     git reset → проверка .env.prod → up db → wait → up --build (миграции внутри api) → health web+api.
+   Push в main → check → deploy: db → up --build app → health /api/health.
 
-Заголовок noindex уже в nginx (deploy/nginx.conf) + robots.txt + meta в index.html.
+Локально фронт: npm run dev (Vite), API: docker compose -f docker-compose.local.yml up.

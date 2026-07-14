@@ -1,12 +1,12 @@
-# Прод на мини-ПК за NPM (как disput).
+# Прод на мини-ПК за NPM (как disput / peerling).
 # Подготовка (один раз): docker network create proxy_net
 #
 # Рядом — .env.prod (не в git). См. .env.prod.example
 #
-# Порядок деплоя (как в CI): db → pg_isready → up --build (api мигрирует схему при старте) → web.
+# Порядок (как в CI): db → pg_isready → up --build (app мигрирует схему и отдаёт SPA).
 #
-# NPM: Proxy Host → http://appzac-prod-web:80
-#   (имя контейнера = ${STACK_NAME}-web, по умолчанию appzac-prod-web)
+# NPM: Proxy Host → http://appzac-prod-app:8080
+#   (имя контейнера = ${STACK_NAME}-app). WebSockets не обязательны.
 
 services:
   db:
@@ -26,47 +26,30 @@ services:
     networks:
       - default
 
-  api:
+  app:
     build:
-      context: ./api
+      context: .
       dockerfile: Dockerfile
-    container_name: ${STACK_NAME:-appzac-prod}-api
+    container_name: ${STACK_NAME:-appzac-prod}-app
     restart: unless-stopped
     env_file:
       - .env.prod
     environment:
       HTTP_ADDR: ":8080"
       MIGRATIONS_DIR: /app/migrations
+      PUBLIC_DIR: /app/public
     depends_on:
       db:
         condition: service_healthy
     networks:
       - default
+      - proxy_net
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/api/health"]
       interval: 10s
       timeout: 3s
       retries: 10
-      start_period: 20s
-
-  web:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: ${STACK_NAME:-appzac-prod}-web
-    restart: unless-stopped
-    depends_on:
-      api:
-        condition: service_healthy
-    networks:
-      - default
-      - proxy_net
-    healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://127.0.0.1/"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 10s
+      start_period: 25s
 
 networks:
   proxy_net:
