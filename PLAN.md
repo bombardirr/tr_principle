@@ -41,7 +41,7 @@
 
 **B2 p2 — после auth + облачной TM** (перед стартом — словарь ниже)
 
-- [ ] Настраиваемый порог fuzzy
+- [x] Настраиваемый порог fuzzy (дефолт 75%, слайдер 50–100%)
 - [ ] Context match (101%)
 - [ ] Штраф за теги
 - [ ] Match metadata в UI
@@ -86,7 +86,7 @@
 - [x] Sentence-сегменты на импорте (`paragraphKey` + `sentenceIndex`); экспорт склеивает абзац
 - [x] `findTmMatches` + multi-variant upsert; attribution/context на TU
 - [x] ParagraphBlock + TmVariantPicker (бейдж → список); mid-toolbar без ТМ
-- [x] Шапка: TM coverage + done %; дефолт fuzzy 100%, autosave TM off
+- [x] Шапка: TM coverage + done %; дефолт fuzzy 75%, autosave TM off
 - [x] Первый open — попап языковой пары + порог
 - [x] Миграция: «Пересегментировать?»
 - [x] Порог в тулбаре (`%`); автосейв ТМ только для новых/изменённых; ручная запись в ТМ кнопкой у бейджа
@@ -202,8 +202,8 @@
 3. **Облачная TM** sync (MVP) ✓
 4. Project lock + backup ✓
 5. Prod + security pass ✓
-6. Telegram: link + password reset (конец MVP) ← дальше
-7. B2 p2 (context / tags / concordance / audit) — по словарю выше
+6. Telegram: link + password reset (конец MVP) — отложено
+7. B2 p2 (context / tags / concordance / audit) ← дальше
 8. Глоссарий; форматы; MT; multi-TM; SRX; админка ТМ
 
 ---

@@ -132,7 +132,7 @@ const needsResegment = computed(() =>
 )
 
 const thresholdPct = computed(() => {
-  const score = record.value?.meta.fuzzyMinScore ?? tmSettings.value.fuzzyMinScore ?? 1
+  const score = record.value?.meta.fuzzyMinScore ?? tmSettings.value.fuzzyMinScore ?? 0.75
   return Math.round(score * 100)
 })
 

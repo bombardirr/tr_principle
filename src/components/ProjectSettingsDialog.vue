@@ -23,7 +23,7 @@ const emit = defineEmits<{
 const { t } = useI18n()
 
 const pairId = ref(LANG_PAIR_PRESETS[0]!.id)
-const thresholdPct = ref(100)
+const thresholdPct = ref(75)
 
 watch(
   () => [props.open, props.sourceLang, props.targetLang, props.fuzzyMinScore] as const,
@@ -31,7 +31,7 @@ watch(
     if (!open) return
     const found = findLangPairPreset(props.sourceLang, props.targetLang)
     pairId.value = found?.id ?? LANG_PAIR_PRESETS[0]!.id
-    const score = props.fuzzyMinScore ?? 1
+    const score = props.fuzzyMinScore ?? 0.75
     thresholdPct.value = Math.round(score * 100)
   },
   { immediate: true },
@@ -39,7 +39,7 @@ watch(
 
 function onSave() {
   const preset = LANG_PAIR_PRESETS.find((p) => p.id === pairId.value) as LangPairPreset
-  const pct = Math.min(100, Math.max(50, thresholdPct.value || 100))
+  const pct = Math.min(100, Math.max(50, thresholdPct.value || 75))
   emit('save', {
     sourceLang: preset.sourceLang,
     targetLang: preset.targetLang,
@@ -72,6 +72,7 @@ function onSave() {
 
       <label class="field">
         <span class="label">{{ t('editor.thresholdLabel') }}</span>
+        <p class="field-hint">{{ t('editor.thresholdExplain') }}</p>
         <div class="threshold-row">
           <input
             v-model.number="thresholdPct"
@@ -142,6 +143,14 @@ function onSave() {
   font-weight: 600;
   letter-spacing: 0.02em;
   color: var(--text-muted);
+}
+
+.field-hint {
+  margin: 0;
+  font-size: 0.78rem;
+  line-height: 1.35;
+  color: var(--text-muted);
+  opacity: 0.9;
 }
 
 .select {

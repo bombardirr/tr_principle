@@ -13,7 +13,7 @@ const STORAGE_BASE = 'appzac-tm-settings'
 
 export const TM_SETTINGS_DEFAULT: TmSettings = {
   punctuationMode: 'soft',
-  fuzzyMinScore: 1,
+  fuzzyMinScore: 0.75,
   enableFragments: true,
   autoSaveToTm: false,
 }
