@@ -14,7 +14,8 @@ import { packProjectFile } from '@/storage/projectFile'
 import IconButton from '@/components/IconButton.vue'
 import EditorGlyph from '@/components/EditorGlyph.vue'
 import TooltipWrap from '@/components/TooltipWrap.vue'
-import { useProjectLease } from '@/composables/useProjectLease'
+import { useProjectAccess } from '@/composables/useProjectAccess'
+import { scheduleProjectBackup, pushProjectBackup } from '@/projects/backup'
 import { useTmSettings } from '@/composables/useTmSettings'
 import { findTmMatches } from '@/tm/match'
 import { findLangPairPreset, langPairLabel } from '@/tm/langPairs'
@@ -61,7 +62,7 @@ const previewToken = ref(0)
 let previewTimer: ReturnType<typeof setTimeout> | null = null
 let pageScrollSaveTimer: ReturnType<typeof setTimeout> | null = null
 const activeSegmentId = ref<string | null>(null)
-const projectLease = useProjectLease(() => props.id)
+const projectLease = useProjectAccess(() => props.id)
 const { settings: tmSettings, togglePunctuationMode: toggleTmPunctuation, toggleAutoSaveToTm } =
   useTmSettings()
 const tmUnits = shallowRef<TmUnit[]>([])
@@ -319,6 +320,9 @@ async function persistNow(): Promise<void> {
   }
 
   await saveProject(record.value)
+  if (projectLease.isLeader.value) {
+    scheduleProjectBackup(record.value)
+  }
   if (tmSettings.value.autoSaveToTm && tmAutosaveIds.value.size) {
     const onlyIds = [...tmAutosaveIds.value]
     const dirty = await recordDoneSegmentsInTm(record.value.segments, {
@@ -724,6 +728,23 @@ watch(previewEnabled, (on) => {
   if (on) previewToken.value++
 })
 
+async function uploadCloudBackup() {
+  if (!record.value || projectLease.blocked.value) return
+  saving.value = true
+  try {
+    await persistNow()
+    await pushProjectBackup(record.value)
+    notice.value = t('editor.cloudBackupOk')
+    error.value = ''
+  } catch (e) {
+    notice.value = ''
+    error.value = t('editor.cloudBackupFail')
+    setSaveError(e)
+  } finally {
+    saving.value = false
+  }
+}
+
 async function downloadProject() {
   if (!record.value) return
   await withSaving(async () => {
@@ -870,6 +891,13 @@ async function goBack() {
           <IconButton :title="t('editor.saveProjectHint')" @click="downloadProject">
             <EditorGlyph name="archive" />
           </IconButton>
+          <IconButton
+            :title="t('editor.cloudBackupHint')"
+            :disabled="!record || projectLease.blocked.value"
+            @click="uploadCloudBackup"
+          >
+            <EditorGlyph name="cloud-upload" />
+          </IconButton>
           <IconButton :title="t('editor.exportDocxHint')" @click="exportDocx">
             <EditorGlyph name="download-docx" />
           </IconButton>
@@ -916,8 +944,12 @@ async function goBack() {
     <p v-else-if="notice" class="notice">{{ notice }}</p>
     <p v-if="total === 0" class="notice">{{ t('projects.emptyDoc') }}</p>
 
-    <p v-if="!projectLease.isLeader.value" class="lease-notice" role="status">
-      {{ t('editor.leaseBlocked') }}
+    <p v-if="projectLease.blocked.value" class="lease-notice" role="status">
+      {{
+        !projectLease.tabLeader.value
+          ? t('editor.leaseBlocked')
+          : t('editor.cloudLockBlocked')
+      }}
     </p>
 
     <div

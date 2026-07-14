@@ -103,6 +103,10 @@ export default {
     quota:
       'Не хватает места в браузере. Сохраните копию проекта на диск, чтобы не потерять работу.',
     errorGeneric: 'Ошибка: {message}',
+    restoreCloudHint: 'Восстановить проект из облака',
+    restoreCloudOk: '«{name}» восстановлен из облака',
+    restoreCloudMissing: 'В облаке нет копии этого проекта',
+    restoreCloudOverwrite: 'Локальная копия «{name}» будет заменена. Продолжить?',
   },
   editor: {
     back: 'К проектам',
@@ -172,6 +176,10 @@ export default {
     previewRefresh: 'Обновить превью',
     previewRefreshHint: 'Обновить предпросмотр по текущим переводам',
     leaseBlocked: 'Проект открыт в другой вкладке. Здесь доступен только просмотр.',
+    cloudLockBlocked: 'Проект открыт на другом устройстве. Здесь доступен только просмотр.',
+    cloudBackupHint: 'Сохранить проект в облако',
+    cloudBackupOk: 'Проект сохранён в облако',
+    cloudBackupFail: 'Не удалось сохранить в облако',
     tmApplyExact: 'Вставить точное совпадение из ТМ',
     tmApplyFuzzy: 'Вставить нечёткое совпадение из ТМ ({pct}%)',
     tmApplyFragmentExact: 'Точное совпадение фразы внутри сегмента',

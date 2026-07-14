@@ -120,9 +120,9 @@
 
 #### 3) Lock + backup проекта
 
-- [ ] `project_locks` + heartbeat
-- [ ] Backup `.tcat.zip` API (свой user_id)
-- [ ] Tab-lease остаётся для гостя / офлайн
+- [x] `project_locks` + heartbeat
+- [x] Backup `.tcat.zip` API (свой user_id)
+- [x] Tab-lease остаётся локально; cloud lock — cross-device
 
 #### 4) Сброс пароля через Telegram (без почты) — в конце MVP
 
@@ -199,8 +199,8 @@
 1. **Модель sentence-сегментов + ТМ UX** ✓
 2. **Auth API + лендинг (auth-first)** ✓
 3. **Облачная TM** sync (MVP) ✓
-4. Project lock + backup ← сейчас
-5. Prod + security pass
+4. Project lock + backup ✓
+5. Prod + security pass ← сейчас
 6. Telegram: link + password reset (конец MVP)
 7. B2 p2 (context / tags / concordance / audit) — по словарю выше
 8. Глоссарий; форматы; MT; multi-TM; SRX; админка ТМ

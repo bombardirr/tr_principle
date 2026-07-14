@@ -31,11 +31,15 @@ services:
       HTTP_ADDR: ":8080"
       CORS_ORIGIN: http://localhost:5173
       MIGRATIONS_DIR: /app/migrations
+      BACKUP_DIR: /data/backups
     ports:
       - "18080:8080"
+    volumes:
+      - appzac_backups:/data/backups
     depends_on:
       db:
         condition: service_healthy
 
 volumes:
   appzac_pg:
+  appzac_backups:

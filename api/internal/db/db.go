@@ -34,7 +34,19 @@ func Connect(ctx context.Context, databaseURL string) (*pgxpool.Pool, error) {
 }
 
 func Migrate(ctx context.Context, pool *pgxpool.Pool, migrationsDir string) error {
-	_, err := pool.Exec(ctx, `
+	conn, err := pool.Acquire(ctx)
+	if err != nil {
+		return err
+	}
+	defer conn.Release()
+
+	// Serialize concurrent migrators (parallel package tests).
+	if _, err := conn.Exec(ctx, `SELECT pg_advisory_lock(87201405)`); err != nil {
+		return err
+	}
+	defer func() { _, _ = conn.Exec(ctx, `SELECT pg_advisory_unlock(87201405)`) }()
+
+	_, err = conn.Exec(ctx, `
 		CREATE TABLE IF NOT EXISTS schema_migrations (
 			filename TEXT PRIMARY KEY,
 			applied_at TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -58,7 +70,7 @@ func Migrate(ctx context.Context, pool *pgxpool.Pool, migrationsDir string) erro
 
 	for _, name := range files {
 		var exists bool
-		err := pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM schema_migrations WHERE filename=$1)`, name).Scan(&exists)
+		err := conn.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM schema_migrations WHERE filename=$1)`, name).Scan(&exists)
 		if err != nil {
 			return err
 		}
@@ -70,7 +82,7 @@ func Migrate(ctx context.Context, pool *pgxpool.Pool, migrationsDir string) erro
 			return err
 		}
 		sql := stripGooseDirectives(string(body))
-		tx, err := pool.Begin(ctx)
+		tx, err := conn.Begin(ctx)
 		if err != nil {
 			return err
 		}

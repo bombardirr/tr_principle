@@ -6,6 +6,8 @@ import {
   Check,
   ChevronLeft,
   CircleX,
+  CloudDownload,
+  CloudUpload,
   Contrast,
   Database,
   DatabaseArrowDown,
@@ -52,6 +54,8 @@ export type GlyphName =
   | 'resegment'
   | 'check'
   | 'close'
+  | 'cloud-upload'
+  | 'cloud-download'
 
 const props = defineProps<{
   name: GlyphName
@@ -82,6 +86,8 @@ const icons: Record<GlyphName, Component> = {
   resegment: ListRestart,
   check: Check,
   close: X,
+  'cloud-upload': CloudUpload,
+  'cloud-download': CloudDownload,
 }
 </script>
 

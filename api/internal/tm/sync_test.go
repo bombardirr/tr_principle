@@ -16,6 +16,7 @@ import (
 	"github.com/bombardirr/tr_principle/api/internal/auth"
 	"github.com/bombardirr/tr_principle/api/internal/db"
 	"github.com/bombardirr/tr_principle/api/internal/httpapi"
+	"github.com/bombardirr/tr_principle/api/internal/projects"
 	"github.com/bombardirr/tr_principle/api/internal/tm"
 	"github.com/google/uuid"
 )
@@ -46,7 +47,10 @@ func TestTmSyncFlow(t *testing.T) {
 		Limiter: auth.NewRateLimiter(100, time.Minute),
 	}
 	tmHandler := &tm.Handler{Store: tm.NewStore(pool)}
-	srv := httptest.NewServer(httpapi.NewRouter(authHandler, tmHandler, "http://localhost"))
+	srv := httptest.NewServer(httpapi.NewRouter(authHandler, tmHandler, &projects.Handler{
+		Store:     projects.NewStore(pool),
+		BackupDir: t.TempDir(),
+	}, "http://localhost"))
 	t.Cleanup(srv.Close)
 
 	emailA := fmt.Sprintf("tmtest_a_%s@example.com", time.Now().Format("150405.000000000"))

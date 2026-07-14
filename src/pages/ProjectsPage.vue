@@ -11,6 +11,8 @@ import {
   saveProject,
 } from '@/storage/idb'
 import { unpackProjectFile } from '@/storage/projectFile'
+import { getProjectBackup } from '@/projects/api'
+import { ApiError } from '@/auth/api'
 import { resegmentParagraphs } from '@/tm/resegment'
 import { SEGMENT_SCHEMA_DATE_SAFE } from '@/types/project'
 import IconButton from '@/components/IconButton.vue'
@@ -137,6 +139,31 @@ async function confirmResegment(meta: ProjectMeta) {
   }
 }
 
+async function restoreFromCloud(meta: ProjectMeta) {
+  const local = await getProject(meta.id)
+  if (local && !window.confirm(t('projects.restoreCloudOverwrite', { name: meta.name }))) {
+    return
+  }
+  busy.value = true
+  error.value = ''
+  notice.value = ''
+  try {
+    const bytes = await getProjectBackup(meta.id)
+    const record = await unpackProjectFile(bytes)
+    await saveProject(record)
+    await refresh()
+    notice.value = t('projects.restoreCloudOk', { name: record.meta.name || meta.name })
+  } catch (err) {
+    if (err instanceof ApiError && err.status === 404) {
+      error.value = t('projects.restoreCloudMissing')
+    } else {
+      error.value = err instanceof Error ? err.message : String(err)
+    }
+  } finally {
+    busy.value = false
+  }
+}
+
 function formatDate(iso: string) {
   try {
     return new Date(iso).toLocaleString()
@@ -219,6 +246,13 @@ function formatDate(iso: string) {
             </div>
           </template>
           <template v-else>
+            <IconButton
+              :title="t('projects.restoreCloudHint')"
+              :disabled="busy"
+              @click="restoreFromCloud(p)"
+            >
+              <EditorGlyph name="cloud-download" />
+            </IconButton>
             <IconButton
               :title="t('projects.resegment')"
               :disabled="busy"

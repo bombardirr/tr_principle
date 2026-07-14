@@ -38,6 +38,9 @@ services:
       HTTP_ADDR: ":8080"
       MIGRATIONS_DIR: /app/migrations
       PUBLIC_DIR: /app/public
+      BACKUP_DIR: /data/backups
+    volumes:
+      - appzac_backups:/data/backups
     depends_on:
       db:
         condition: service_healthy
@@ -57,3 +60,4 @@ networks:
 
 volumes:
   appzac_pgdata:
+  appzac_backups:

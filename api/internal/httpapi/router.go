@@ -5,17 +5,23 @@ import (
 	"time"
 
 	"github.com/bombardirr/tr_principle/api/internal/auth"
+	"github.com/bombardirr/tr_principle/api/internal/projects"
 	"github.com/bombardirr/tr_principle/api/internal/tm"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 )
 
-func NewRouter(authHandler *auth.Handler, tmHandler *tm.Handler, allowedOrigin string) http.Handler {
+func NewRouter(
+	authHandler *auth.Handler,
+	tmHandler *tm.Handler,
+	projectsHandler *projects.Handler,
+	allowedOrigin string,
+) http.Handler {
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID)
 	r.Use(middleware.RealIP)
 	r.Use(middleware.Recoverer)
-	r.Use(middleware.Timeout(30 * time.Second))
+	r.Use(middleware.Timeout(120 * time.Second))
 	r.Use(cors(allowedOrigin))
 
 	r.Get("/api/health", func(w http.ResponseWriter, _ *http.Request) {
@@ -40,6 +46,15 @@ func NewRouter(authHandler *auth.Handler, tmHandler *tm.Handler, allowedOrigin s
 		r.Post("/sync", tmHandler.Push)
 	})
 
+	r.Route("/api/projects/{projectID}", func(r chi.Router) {
+		r.Use(authHandler.Middleware)
+		r.Post("/lock", projectsHandler.ClaimLock)
+		r.Delete("/lock", projectsHandler.ReleaseLock)
+		r.Put("/backup", projectsHandler.PutBackup)
+		r.Get("/backup", projectsHandler.GetBackup)
+		r.Head("/backup", projectsHandler.GetBackup)
+	})
+
 	return r
 }
 
@@ -48,7 +63,7 @@ func cors(origin string) func(http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Access-Control-Allow-Origin", origin)
 			w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type")
-			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PATCH, OPTIONS")
+			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, HEAD, OPTIONS")
 			if r.Method == http.MethodOptions {
 				w.WriteHeader(http.StatusNoContent)
 				return

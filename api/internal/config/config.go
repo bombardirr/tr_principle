@@ -14,6 +14,7 @@ type Config struct {
 	TokenTTL      time.Duration
 	AllowedOrigin string
 	PublicDir     string
+	BackupDir     string
 }
 
 func FromEnv() (Config, error) {
@@ -45,6 +46,10 @@ func FromEnv() (Config, error) {
 	if publicDir == "" {
 		publicDir = "public"
 	}
+	backupDir := os.Getenv("BACKUP_DIR")
+	if backupDir == "" {
+		backupDir = "data/backups"
+	}
 	return Config{
 		HTTPAddr:      addr,
 		DatabaseURL:   dbURL,
@@ -52,5 +57,6 @@ func FromEnv() (Config, error) {
 		TokenTTL:      time.Duration(ttlHours) * time.Hour,
 		AllowedOrigin: origin,
 		PublicDir:     publicDir,
+		BackupDir:     backupDir,
 	}, nil
 }

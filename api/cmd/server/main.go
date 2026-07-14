@@ -14,6 +14,7 @@ import (
 	"github.com/bombardirr/tr_principle/api/internal/config"
 	"github.com/bombardirr/tr_principle/api/internal/db"
 	"github.com/bombardirr/tr_principle/api/internal/httpapi"
+	"github.com/bombardirr/tr_principle/api/internal/projects"
 	"github.com/bombardirr/tr_principle/api/internal/tm"
 )
 
@@ -46,8 +47,12 @@ func main() {
 		Limiter: auth.NewRateLimiter(30, time.Minute),
 	}
 	tmHandler := &tm.Handler{Store: tm.NewStore(pool)}
+	projectsHandler := &projects.Handler{
+		Store:     projects.NewStore(pool),
+		BackupDir: cfg.BackupDir,
+	}
 
-	api := httpapi.NewRouter(handler, tmHandler, cfg.AllowedOrigin)
+	api := httpapi.NewRouter(handler, tmHandler, projectsHandler, cfg.AllowedOrigin)
 	handlerRoot := httpapi.MountSPA(api, cfg.PublicDir)
 
 	srv := &http.Server{
