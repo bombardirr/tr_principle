@@ -10,6 +10,7 @@ import TmVariantPicker from './TmVariantPicker.vue'
 import SegmentAuditPopover from './SegmentAuditPopover.vue'
 import TmConcordancePanel from './TmConcordancePanel.vue'
 import { FEATURE_TM_CONCORDANCE } from '@/features'
+import { extractTagIds } from '@/docx/tags'
 import { plainSource } from '@/tm/fragments'
 import { isSegmentTranslated } from '@/utils/segmentStatus'
 import { resolveSegmentKinds, type SegmentKind } from '@/utils/segmentKind'
@@ -39,6 +40,9 @@ const emit = defineEmits<{
   undo: [segId: string]
   redo: [segId: string]
 }>()
+
+/** Per-block: chips only after toggle on this row. */
+const showMarkers = ref(false)
 
 const showConcordance = FEATURE_TM_CONCORDANCE
 
@@ -127,6 +131,46 @@ const concordanceSeed = computed(() =>
   activeSeg.value ? plainSource(activeSeg.value.source) : '',
 )
 
+function segmentHasMarkers(seg: Segment) {
+  return extractTagIds(seg.source).length > 0 || extractTagIds(seg.target).length > 0
+}
+
+const blockHasMarkers = computed(() => sorted.value.some(segmentHasMarkers))
+
+watch(blockHasMarkers, (ok) => {
+  if (!ok) showMarkers.value = false
+})
+
+const markersToggleTitle = computed(() => {
+  if (!blockHasMarkers.value) return t('editor.markersNoneHint')
+  return showMarkers.value ? t('editor.markersHideHint') : t('editor.markersShowHint')
+})
+
+function toggleMarkers() {
+  if (!blockHasMarkers.value) return
+  showMarkers.value = !showMarkers.value
+}
+
+/** One-shot class so the markers button flashes on row hover (CSS :hover was easy to miss). */
+const markersFlash = ref(false)
+let markersFlashTimer: ReturnType<typeof setTimeout> | null = null
+
+function onRowPointerEnter() {
+  if (!blockHasMarkers.value || showMarkers.value) return
+  markersFlash.value = false
+  // Double rAF so the class clears a frame before restart (restarts CSS animation).
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      markersFlash.value = true
+      if (markersFlashTimer) clearTimeout(markersFlashTimer)
+      markersFlashTimer = setTimeout(() => {
+        markersFlash.value = false
+        markersFlashTimer = null
+      }, 300)
+    })
+  })
+}
+
 const concordanceOpen = ref(false)
 
 function onConcordanceOpenChange(open: boolean) {
@@ -181,7 +225,9 @@ function onRedo() {
     :class="{
       active: sorted.some((s) => s.id === activeSegmentId),
       'concordance-open': concordanceOpen,
+      'has-markers': blockHasMarkers,
     }"
+    @pointerenter="onRowPointerEnter"
   >
     <div class="meta">
       <div class="meta-source">
@@ -193,7 +239,31 @@ function onRedo() {
           </span>
         </span>
       </div>
-      <div class="meta-mid" aria-hidden="true" />
+      <div
+        class="meta-center"
+        role="toolbar"
+        :aria-label="t('editor.markersToggleLabel')"
+      >
+        <IconButton
+          :class="['markers-btn', { 'markers-flash': markersFlash }]"
+          :title="markersToggleTitle"
+          :active="showMarkers && blockHasMarkers"
+          :disabled="!blockHasMarkers"
+          @mousedown.prevent
+          @click="toggleMarkers"
+        >
+          <EditorGlyph name="markers" />
+        </IconButton>
+        <TmConcordancePanel
+          v-if="showConcordance"
+          :units="tmUnits ?? []"
+          :seed-query="concordanceSeed"
+          :enabled="!!activeSeg"
+          @insert="onConcordanceInsert"
+          @open-change="onConcordanceOpenChange"
+        />
+        <SegmentAuditPopover :entries="activeSeg?.audit ?? []" />
+      </div>
       <div class="meta-target">
         <TmVariantPicker
           :matches="activeSeg ? matchesFor(activeSeg) : []"
@@ -259,6 +329,7 @@ function onRedo() {
             :spans="seg.spans"
             :locale="locale"
             :editable="false"
+            :show-markers="showMarkers"
           />
         </div>
       </div>
@@ -278,15 +349,6 @@ function onRedo() {
         <IconButton :title="t('editor.resetTargetHint')" @mousedown.prevent @click="onReset">
           <EditorGlyph name="reset" />
         </IconButton>
-        <TmConcordancePanel
-          v-if="showConcordance"
-          :units="tmUnits ?? []"
-          :seed-query="concordanceSeed"
-          :enabled="!!activeSeg"
-          @insert="onConcordanceInsert"
-          @open-change="onConcordanceOpenChange"
-        />
-        <SegmentAuditPopover :entries="activeSeg?.audit ?? []" />
       </div>
 
       <div
@@ -307,6 +369,7 @@ function onRedo() {
             :spans="seg.spans"
             :locale="locale"
             :placeholder="t('editor.sentencePlaceholder')"
+            :show-markers="showMarkers"
             @update:model-value="emit('updateTarget', seg.id, $event)"
           />
         </div>
@@ -357,9 +420,61 @@ $toolbar-col-width: 2rem;
   flex-wrap: wrap;
 }
 
-.meta-mid {
-  width: $toolbar-col-width;
+.meta-center {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 0.2rem;
   justify-self: center;
+  min-width: $toolbar-col-width;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.12s ease;
+}
+
+.row:hover .meta-center,
+.row.active .meta-center,
+.row.concordance-open .meta-center,
+.meta-center:focus-within,
+.meta-center:has(.markers-flash) {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.meta-center :deep(.icon-btn) {
+  width: 1.5rem;
+  height: 1.5rem;
+}
+
+.meta-center :deep(.icon-btn.active) {
+  color: var(--accent);
+}
+
+/* Triggered via .markers-flash (pointerenter) — class lands on IconButton root. */
+.meta-center :deep(.markers-btn.markers-flash) {
+  animation: markers-hover-flash 0.28s ease-out;
+}
+
+@keyframes markers-hover-flash {
+  0% {
+    color: var(--text-muted);
+    filter: none;
+    text-shadow: none;
+  }
+  30% {
+    color: #9fe8ff;
+    filter: drop-shadow(0 0 2px #fff) drop-shadow(0 0 6px #5b9fd4)
+      drop-shadow(0 0 14px #3d8ecf) drop-shadow(0 0 22px rgba(91, 159, 212, 0.85));
+    text-shadow:
+      0 0 4px #fff,
+      0 0 10px #7ec8ff,
+      0 0 18px #5b9fd4;
+  }
+  100% {
+    color: var(--text-muted);
+    filter: none;
+    text-shadow: none;
+  }
 }
 
 .meta-target {
@@ -542,8 +657,9 @@ $toolbar-col-width: 2rem;
     row-gap: 0.45rem;
   }
 
-  .meta-mid {
-    display: none;
+  .meta-center {
+    justify-self: stretch;
+    width: 100%;
   }
 
   .mid-toolbar {

@@ -1,5 +1,10 @@
 export const TAG_RE = /\{(\d+)\}/g
 
+/** Strip formatting markers `{n}` for plain display / TM normalize helpers. */
+export function stripMarkers(text: string): string {
+  return text.replace(TAG_RE, '')
+}
+
 /** Build source with formatting markers `{n}` from spans. Single span → plain text (no markers). */
 export function buildTaggedText(spanTexts: string[]): string {
   if (spanTexts.length === 0) return ''

@@ -2,6 +2,7 @@
 import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import type { RunSpan } from '@/types/project'
 import { lookForTag } from '@/docx/tagLook'
+import { stripMarkers } from '@/docx/tags'
 import AppTooltip from '@/components/AppTooltip.vue'
 import { useAnchoredTooltip } from '@/composables/useAnchoredTooltip'
 
@@ -13,8 +14,10 @@ const props = withDefaults(
     placeholder?: string
     /** Defaults to true — Vue Boolean props are false when omitted. */
     editable?: boolean
+    /** When false (default), hide `{n}` chips and show plain text. */
+    showMarkers?: boolean
   }>(),
-  { editable: true },
+  { editable: true, showMarkers: false },
 )
 
 const emit = defineEmits<{
@@ -37,10 +40,19 @@ function escapeHtml(s: string): string {
     .replace(/"/g, '&quot;')
 }
 
+/** What the editor shows / what fromDom returns while typing (markers stripped if hidden). */
+function displayText(text: string): string {
+  return props.showMarkers ? text : stripMarkers(text)
+}
+
 function toHtml(text: string): string {
-  if (!text) return '<br>'
+  const shown = displayText(text)
+  if (!shown) return '<br>'
+  if (!props.showMarkers) {
+    return escapeHtml(shown)
+  }
   const locale = props.locale ?? 'ru'
-  return text
+  return shown
     .split(/(\{\d+\})/)
     .map((part) => {
       if (/^\{\d+\}$/.test(part)) {
@@ -97,9 +109,9 @@ function placeCaretEnd() {
 
 function paint(force = false) {
   if (!editor) return
-  // Skip only when the focused DOM already matches the model (user is typing).
+  // Skip only when the focused DOM already matches what's displayed (user is typing).
   // External updates (e.g. «Взять оригинал») must repaint even while focused.
-  if (focused && !force && fromDom(editor) === props.modelValue) return
+  if (focused && !force && fromDom(editor) === displayText(props.modelValue)) return
   const next = toHtml(props.modelValue)
   if (editor.innerHTML !== next) {
     editor.innerHTML = next
@@ -212,6 +224,11 @@ onBeforeUnmount(() => {
 watch(
   () => [props.modelValue, props.spans, props.locale, props.placeholder] as const,
   () => nextTick(() => paint()),
+)
+
+watch(
+  () => props.showMarkers,
+  () => nextTick(() => paint(true)),
 )
 </script>
 

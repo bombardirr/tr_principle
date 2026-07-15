@@ -147,6 +147,10 @@ export default {
     undoHint: 'Undo translation change',
     redoHint: 'Redo translation change',
     redoStepsHint: '{n} step(s) to the latest translation',
+    markersToggleLabel: 'Formatting markers',
+    markersShowHint: 'Show formatting markers in source and translation',
+    markersHideHint: 'Hide formatting markers',
+    markersNoneHint: 'No formatting markers in this segment',
     exportUnsavedConfirm:
       'There are unsaved changes. Export anyway? (You can save the project separately.)',
     auditHint: 'Edit history for this segment',

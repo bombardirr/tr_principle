@@ -3,6 +3,7 @@ import type { Component } from 'vue'
 import {
   Archive,
   ArrowRightFromLine,
+  Braces,
   Check,
   ChevronLeft,
   CircleX,
@@ -66,6 +67,7 @@ export type GlyphName =
   | 'concordance'
   | 'undo'
   | 'redo'
+  | 'markers'
 
 const props = defineProps<{
   name: GlyphName
@@ -103,6 +105,7 @@ const icons: Record<GlyphName, Component> = {
   concordance: Search,
   undo: Undo2,
   redo: Redo2,
+  markers: Braces,
 }
 </script>
 
