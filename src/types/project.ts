@@ -22,6 +22,31 @@ export interface RunSpan {
   text: string
 }
 
+/**
+ * Inclusive-exclusive ranges in target *plain* text (no `{n}` markers).
+ * Mirrors common Word `w:rPr` props we round-trip (see `RunStyle` in runStyle.ts).
+ */
+export interface TargetStyleRange {
+  start: number
+  end: number
+  bold?: boolean
+  italic?: boolean
+  /** Presence of underline; detail in underlineVal. */
+  underline?: boolean
+  /** Word w:u @w:val — single | double | thick | wave | … */
+  underlineVal?: string
+  font?: string
+  fontSizePt?: number
+  /** Hex RGB without #, as in Word w:color. */
+  color?: string
+  strike?: boolean
+  doubleStrike?: boolean
+  /** Word w:vertAlign — superscript | subscript */
+  vertAlign?: 'superscript' | 'subscript'
+  /** Word w:highlight @w:val — yellow | green | … */
+  highlight?: string
+}
+
 export interface Segment {
   id: string
   storyKey: string
@@ -33,6 +58,8 @@ export interface Segment {
   sentenceIndex: number
   source: string
   target: string
+  /** Translator overrides on plain target; absent = export via span identity / predominant. */
+  targetStyles?: TargetStyleRange[]
   status: SegmentStatus
   inTable: boolean
   inTextbox: boolean

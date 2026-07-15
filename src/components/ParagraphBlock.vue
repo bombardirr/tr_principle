@@ -5,15 +5,16 @@ import type { TmMatch, TmUnit } from '@/types/tm'
 import type { Segment } from '@/types/project'
 import IconButton from './IconButton.vue'
 import EditorGlyph from './EditorGlyph.vue'
-import TaggedEditor from './TaggedEditor.vue'
+import RichSourceView from './RichSourceView.vue'
+import RichTargetEditor from './RichTargetEditor.vue'
 import TmVariantPicker from './TmVariantPicker.vue'
 import SegmentAuditPopover from './SegmentAuditPopover.vue'
 import TmConcordancePanel from './TmConcordancePanel.vue'
 import { FEATURE_TM_CONCORDANCE } from '@/features'
-import { extractTagIds } from '@/docx/tags'
 import { plainSource } from '@/tm/fragments'
-import { isSegmentTranslated } from '@/utils/segmentStatus'
+import { isIntentionallyEmpty, isSegmentTranslated } from '@/utils/segmentStatus'
 import { resolveSegmentKinds, type SegmentKind } from '@/utils/segmentKind'
+import type { TargetStyleRange } from '@/types/project'
 
 const props = defineProps<{
   segments: Segment[]
@@ -26,10 +27,12 @@ const props = defineProps<{
   canUndo?: (segId: string) => boolean
   canRedo?: (segId: string) => boolean
   redoCount?: (segId: string) => number
+  /** Bumps when targetStyles change externally (toolbar) so the editor can force-repaint. */
+  stylePaintNonce?: number
 }>()
 
 const emit = defineEmits<{
-  updateTarget: [segId: string, value: string]
+  updateTarget: [segId: string, value: string, styles?: TargetStyleRange[]]
   copySource: [segId: string]
   leaveEmpty: [segId: string]
   resetTarget: [segId: string]
@@ -39,14 +42,12 @@ const emit = defineEmits<{
   insertConcordance: [segId: string, target: string]
   undo: [segId: string]
   redo: [segId: string]
+  targetSelection: [segId: string, range: { start: number; end: number } | null]
 }>()
-
-/** Per-block: chips only after toggle on this row. */
-const showMarkers = ref(false)
 
 const showConcordance = FEATURE_TM_CONCORDANCE
 
-const { t, locale } = useI18n()
+const { t } = useI18n()
 
 const sorted = computed(() =>
   [...props.segments].sort((a, b) => a.sentenceIndex - b.sentenceIndex),
@@ -81,12 +82,26 @@ watch(
   },
 )
 
+watch(
+  () => props.stylePaintNonce,
+  (nonce) => {
+    if (!nonce) return
+    const id = props.activeSegmentId
+    if (!id || !sorted.value.some((s) => s.id === id)) return
+    nextTick(() => editors.value[id]?.sync())
+  },
+)
+
 function kindClass(kind: SegmentKind) {
   return `seg-kind--${kind}`
 }
 
 function filled(seg: Segment) {
   return isSegmentTranslated(seg)
+}
+
+function leaveEmptyActive(seg: Segment | undefined) {
+  return Boolean(seg && isIntentionallyEmpty(seg))
 }
 
 function onCopy() {
@@ -131,44 +146,16 @@ const concordanceSeed = computed(() =>
   activeSeg.value ? plainSource(activeSeg.value.source) : '',
 )
 
-function segmentHasMarkers(seg: Segment) {
-  return extractTagIds(seg.source).length > 0 || extractTagIds(seg.target).length > 0
+function sourceSpansFor(seg: Segment) {
+  return seg.paragraphSpans?.length ? seg.paragraphSpans : seg.spans
 }
 
-const blockHasMarkers = computed(() => sorted.value.some(segmentHasMarkers))
-
-watch(blockHasMarkers, (ok) => {
-  if (!ok) showMarkers.value = false
-})
-
-const markersToggleTitle = computed(() => {
-  if (!blockHasMarkers.value) return t('editor.markersNoneHint')
-  return showMarkers.value ? t('editor.markersHideHint') : t('editor.markersShowHint')
-})
-
-function toggleMarkers() {
-  if (!blockHasMarkers.value) return
-  showMarkers.value = !showMarkers.value
+function onTargetUpdate(segId: string, value: string, styles?: TargetStyleRange[]) {
+  emit('updateTarget', segId, value, styles)
 }
 
-/** One-shot class so the markers button flashes on row hover (CSS :hover was easy to miss). */
-const markersFlash = ref(false)
-let markersFlashTimer: ReturnType<typeof setTimeout> | null = null
-
-function onRowPointerEnter() {
-  if (!blockHasMarkers.value || showMarkers.value) return
-  markersFlash.value = false
-  // Double rAF so the class clears a frame before restart (restarts CSS animation).
-  requestAnimationFrame(() => {
-    requestAnimationFrame(() => {
-      markersFlash.value = true
-      if (markersFlashTimer) clearTimeout(markersFlashTimer)
-      markersFlashTimer = setTimeout(() => {
-        markersFlash.value = false
-        markersFlashTimer = null
-      }, 300)
-    })
-  })
+function onTargetSelection(segId: string, range: { start: number; end: number } | null) {
+  emit('targetSelection', segId, range)
 }
 
 const concordanceOpen = ref(false)
@@ -231,9 +218,7 @@ function onRedo() {
       active: sorted.some((s) => s.id === activeSegmentId),
       'concordance-open': concordanceOpen,
       'audit-open': auditOpen,
-      'has-markers': blockHasMarkers,
     }"
-    @pointerenter="onRowPointerEnter"
   >
     <div class="meta">
       <div class="meta-source">
@@ -245,21 +230,7 @@ function onRedo() {
           </span>
         </span>
       </div>
-      <div
-        class="meta-center"
-        role="toolbar"
-        :aria-label="t('editor.markersToggleLabel')"
-      >
-        <IconButton
-          :class="['markers-btn', { 'markers-flash': markersFlash }]"
-          :title="markersToggleTitle"
-          :active="showMarkers && blockHasMarkers"
-          :disabled="!blockHasMarkers"
-          @mousedown.prevent
-          @click="toggleMarkers"
-        >
-          <EditorGlyph name="markers" />
-        </IconButton>
+      <div class="meta-center" role="toolbar" :aria-label="displayId">
         <TmConcordancePanel
           v-if="showConcordance"
           :units="tmUnits ?? []"
@@ -333,12 +304,9 @@ function onRedo() {
           :class="{ 'slot-active': seg.id === activeId }"
           @mousedown="emit('activate', seg.id)"
         >
-          <TaggedEditor
-            :model-value="seg.source"
-            :spans="seg.spans"
-            :locale="locale"
-            :editable="false"
-            :show-markers="showMarkers"
+          <RichSourceView
+            :tagged-source="seg.source"
+            :spans="sourceSpansFor(seg)"
           />
         </div>
       </div>
@@ -349,7 +317,7 @@ function onRedo() {
         </IconButton>
         <IconButton
           :title="t('editor.leaveEmptyHint')"
-          :active="activeSeg ? filled(activeSeg) : false"
+          :active="leaveEmptyActive(activeSeg)"
           @mousedown.prevent
           @click="onLeaveEmpty"
         >
@@ -372,14 +340,13 @@ function onRedo() {
           @mousedown="emit('activate', seg.id)"
           @focusin="emit('activate', seg.id)"
         >
-          <TaggedEditor
+          <RichTargetEditor
             :ref="(el) => { editors[seg.id] = el as any }"
             :model-value="seg.target"
-            :spans="seg.spans"
-            :locale="locale"
+            :styles="seg.targetStyles"
             :placeholder="t('editor.sentencePlaceholder')"
-            :show-markers="showMarkers"
-            @update:model-value="emit('updateTarget', seg.id, $event)"
+            @change="onTargetUpdate(seg.id, $event.target, $event.styles)"
+            @selection-change="onTargetSelection(seg.id, $event)"
           />
         </div>
       </div>
@@ -650,8 +617,19 @@ $toolbar-col-width: 2rem;
   background: var(--surface-2);
 }
 
+/* Same base metrics so Word font/size from spans aren't skewed by pane chrome. */
+.source-pane,
+.target-pane {
+  font-family: 'Times New Roman', Times, serif;
+  font-size: 11pt;
+  line-height: 1.35;
+}
+
 .target-pane {
   cursor: text;
+  /* Beat parent .editor-readonly pointer-events:none when lease is ok;
+     also ensure clicks reach the contenteditable under overlays. */
+  pointer-events: auto;
 }
 
 .pane.filled {

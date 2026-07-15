@@ -1,12 +1,16 @@
-import type { Segment } from '@/types/project'
+import type { Segment, TargetStyleRange } from '@/types/project'
 import { isIntentionallyEmpty } from '@/utils/segmentStatus'
 import { joinSentenceTargets } from '@/tm/sentences'
-import { buildTaggedText, coerceTargetTags, splitTaggedText } from './tags'
+import { buildTaggedText, coerceTargetTags, splitTaggedText, stripMarkers } from './tags'
+import { styledPiecesFromTarget, type StyledPiece } from './runStyle'
 import {
   allParagraphsLoose,
+  cloneRun,
   collectRunsWithT,
+  insertRunAfter,
   parseXml,
   serializeXml,
+  setRunStyle,
   setRunText,
 } from './xmlUtils'
 
@@ -14,6 +18,64 @@ function effectiveTarget(segment: Segment): string {
   if (isIntentionallyEmpty(segment)) return ''
   const t = segment.target.trim()
   return t === '' ? segment.source : segment.target
+}
+
+function hasNonEmptyTargetStyles(segments: Segment[]): boolean {
+  return segments.some((s) => (s.targetStyles?.length ?? 0) > 0)
+}
+
+/** Gap inserted between joined sentence plain targets (mirrors joinSentenceTargets). */
+function joinSentenceGap(acc: string, raw: string): number {
+  const t = raw.trim()
+  if (!t || !acc) return 0
+  if (/\{(\d+)\}$/.test(acc) && /^\{(\d+)\}/.test(t)) return 0
+  const needSpace = !/\s$/u.test(acc) && !/^[.,;:!?…»"'”)\]]/u.test(t)
+  return needSpace ? 1 : 0
+}
+
+function mergeParagraphTargetStyles(segments: Segment[]): TargetStyleRange[] | undefined {
+  if (!hasNonEmptyTargetStyles(segments)) return undefined
+  const sorted = [...segments].sort((a, b) => a.sentenceIndex - b.sentenceIndex)
+  const merged: TargetStyleRange[] = []
+  let acc = ''
+
+  for (const seg of sorted) {
+    const plain = stripMarkers(effectiveTarget(seg))
+    const offset = acc.length === 0 ? 0 : acc.length + joinSentenceGap(acc, plain)
+    for (const r of seg.targetStyles ?? []) {
+      merged.push({
+        ...r,
+        start: r.start + offset,
+        end: r.end + offset,
+      })
+    }
+    acc = joinSentenceTargets([acc, plain])
+  }
+
+  return merged.length ? merged : undefined
+}
+
+function plainJoinedTarget(segments: Segment[]): string {
+  const sorted = [...segments].sort((a, b) => a.sentenceIndex - b.sentenceIndex)
+  return joinSentenceTargets(sorted.map((s) => stripMarkers(effectiveTarget(s))))
+}
+
+function applyStyledPiecesToParagraph(para: Element, pieces: StyledPiece[]): void {
+  const runs = collectRunsWithT(para)
+  for (const run of runs) setRunText(run, '')
+  if (!pieces.length || !runs.length) return
+
+  const template = runs[0]!
+  let prevRun: Element | null = null
+
+  for (let i = 0; i < pieces.length; i++) {
+    const piece = pieces[i]!
+    const run = i === 0 ? template : cloneRun(template)
+    if (i > 0 && prevRun) insertRunAfter(prevRun, run)
+    setRunStyle(run, piece.style)
+    setRunText(run, piece.text)
+    prevRun = run
+  }
 }
 
 function translationParts(segment: Segment): string[] | null {
@@ -61,10 +123,13 @@ export function mergeParagraphGroup(segments: Segment[]): Segment | null {
         : coerceTargetTags(fullSource, joined)
   }
 
+  const targetStyles = mergeParagraphTargetStyles(sorted)
+
   return {
     ...head,
     source: fullSource,
     target: fullTarget,
+    targetStyles,
     status: allEmptyIntentional
       ? 'done'
       : fullTarget.trim()
@@ -109,6 +174,13 @@ export function applyTranslationsToStories(
       if (!merged) continue
       const para = paragraphs[merged.paraIndex]
       if (!para) continue
+
+      if (hasNonEmptyTargetStyles(group)) {
+        const plain = plainJoinedTarget(group)
+        const pieces = styledPiecesFromTarget(plain, merged.targetStyles)
+        applyStyledPiecesToParagraph(para, pieces)
+        continue
+      }
 
       const runs = collectRunsWithT(para)
       const parts = translationParts(merged)

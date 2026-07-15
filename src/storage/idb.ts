@@ -62,6 +62,7 @@ export function cloneProjectRecord(record: ProjectRecord): ProjectRecord {
       sentenceIndex: s.sentenceIndex ?? 0,
       source: s.source,
       target: s.target,
+      targetStyles: s.targetStyles?.map((r) => ({ ...r })),
       status: s.status,
       inTable: s.inTable,
       inTextbox: s.inTextbox ?? false,

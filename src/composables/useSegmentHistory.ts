@@ -1,9 +1,10 @@
 import { reactive, ref } from 'vue'
-import type { Segment, SegmentStatus } from '@/types/project'
+import type { Segment, SegmentStatus, TargetStyleRange } from '@/types/project'
 
 export type SegmentSnapshot = {
   target: string
   status: SegmentStatus
+  targetStyles?: TargetStyleRange[]
 }
 
 const MAX_STEPS = 30
@@ -17,12 +18,50 @@ type Lane = {
   tipIsTyping: boolean
 }
 
-function snapshotOf(seg: Pick<Segment, 'target' | 'status'>): SegmentSnapshot {
-  return { target: seg.target, status: seg.status }
+function cloneTargetStyles(
+  styles: TargetStyleRange[] | undefined,
+): TargetStyleRange[] | undefined {
+  if (!styles?.length) return undefined
+  return styles.map((r) => ({ ...r }))
+}
+
+function snapshotOf(
+  seg: Pick<Segment, 'target' | 'status' | 'targetStyles'>,
+): SegmentSnapshot {
+  const targetStyles = cloneTargetStyles(seg.targetStyles)
+  return {
+    target: seg.target,
+    status: seg.status,
+    ...(targetStyles ? { targetStyles } : {}),
+  }
+}
+
+function stylesEqual(
+  a: TargetStyleRange[] | undefined,
+  b: TargetStyleRange[] | undefined,
+): boolean {
+  if (!a?.length && !b?.length) return true
+  if (!a?.length || !b?.length || a.length !== b.length) return false
+  return a.every((r, i) => {
+    const o = b[i]!
+    return (
+      r.start === o.start &&
+      r.end === o.end &&
+      r.bold === o.bold &&
+      r.italic === o.italic &&
+      r.underline === o.underline &&
+      r.font === o.font &&
+      r.fontSizePt === o.fontSizePt
+    )
+  })
 }
 
 function same(a: SegmentSnapshot, b: SegmentSnapshot): boolean {
-  return a.target === b.target && a.status === b.status
+  return (
+    a.target === b.target &&
+    a.status === b.status &&
+    stylesEqual(a.targetStyles, b.targetStyles)
+  )
 }
 
 /**
@@ -47,7 +86,7 @@ export function useSegmentHistory() {
     return L
   }
 
-  function seed(seg: Pick<Segment, 'id' | 'target' | 'status'>) {
+  function seed(seg: Pick<Segment, 'id' | 'target' | 'status' | 'targetStyles'>) {
     const L = lane(seg.id)
     if (L.stack.length === 0) {
       L.stack.push(snapshotOf(seg))
@@ -62,7 +101,7 @@ export function useSegmentHistory() {
    * @param coalesce — typing: replace tip within the idle window of a typing burst.
    */
   function commit(
-    seg: Pick<Segment, 'id' | 'target' | 'status'>,
+    seg: Pick<Segment, 'id' | 'target' | 'status' | 'targetStyles'>,
     options?: { coalesce?: boolean },
   ) {
     const L = lane(seg.id)

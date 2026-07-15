@@ -35,12 +35,14 @@ import { markTmDirty } from '@/tm/sync'
 import {
   countTranslatedSegments,
   finalizeSegmentStatus,
-  isSegmentTranslated,
   normalizeSegmentStatus,
 } from '@/utils/segmentStatus'
-import type { ProjectRecord, Segment } from '@/types/project'
+import type { ProjectRecord, Segment, TargetStyleRange } from '@/types/project'
 import { SEGMENT_SCHEMA_DATE_SAFE } from '@/types/project'
 import type { TmMatch, TmUnit } from '@/types/tm'
+import { stripMarkers } from '@/docx/tags'
+import { targetStylesFromTaggedSource, toggleStyleRange } from '@/docx/runStyle'
+import StyleToolbar from '@/components/StyleToolbar.vue'
 
 const props = defineProps<{ id: string }>()
 const { t } = useI18n()
@@ -465,13 +467,14 @@ function editActor() {
   return publicActorLabel(user.value)
 }
 
-function updateTarget(seg: Segment, value: string) {
+function updateTarget(seg: Segment, value: string, styles?: Segment['targetStyles']) {
   if (!record.value || projectLease.blocked.value) return
   notice.value = ''
   segHistory.seed(seg)
   const by = editActor()
   patchSegment(seg.id, {
     target: value,
+    ...(styles !== undefined ? { targetStyles: styles } : {}),
     status: value.trim() ? 'draft' : seg.status === 'done' ? 'draft' : 'empty',
     tmSavePending: false,
     origin: 'manual',
@@ -490,9 +493,9 @@ function updateTarget(seg: Segment, value: string) {
   scheduleSave()
 }
 
-function updateTargetById(segId: string, value: string) {
+function updateTargetById(segId: string, value: string, styles?: Segment['targetStyles']) {
   const seg = record.value?.segments.find((s) => s.id === segId)
-  if (seg) updateTarget(seg, value)
+  if (seg) updateTarget(seg, value, styles)
 }
 
 function copySource(seg: Segment) {
@@ -500,8 +503,12 @@ function copySource(seg: Segment) {
   notice.value = ''
   segHistory.seed(seg)
   const by = editActor()
+  const plain = stripMarkers(seg.source)
+  const spans = seg.paragraphSpans?.length ? seg.paragraphSpans : seg.spans
+  const targetStyles = targetStylesFromTaggedSource(seg.source, spans)
   patchSegment(seg.id, {
-    target: seg.source,
+    target: plain,
+    targetStyles,
     status: 'draft',
     tmSavePending: false,
     origin: 'copy-source',
@@ -511,7 +518,7 @@ function copySource(seg: Segment) {
       action: 'copy-source',
       by,
       before: seg.target,
-      after: seg.source,
+      after: plain,
     }),
   })
   const after = record.value?.segments.find((s) => s.id === seg.id)
@@ -533,6 +540,7 @@ function leaveEmpty(seg: Segment) {
   const by = editActor()
   patchSegment(seg.id, {
     target: '',
+    targetStyles: [],
     status: 'done',
     tmSavePending: false,
     origin: 'leave-empty',
@@ -563,6 +571,7 @@ function resetTarget(seg: Segment) {
   const by = editActor()
   patchSegment(seg.id, {
     target: '',
+    targetStyles: [],
     status: 'empty',
     tmSavePending: false,
     origin: 'reset',
@@ -655,6 +664,7 @@ function insertConcordanceTarget(segId: string, target: string) {
   const by = editActor()
   patchSegment(segId, {
     target,
+    targetStyles: [],
     status: 'draft',
     tmSavePending: false,
     origin: 'tm',
@@ -683,6 +693,7 @@ function applyTmMatch(segId: string, match: TmMatch) {
   const by = match.unitId ? `tm:${match.unitId}` : 'tm'
   patchSegment(segId, {
     target: match.target,
+    targetStyles: [],
     status: 'draft',
     tmSavePending: false,
     origin: 'tm',
@@ -701,10 +712,14 @@ function applyTmMatch(segId: string, match: TmMatch) {
   scheduleSave()
 }
 
-function restoreSegmentSnapshot(segId: string, snap: { target: string; status: Segment['status'] }) {
+function restoreSegmentSnapshot(
+  segId: string,
+  snap: { target: string; status: Segment['status']; targetStyles?: TargetStyleRange[] },
+) {
   if (!record.value || projectLease.blocked.value) return
   patchSegment(segId, {
     target: snap.target,
+    targetStyles: snap.targetStyles ?? [],
     status: snap.status,
     tmSavePending: false,
     origin: 'manual',
@@ -714,6 +729,50 @@ function restoreSegmentSnapshot(segId: string, snap: { target: string; status: S
   if (snap.target.trim()) markTmAutosave(segId)
   else clearTmAutosave(segId)
   scheduleSave(UNDO_SAVE_IDLE_MS)
+}
+
+const targetSelection = ref<{ segId: string; start: number; end: number } | null>(null)
+
+function onTargetSelection(segId: string, range: { start: number; end: number } | null) {
+  if (!range || range.start === range.end) {
+    if (targetSelection.value?.segId === segId) targetSelection.value = null
+    return
+  }
+  targetSelection.value = { segId, ...range }
+}
+
+const stylePaintNonce = ref(0)
+
+function toggleActiveStyle(prop: 'bold' | 'italic' | 'underline') {
+  if (!record.value || projectLease.blocked.value) return
+  const sel = targetSelection.value
+  if (!sel || sel.start === sel.end) return
+  const seg = record.value.segments.find((s) => s.id === sel.segId)
+  if (!seg) return
+  const next = toggleStyleRange(seg.targetStyles, seg.target.length, sel.start, sel.end, prop)
+  updateTarget(seg, seg.target, next)
+  stylePaintNonce.value++
+}
+
+function stylePropActive(prop: 'bold' | 'italic' | 'underline'): boolean {
+  const sel = targetSelection.value
+  if (!sel || !record.value) return false
+  const seg = record.value.segments.find((s) => s.id === sel.segId)
+  if (!seg?.targetStyles?.length) return false
+  const { start, end } = sel
+  return seg.targetStyles.some(
+    (r) => r[prop] && r.start < end && r.end > start && r.start <= start && r.end >= end,
+  )
+}
+
+function onEditorKeydown(e: KeyboardEvent) {
+  if (projectLease.blocked.value) return
+  if (!(e.ctrlKey || e.metaKey) || e.altKey) return
+  const k = e.key.toLowerCase()
+  if (k !== 'b' && k !== 'i' && k !== 'u') return
+  if (!targetSelection.value) return
+  e.preventDefault()
+  toggleActiveStyle(k === 'b' ? 'bold' : k === 'i' ? 'italic' : 'underline')
 }
 
 function undoSegment(segId: string) {
@@ -835,8 +894,14 @@ function deactivateEditor() {
 function onEditorPointerDown(e: PointerEvent) {
   const target = e.target
   if (!(target instanceof Element)) return
-  // Keep the row active when using mid-toolbar or TM controls above the target.
-  if (target.closest('.target-pane, .mid-toolbar, .meta-target, .tm-picker')) return
+  // Keep the row active when using mid-toolbar, style toolbar, or TM controls.
+  if (
+    target.closest(
+      '.target-pane, .mid-toolbar, .meta-target, .tm-picker, .style-toolbar-host',
+    )
+  ) {
+    return
+  }
   deactivateEditor()
 }
 
@@ -1099,7 +1164,17 @@ async function goBack() {
       class="editor-layout"
       :class="{ 'with-preview': previewEnabled, 'editor-readonly': projectLease.blocked.value }"
     >
-      <div class="editor-main">
+      <div class="editor-main" @keydown="onEditorKeydown">
+        <div class="style-toolbar-host">
+          <StyleToolbar
+            :disabled="projectLease.blocked.value || !activeSegmentId"
+            :has-selection="!!targetSelection && targetSelection.start !== targetSelection.end"
+            :bold-active="stylePropActive('bold')"
+            :italic-active="stylePropActive('italic')"
+            :underline-active="stylePropActive('underline')"
+            @toggle="toggleActiveStyle"
+          />
+        </div>
         <div id="editor-concordance-root" class="editor-concordance-root" />
         <ParagraphBlock
           v-for="(seg, i) in record.segments"
@@ -1113,6 +1188,7 @@ async function goBack() {
           :can-undo="segHistory.canUndo"
           :can-redo="segHistory.canRedo"
           :redo-count="segHistory.redoCount"
+          :style-paint-nonce="stylePaintNonce"
           @update-target="updateTargetById"
           @copy-source="copySourceById"
           @leave-empty="leaveEmptyById"
@@ -1123,6 +1199,7 @@ async function goBack() {
           @undo="undoSegment"
           @redo="redoSegment"
           @activate="activateSegment"
+          @target-selection="onTargetSelection"
         />
       </div>
       <DocxPreviewPanel
@@ -1449,6 +1526,21 @@ h1.doc-title {
 
 .editor-layout.with-preview {
   grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.style-toolbar-host {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  display: flex;
+  justify-content: center;
+  padding: 0.35rem 0 0.5rem;
+  margin-bottom: 0.15rem;
+  background: linear-gradient(
+    to bottom,
+    var(--bg) 55%,
+    color-mix(in srgb, var(--bg) 35%, transparent)
+  );
 }
 
 .editor-main {

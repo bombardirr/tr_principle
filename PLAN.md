@@ -113,12 +113,13 @@
 - [x] Режим отображения source/target без видимых `{n}` (toggle `{}` per-block + поиск/история в meta-center; дефолт скрыты)
 - ~~Преобладающий стиль на export~~ → перенесено после **E3** (нужен swap превью исходника, чтобы сверять результат)
 
-**E2 — панель стилизации (над переводом)**
+**E2 — панель стилизации (над переводом)** ← **landing (Word-like F1–F2)**
 
-- [ ] Toolbar B / I / U (+ размер/шрифт — по возможности из доступных в сегменте) **над колонкой target**, визуально по центру этой колонки; не в `#app-header` / toolbar-bar
-- [ ] Активен только при focus/active сегменте + непустом selection в target
-- [ ] Стили пишутся в модель сегмента (не «рисовать» только в contenteditable без persist)
-- [ ] Round-trip: styled ranges → DOCX runs; тесты на simple bold/italic
+- [x] Toolbar B / I / U **над колонкой target**, по центру; не в `#app-header`
+- [x] Активен при непустом selection в target (+ Ctrl+B/I/U)
+- [x] `targetStyles` на сегменте + undo snapshot; rich source без маркеров в UX
+- [x] Round-trip: styled ranges → rebuild DOCX runs (`tests/docx/targetStyles.test.ts`)
+- [ ] Font/size dropdowns; пипетка / «как в оригинале» (F4)
 
 **E3 — превью: swap + pop-out** ← **следующее перед predominant-export**
 

@@ -93,6 +93,136 @@ export function runText(run: Element): string {
     .join('')
 }
 
+const W_NS = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'
+
+export type RunStyleProps = {
+  bold?: boolean
+  italic?: boolean
+  underline?: boolean
+  underlineVal?: string
+  font?: string
+  /** Points (Word sz is half-points). */
+  fontSizePt?: number
+  color?: string
+  strike?: boolean
+  doubleStrike?: boolean
+  vertAlign?: 'superscript' | 'subscript'
+  highlight?: string
+}
+
+function createWElement(doc: Document, local: string): Element {
+  return doc.createElementNS(W_NS, local)
+}
+
+function setWVal(el: Element, val: string): void {
+  el.setAttributeNS(W_NS, 'w:val', val)
+  el.setAttribute('w:val', val)
+}
+
+function setRFonts(el: Element, font: string): void {
+  el.setAttributeNS(W_NS, 'w:ascii', font)
+  el.setAttribute('w:ascii', font)
+  el.setAttributeNS(W_NS, 'w:hAnsi', font)
+  el.setAttribute('w:hAnsi', font)
+}
+
+/** Write visual run properties (replaces prior b/i/u/sz/rFonts on the run). */
+export function setRunStyle(run: Element, style: RunStyleProps): void {
+  const doc = run.ownerDocument
+  if (!doc) return
+
+  let rPr: Element | null = null
+  for (const c of childrenElements(run)) {
+    if (localName(c) === 'rPr') {
+      rPr = c
+      break
+    }
+  }
+
+  if (!rPr) {
+    rPr = createWElement(doc, 'rPr')
+    const first = childrenElements(run)[0]
+    if (first) run.insertBefore(rPr, first)
+    else run.appendChild(rPr)
+  }
+
+  const managed = new Set([
+    'b',
+    'bCs',
+    'i',
+    'iCs',
+    'u',
+    'sz',
+    'szCs',
+    'rFonts',
+    'color',
+    'highlight',
+    'strike',
+    'dstrike',
+    'vertAlign',
+  ])
+  for (const c of [...childrenElements(rPr)]) {
+    if (managed.has(localName(c))) rPr.removeChild(c)
+  }
+
+  if (style.bold) {
+    rPr.appendChild(createWElement(doc, 'b'))
+    rPr.appendChild(createWElement(doc, 'bCs'))
+  }
+  if (style.italic) {
+    rPr.appendChild(createWElement(doc, 'i'))
+    rPr.appendChild(createWElement(doc, 'iCs'))
+  }
+  if (style.underline) {
+    const u = createWElement(doc, 'u')
+    setWVal(u, style.underlineVal || 'single')
+    rPr.appendChild(u)
+  }
+  if (style.strike) rPr.appendChild(createWElement(doc, 'strike'))
+  if (style.doubleStrike) rPr.appendChild(createWElement(doc, 'dstrike'))
+  if (style.vertAlign) {
+    const va = createWElement(doc, 'vertAlign')
+    setWVal(va, style.vertAlign)
+    rPr.appendChild(va)
+  }
+  if (style.color) {
+    const color = createWElement(doc, 'color')
+    setWVal(color, style.color.replace(/^#/, ''))
+    rPr.appendChild(color)
+  }
+  if (style.highlight) {
+    const hl = createWElement(doc, 'highlight')
+    setWVal(hl, style.highlight)
+    rPr.appendChild(hl)
+  }
+  if (style.fontSizePt && style.fontSizePt > 0) {
+    const half = String(Math.round(style.fontSizePt * 2))
+    const sz = createWElement(doc, 'sz')
+    setWVal(sz, half)
+    rPr.appendChild(sz)
+    const szCs = createWElement(doc, 'szCs')
+    setWVal(szCs, half)
+    rPr.appendChild(szCs)
+  }
+  if (style.font) {
+    const rf = createWElement(doc, 'rFonts')
+    setRFonts(rf, style.font)
+    rPr.appendChild(rf)
+  }
+}
+
+export function cloneRun(run: Element): Element {
+  return run.cloneNode(true) as Element
+}
+
+export function insertRunAfter(refRun: Element, newRun: Element): void {
+  const parent = refRun.parentElement
+  if (!parent) return
+  const next = refRun.nextSibling
+  if (next) parent.insertBefore(newRun, next)
+  else parent.appendChild(newRun)
+}
+
 export function setRunText(run: Element, text: string): void {
   const nodes = getTextNodes(run)
   if (nodes.length === 0) return
