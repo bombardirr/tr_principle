@@ -43,3 +43,5 @@ desktop.ini
 
 # GitHub Actions runner (если случайно создали внутри репо — не коммитить)
 actions-runner/
+
+.worktrees/
