@@ -116,6 +116,7 @@
 **E2 — панель стилизации (над переводом)** ← **landing (Word-like F1–F2)**
 
 - [x] Toolbar B / I / U **над колонкой target**, по центру; не в `#app-header`
+- [x] Segment chrome: split source/target headers + magnetic rail for pair-actions
 - [x] Активен при непустом selection в target (+ Ctrl+B/I/U)
 - [x] `targetStyles` на сегменте + undo snapshot; rich source без маркеров в UX
 - [x] Round-trip: styled ranges → rebuild DOCX runs (`tests/docx/targetStyles.test.ts`)

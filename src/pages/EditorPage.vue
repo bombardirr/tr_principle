@@ -3,7 +3,6 @@ import { computed, nextTick, onMounted, onUnmounted, ref, shallowRef, watch } fr
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import MarqueeText from '@/components/MarqueeText.vue'
-import ParagraphBlock from '@/components/ParagraphBlock.vue'
 import ProjectSettingsDialog from '@/components/ProjectSettingsDialog.vue'
 import ResegmentDialog from '@/components/ResegmentDialog.vue'
 import DocxPreviewPanel from '@/components/DocxPreviewPanel.vue'
@@ -35,6 +34,7 @@ import { markTmDirty } from '@/tm/sync'
 import {
   countTranslatedSegments,
   finalizeSegmentStatus,
+  isIntentionallyEmpty,
   normalizeSegmentStatus,
 } from '@/utils/segmentStatus'
 import type { ProjectRecord, Segment, TargetStyleRange } from '@/types/project'
@@ -42,7 +42,9 @@ import { SEGMENT_SCHEMA_DATE_SAFE } from '@/types/project'
 import type { TmMatch, TmUnit } from '@/types/tm'
 import { stripMarkers } from '@/docx/tags'
 import { targetStylesFromTaggedSource, toggleStyleRange } from '@/docx/runStyle'
-import StyleToolbar from '@/components/StyleToolbar.vue'
+import { firstSegmentIdInViewport, pickMagnetRowId } from '@/editor/magnetGeometry'
+import MagneticSegmentRail from '@/components/MagneticSegmentRail.vue'
+import ParagraphBlock from '@/components/ParagraphBlock.vue'
 
 const props = defineProps<{ id: string }>()
 const { t } = useI18n()
@@ -381,7 +383,10 @@ async function restorePageScroll() {
   if (snap.activeSegmentId) activeSegmentId.value = snap.activeSegmentId
   await nextTick()
   restoreWindowScroll(snap.pageY)
-  window.setTimeout(() => restoreWindowScroll(snap.pageY), 150)
+  window.setTimeout(() => {
+    restoreWindowScroll(snap.pageY)
+    scheduleViewportAnchor()
+  }, 150)
 }
 
 async function load() {
@@ -397,6 +402,8 @@ async function load() {
   }
   record.value = withNormalizedRecord(found)
   await restorePageScroll()
+  await nextTick()
+  scheduleViewportAnchor()
 }
 
 function onBeforeUnload(e: BeforeUnloadEvent) {
@@ -413,7 +420,16 @@ onMounted(() => {
     tmUnits.value = units
   })
   window.addEventListener('scroll', onPageScroll, PAGE_SCROLL_OPTS)
+  window.addEventListener('scroll', scheduleViewportAnchor, PAGE_SCROLL_OPTS)
+  window.addEventListener('resize', scheduleViewportAnchor)
+  window.addEventListener('mousemove', onPointerLive, PAGE_SCROLL_OPTS)
+  document.documentElement.addEventListener('mouseleave', onPointerLeaveWindow)
   window.addEventListener('beforeunload', onBeforeUnload)
+  chromeMq = window.matchMedia('(max-width: 800px)')
+  onChromeMq()
+  chromeMq.addEventListener('change', onChromeMq)
+  idleViewportChrome.value = true
+  void nextTick(() => scheduleViewportAnchor())
 })
 
 watch(() => props.id, () => {
@@ -422,7 +438,14 @@ watch(() => props.id, () => {
 
 onUnmounted(() => {
   window.removeEventListener('scroll', onPageScroll, PAGE_SCROLL_OPTS)
+  window.removeEventListener('scroll', scheduleViewportAnchor, PAGE_SCROLL_OPTS)
+  window.removeEventListener('resize', scheduleViewportAnchor)
+  window.removeEventListener('mousemove', onPointerLive, PAGE_SCROLL_OPTS)
+  document.documentElement.removeEventListener('mouseleave', onPointerLeaveWindow)
   window.removeEventListener('beforeunload', onBeforeUnload)
+  chromeMq?.removeEventListener('change', onChromeMq)
+  chromeMq = null
+  if (viewportAnchorTimer) clearTimeout(viewportAnchorTimer)
   if (pageScrollSaveTimer) clearTimeout(pageScrollSaveTimer)
   void persistScroll()
   clearSaveTimer()
@@ -865,6 +888,7 @@ async function withSaving<T>(fn: () => Promise<T>): Promise<T | undefined> {
 function activateSegment(segId: string) {
   const seg = record.value?.segments.find((s) => s.id === segId)
   if (seg) segHistory.seed(seg)
+  hoverSegmentId.value = segId
   if (activeSegmentId.value === segId) return
   activeSegmentId.value = segId
   scheduleScrollPersist()
@@ -891,13 +915,117 @@ function deactivateEditor() {
   scheduleScrollPersist()
 }
 
+const hoverSegmentId = ref<string | null>(null)
+const viewportAnchorId = ref<string | null>(null)
+/** Dimmed header icons on viewport-anchor only while pointer is idle (no mouse move yet). */
+const idleViewportChrome = ref(true)
+/** Pointer over the magnetic rail cluster — light header icons on magnet target. */
+const railHovered = ref(false)
+const segmentListEl = ref<HTMLElement | null>(null)
+const chromeStacked = ref(false)
+let chromeMq: MediaQueryList | null = null
+let viewportAnchorTimer: ReturnType<typeof setTimeout> | null = null
+
+function onPointerLive() {
+  if (idleViewportChrome.value) idleViewportChrome.value = false
+}
+
+function onPointerLeaveWindow(e: MouseEvent) {
+  // RelatedTarget null → left the document; restore idle hint icons.
+  if (e.relatedTarget == null && !activeSegmentId.value) {
+    idleViewportChrome.value = true
+  }
+}
+
+function onChromeMq() {
+  chromeStacked.value = chromeMq?.matches ?? false
+}
+
+function refreshViewportAnchor() {
+  const list = segmentListEl.value
+  const ids = record.value?.segments.map((s) => s.id) ?? []
+  if (!list || !ids.length) {
+    viewportAnchorId.value = null
+    return
+  }
+  viewportAnchorId.value = firstSegmentIdInViewport(ids, (id) => {
+    const el = document.getElementById(`segment-${id}`)
+    if (!el) return null
+    const r = el.getBoundingClientRect()
+    return { top: r.top, bottom: r.bottom }
+  })
+}
+
+function scheduleViewportAnchor() {
+  if (viewportAnchorTimer) clearTimeout(viewportAnchorTimer)
+  viewportAnchorTimer = setTimeout(() => {
+    viewportAnchorTimer = null
+    refreshViewportAnchor()
+  }, 50)
+}
+
+function onRowHover(segId: string | null) {
+  // While a segment is active, hover cannot retarget the rail — stay glued to active.
+  if (activeSegmentId.value) {
+    hoverSegmentId.value = activeSegmentId.value
+    return
+  }
+  hoverSegmentId.value = segId
+}
+
+watch(activeSegmentId, (id) => {
+  hoverSegmentId.value = id
+})
+
+watch(
+  () => record.value?.segments.map((s) => s.id).join('\0') ?? '',
+  () => scheduleViewportAnchor(),
+)
+
+function magnetTargetId() {
+  return pickMagnetRowId({
+    activeId: activeSegmentId.value,
+    hoverId: hoverSegmentId.value,
+    viewportAnchorId: viewportAnchorId.value,
+  })
+}
+
+/** Segment whose header centers should light up while the rail is hovered. */
+const railChromeSegId = computed(() => (railHovered.value ? magnetTargetId() : null))
+
+function onRailHover(hovered: boolean) {
+  railHovered.value = hovered
+}
+
+const railLeaveEmptyActive = computed(() => {
+  const id = magnetTargetId()
+  if (!id || !record.value) return false
+  const seg = record.value.segments.find((s) => s.id === id)
+  return Boolean(seg && isIntentionallyEmpty(seg))
+})
+
+function onRailCopy(segId: string) {
+  activateSegment(segId)
+  copySourceById(segId)
+}
+
+function onRailLeaveEmpty(segId: string) {
+  activateSegment(segId)
+  leaveEmptyById(segId)
+}
+
+function onRailReset(segId: string) {
+  activateSegment(segId)
+  resetTargetById(segId)
+}
+
 function onEditorPointerDown(e: PointerEvent) {
   const target = e.target
   if (!(target instanceof Element)) return
-  // Keep the row active when using mid-toolbar, style toolbar, or TM controls.
+  // Keep the row active when using rail, headers, style toolbar, or TM controls.
   if (
     target.closest(
-      '.target-pane, .mid-toolbar, .meta-target, .tm-picker, .style-toolbar-host',
+      '.target-pane, .magnetic-rail, .magnetic-cluster, .source-header, .target-header, .tm-picker, .style-toolbar, .rail-gutter, .stacked-actions',
     )
   ) {
     return
@@ -1165,42 +1293,61 @@ async function goBack() {
       :class="{ 'with-preview': previewEnabled, 'editor-readonly': projectLease.blocked.value }"
     >
       <div class="editor-main" @keydown="onEditorKeydown">
-        <div class="style-toolbar-host">
-          <StyleToolbar
-            :disabled="projectLease.blocked.value || !activeSegmentId"
-            :has-selection="!!targetSelection && targetSelection.start !== targetSelection.end"
-            :bold-active="stylePropActive('bold')"
-            :italic-active="stylePropActive('italic')"
-            :underline-active="stylePropActive('underline')"
-            @toggle="toggleActiveStyle"
+        <div id="editor-concordance-root" class="editor-concordance-root" />
+        <div ref="segmentListEl" class="segment-list">
+          <MagneticSegmentRail
+            :list-el="segmentListEl"
+            :active-segment-id="activeSegmentId"
+            :hover-segment-id="hoverSegmentId"
+            :viewport-anchor-id="viewportAnchorId"
+            :leave-empty-active="railLeaveEmptyActive"
+            :stacked="chromeStacked"
+            @copy="onRailCopy"
+            @leave-empty="onRailLeaveEmpty"
+            @reset="onRailReset"
+            @rail-hover="onRailHover"
+          />
+          <ParagraphBlock
+            v-for="(seg, i) in record.segments"
+            :key="seg.id"
+            :segments="[seg]"
+            :display-index="i + 1"
+            :active-segment-id="activeSegmentId"
+            :viewport-anchor-id="viewportAnchorId"
+            :idle-viewport-chrome="idleViewportChrome"
+            :force-chrome-reveal="railChromeSegId === seg.id"
+            :matches-for="matchesFor"
+            :needs-tm-save="needsTmSave"
+            :tm-units="tmUnits"
+            :can-undo="segHistory.canUndo"
+            :can-redo="segHistory.canRedo"
+            :redo-count="segHistory.redoCount"
+            :style-paint-nonce="stylePaintNonce"
+            :style-disabled="projectLease.blocked.value || !activeSegmentId"
+            :has-style-selection="
+              !!targetSelection &&
+              targetSelection.segId === seg.id &&
+              targetSelection.start !== targetSelection.end
+            "
+            :bold-active="targetSelection?.segId === seg.id && stylePropActive('bold')"
+            :italic-active="targetSelection?.segId === seg.id && stylePropActive('italic')"
+            :underline-active="targetSelection?.segId === seg.id && stylePropActive('underline')"
+            :stacked="chromeStacked"
+            @update-target="updateTargetById"
+            @copy-source="copySourceById"
+            @leave-empty="leaveEmptyById"
+            @reset-target="resetTargetById"
+            @apply-tm="(id, match) => applyTmMatch(id, match)"
+            @save-to-tm="saveSegmentToTmById"
+            @insert-concordance="insertConcordanceTarget"
+            @undo="undoSegment"
+            @redo="redoSegment"
+            @activate="activateSegment"
+            @target-selection="onTargetSelection"
+            @row-hover="onRowHover"
+            @toggle-style="toggleActiveStyle"
           />
         </div>
-        <div id="editor-concordance-root" class="editor-concordance-root" />
-        <ParagraphBlock
-          v-for="(seg, i) in record.segments"
-          :key="seg.id"
-          :segments="[seg]"
-          :display-index="i + 1"
-          :active-segment-id="activeSegmentId"
-          :matches-for="matchesFor"
-          :needs-tm-save="needsTmSave"
-          :tm-units="tmUnits"
-          :can-undo="segHistory.canUndo"
-          :can-redo="segHistory.canRedo"
-          :redo-count="segHistory.redoCount"
-          :style-paint-nonce="stylePaintNonce"
-          @update-target="updateTargetById"
-          @copy-source="copySourceById"
-          @leave-empty="leaveEmptyById"
-          @reset-target="resetTargetById"
-          @apply-tm="(id, match) => applyTmMatch(id, match)"
-          @save-to-tm="saveSegmentToTmById"
-          @insert-concordance="insertConcordanceTarget"
-          @undo="undoSegment"
-          @redo="redoSegment"
-          @activate="activateSegment"
-          @target-selection="onTargetSelection"
-        />
       </div>
       <DocxPreviewPanel
         v-if="previewEnabled"
@@ -1528,21 +1675,6 @@ h1.doc-title {
   grid-template-columns: minmax(0, 1fr) auto;
 }
 
-.style-toolbar-host {
-  position: sticky;
-  top: 0;
-  z-index: 5;
-  display: flex;
-  justify-content: center;
-  padding: 0.35rem 0 0.5rem;
-  margin-bottom: 0.15rem;
-  background: linear-gradient(
-    to bottom,
-    var(--bg) 55%,
-    color-mix(in srgb, var(--bg) 35%, transparent)
-  );
-}
-
 .editor-main {
   position: relative;
   display: flex;
@@ -1550,6 +1682,12 @@ h1.doc-title {
   gap: 0.45rem;
   min-width: 0;
   width: 100%;
+}
+
+.segment-list {
+  position: relative;
+  width: 100%;
+  min-width: 0;
 }
 
 .editor-concordance-root {

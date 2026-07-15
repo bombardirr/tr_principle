@@ -227,6 +227,7 @@ export default {
     previewScrollTop: 'Прокрутить вверх',
     previewScrollBottom: 'Прокрутить вниз',
     styleToolbarLabel: 'Форматирование перевода',
+    pairActionsLabel: 'Действия с парой оригинал–перевод',
     previewRefresh: 'Обновить превью',
     previewRefreshHint: 'Обновить предпросмотр по текущим переводам',
     leaseBlocked: 'Проект открыт в другой вкладке. Здесь доступен только просмотр.',

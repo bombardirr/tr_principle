@@ -62,6 +62,7 @@ html[data-theme="dark"] {
   --filled-border: rgba(91, 159, 212, 0.45);
   --saved-border: rgba(125, 190, 138, 0.4);
   --dirty-border: rgba(212, 168, 90, 0.45);
+  --target-pane-bg: color-mix(in srgb, var(--accent) 12%, var(--surface-2));
   --target-filled-bg: rgba(125, 190, 138, 0.14);
   --target-filled-border: rgba(125, 190, 138, 0.42);
   --preview-desk: linear-gradient(168deg, #1a2433 0%, #1f3044 42%, #172636 100%);
@@ -114,6 +115,7 @@ html[data-theme="light"] {
   --filled-border: rgba(44, 95, 138, 0.35);
   --saved-border: rgba(47, 90, 47, 0.35);
   --dirty-border: rgba(138, 106, 47, 0.45);
+  --target-pane-bg: color-mix(in srgb, var(--accent) 8%, var(--surface-2));
   --target-filled-bg: #e6f2e8;
   --target-filled-border: rgba(47, 90, 47, 0.32);
   --preview-desk: linear-gradient(168deg, #edf3fa 0%, #e0ecf7 40%, #d4e3f2 100%);

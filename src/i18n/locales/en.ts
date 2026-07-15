@@ -226,6 +226,7 @@ export default {
     previewScrollTop: 'Scroll to top',
     previewScrollBottom: 'Scroll to bottom',
     styleToolbarLabel: 'Translation formatting',
+    pairActionsLabel: 'Source–target pair actions',
     previewRefresh: 'Refresh preview',
     previewRefreshHint: 'Update the preview with your current translations',
     leaseBlocked: 'This project is open in another tab. View only here.',

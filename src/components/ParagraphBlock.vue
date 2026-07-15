@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { TmMatch, TmUnit } from '@/types/tm'
 import type { Segment } from '@/types/project'
@@ -7,6 +7,7 @@ import IconButton from './IconButton.vue'
 import EditorGlyph from './EditorGlyph.vue'
 import RichSourceView from './RichSourceView.vue'
 import RichTargetEditor from './RichTargetEditor.vue'
+import StyleToolbar from './StyleToolbar.vue'
 import TmVariantPicker from './TmVariantPicker.vue'
 import SegmentAuditPopover from './SegmentAuditPopover.vue'
 import TmConcordancePanel from './TmConcordancePanel.vue'
@@ -29,6 +30,19 @@ const props = defineProps<{
   redoCount?: (segId: string) => number
   /** Bumps when targetStyles change externally (toolbar) so the editor can force-repaint. */
   stylePaintNonce?: number
+  styleDisabled?: boolean
+  hasStyleSelection?: boolean
+  boldActive?: boolean
+  italicActive?: boolean
+  underlineActive?: boolean
+  /** Force stacked chrome (overrides matchMedia when provided). */
+  stacked?: boolean
+  /** Idle hint: first segment in viewport (dimmed header icons, no focus). */
+  viewportAnchorId?: string | null
+  /** When false, hide dimmed viewport-anchor header icons (pointer is moving). */
+  idleViewportChrome?: boolean
+  /** Parent forces bright header centres (e.g. hovering the magnetic rail). */
+  forceChromeReveal?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -43,6 +57,8 @@ const emit = defineEmits<{
   undo: [segId: string]
   redo: [segId: string]
   targetSelection: [segId: string, range: { start: number; end: number } | null]
+  rowHover: [segId: string | null]
+  toggleStyle: [prop: 'bold' | 'italic' | 'underline']
 }>()
 
 const showConcordance = FEATURE_TM_CONCORDANCE
@@ -73,6 +89,24 @@ const displayId = computed(() => {
 const editors = ref<Record<string, { focus: () => void; sync: () => void; blur: () => void } | null>>(
   {},
 )
+
+const mediaStacked = ref(false)
+let mql: MediaQueryList | null = null
+
+function onMqChange() {
+  mediaStacked.value = mql?.matches ?? false
+}
+
+const isStacked = computed(() => props.stacked ?? mediaStacked.value)
+
+onMounted(() => {
+  mql = window.matchMedia('(max-width: 800px)')
+  onMqChange()
+  mql.addEventListener('change', onMqChange)
+})
+onUnmounted(() => {
+  mql?.removeEventListener('change', onMqChange)
+})
 
 watch(
   () => props.activeSegmentId,
@@ -161,6 +195,25 @@ function onTargetSelection(segId: string, range: { start: number; end: number } 
 const concordanceOpen = ref(false)
 const auditOpen = ref(false)
 
+/** Column “armed” by click — not only DOM focus inside an input. */
+const columnFocus = ref<'source' | 'target' | null>(null)
+
+function armColumn(which: 'source' | 'target') {
+  columnFocus.value = which
+  // Clicks on header chrome must activate the segment too (rail locks to active).
+  const id = sorted.value[0]?.id
+  if (id) emit('activate', id)
+}
+
+watch(
+  () => props.activeSegmentId,
+  (id) => {
+    if (!id || !sorted.value.some((s) => s.id === id)) {
+      columnFocus.value = null
+    }
+  },
+)
+
 function onConcordanceOpenChange(open: boolean) {
   concordanceOpen.value = open
 }
@@ -208,6 +261,33 @@ function onRedo() {
     editors.value[activeSeg.value!.id]?.focus()
   })
 }
+
+function onRowEnter() {
+  emit('rowHover', sorted.value[0]?.id ?? null)
+}
+
+function onRowLeave(e: MouseEvent) {
+  const related = e.relatedTarget
+  if (related instanceof Element && related.closest('.magnetic-rail, .magnetic-cluster')) return
+  emit('rowHover', null)
+}
+
+/** While another segment is active, don't reveal header icons on hover of this row. */
+const ownsChromeReveal = computed(() => {
+  const active = props.activeSegmentId
+  if (!active) return true
+  return sorted.value.some((s) => s.id === active)
+})
+
+const isViewportAnchor = computed(() => {
+  const id = props.viewportAnchorId
+  return Boolean(id && sorted.value.some((s) => s.id === id))
+})
+
+const showIdleViewportChrome = computed(
+  () => isViewportAnchor.value && props.idleViewportChrome !== false,
+)
+
 </script>
 
 <template>
@@ -218,136 +298,179 @@ function onRedo() {
       active: sorted.some((s) => s.id === activeSegmentId),
       'concordance-open': concordanceOpen,
       'audit-open': auditOpen,
+      'owns-chrome': ownsChromeReveal,
+      'viewport-anchor': showIdleViewportChrome,
+      'force-chrome': !!forceChromeReveal,
+      stacked: isStacked,
     }"
+    @mouseenter="onRowEnter"
+    @mouseleave="onRowLeave($event)"
   >
-    <div class="meta">
-      <div class="meta-source">
-        <span class="seg-id">{{ displayId }}</span>
-        <span v-if="kinds.length">
-          <span class="meta-sep" aria-hidden="true">·</span>
-          <span v-for="kind in kinds" :key="kind" class="seg-kind" :class="kindClass(kind)">
-            {{ t(`editor.kind.${kind}`) }}
-          </span>
-        </span>
-      </div>
-      <div class="meta-center" role="toolbar" :aria-label="displayId">
-        <TmConcordancePanel
-          v-if="showConcordance"
-          :units="tmUnits ?? []"
-          :seed-query="concordanceSeed"
-          :enabled="!!activeSeg"
-          @insert="onConcordanceInsert"
-          @open-change="onConcordanceOpenChange"
-        />
-        <SegmentAuditPopover
-          :entries="activeSeg?.audit ?? []"
-          @open-change="onAuditOpenChange"
-        />
-      </div>
-      <div class="meta-target">
-        <TmVariantPicker
-          :matches="activeSeg ? matchesFor(activeSeg) : []"
-          :current-target="activeSeg?.target ?? ''"
-          @pick="activeSeg && onPick(activeSeg, $event)"
-        />
-        <div
-          v-if="activeSeg"
-          class="seg-history"
-          role="group"
-          :aria-label="t('editor.undoHint')"
-        >
-          <IconButton
-            :title="t('editor.undoHint')"
-            :disabled="!undoAvailable(activeSeg.id)"
-            @mousedown.prevent
-            @click="onUndo"
-          >
-            <EditorGlyph name="undo" />
-          </IconButton>
-          <IconButton
-            class="redo-btn"
-            :title="
-              stepsToTip(activeSeg.id) > 0
-                ? t('editor.redoStepsHint', { n: stepsToTip(activeSeg.id) })
-                : t('editor.redoHint')
-            "
-            :disabled="!redoAvailable(activeSeg.id)"
-            @mousedown.prevent
-            @click="onRedo"
-          >
-            <EditorGlyph name="redo" />
-            <span
-              v-if="stepsToTip(activeSeg.id) > 0"
-              class="redo-badge"
-              aria-hidden="true"
-            >{{ stepsToTip(activeSeg.id) }}</span>
-          </IconButton>
-        </div>
-        <IconButton
-          v-show="canSaveToTm(activeSeg)"
-          class="tm-save-btn"
-          :title="t('editor.tmCommitHint')"
-          @mousedown.prevent
-          @click="onSaveToTm"
-        >
-          <EditorGlyph name="tm-commit" />
-        </IconButton>
-      </div>
-    </div>
-
     <div class="segment-workspace">
-      <div class="pane source-pane" :class="{ filled: sorted[0] && filled(sorted[0]) }">
-        <div
-          v-for="seg in sorted"
-          :key="`src-${seg.id}`"
-          class="slot"
-          :class="{ 'slot-active': seg.id === activeId }"
-          @mousedown="emit('activate', seg.id)"
-        >
-          <RichSourceView
-            :tagged-source="seg.source"
-            :spans="sourceSpansFor(seg)"
-          />
+      <div
+        class="col source-col"
+        :class="{ 'col--armed': columnFocus === 'source' }"
+        @mousedown="armColumn('source')"
+      >
+        <div class="source-header">
+          <div class="header-start">
+            <span class="seg-id">{{ displayId }}</span>
+            <span v-if="kinds.length" class="kinds">
+              <span class="meta-sep" aria-hidden="true">·</span>
+              <span v-for="kind in kinds" :key="kind" class="seg-kind" :class="kindClass(kind)">
+                {{ t(`editor.kind.${kind}`) }}
+              </span>
+            </span>
+          </div>
+          <div class="header-center header-center--reveal" role="toolbar" :aria-label="displayId">
+            <TmConcordancePanel
+              v-if="showConcordance"
+              :units="tmUnits ?? []"
+              :seed-query="concordanceSeed"
+              :enabled="!!activeSeg"
+              @insert="onConcordanceInsert"
+              @open-change="onConcordanceOpenChange"
+            />
+            <SegmentAuditPopover
+              :entries="activeSeg?.audit ?? []"
+              @open-change="onAuditOpenChange"
+            />
+          </div>
+          <div class="header-end" aria-hidden="true" />
         </div>
-      </div>
-
-      <div class="mid-toolbar" role="toolbar" :aria-label="displayId">
-        <IconButton :title="t('editor.copySourceHint')" @mousedown.prevent @click="onCopy">
-          <EditorGlyph name="copy" />
-        </IconButton>
-        <IconButton
-          :title="t('editor.leaveEmptyHint')"
-          :active="leaveEmptyActive(activeSeg)"
-          @mousedown.prevent
-          @click="onLeaveEmpty"
-        >
-          <EditorGlyph name="leave-empty" />
-        </IconButton>
-        <IconButton :title="t('editor.resetTargetHint')" @mousedown.prevent @click="onReset">
-          <EditorGlyph name="reset" />
-        </IconButton>
+        <div class="pane source-pane">
+          <div
+            v-for="seg in sorted"
+            :key="`src-${seg.id}`"
+            class="slot"
+            :class="{ 'slot-active': seg.id === activeId }"
+            @mousedown="emit('activate', seg.id)"
+          >
+            <RichSourceView
+              :tagged-source="seg.source"
+              :spans="sourceSpansFor(seg)"
+            />
+          </div>
+        </div>
       </div>
 
       <div
-        class="pane target-pane"
-        :class="{ filled: sorted[0] && filled(sorted[0]) }"
+        class="rail-gutter"
+        :class="{ 'rail-gutter--stacked': isStacked }"
+        :aria-hidden="!isStacked"
+        @mouseenter="emit('rowHover', sorted[0]?.id ?? null)"
       >
         <div
-          v-for="seg in sorted"
-          :key="`tgt-${seg.id}`"
-          class="slot target-slot"
-          :class="{ 'slot-active': seg.id === activeId }"
-          @mousedown="emit('activate', seg.id)"
-          @focusin="emit('activate', seg.id)"
+          v-if="isStacked"
+          class="stacked-actions"
+          role="toolbar"
+          :aria-label="t('editor.pairActionsLabel')"
         >
-          <RichTargetEditor
-            :ref="(el) => { editors[seg.id] = el as any }"
-            :model-value="seg.target"
-            :styles="seg.targetStyles"
-            :placeholder="t('editor.sentencePlaceholder')"
-            @change="onTargetUpdate(seg.id, $event.target, $event.styles)"
-            @selection-change="onTargetSelection(seg.id, $event)"
-          />
+          <IconButton :title="t('editor.copySourceHint')" @mousedown.prevent @click="onCopy">
+            <EditorGlyph name="copy" />
+          </IconButton>
+          <IconButton
+            :title="t('editor.leaveEmptyHint')"
+            :active="leaveEmptyActive(activeSeg)"
+            @mousedown.prevent
+            @click="onLeaveEmpty"
+          >
+            <EditorGlyph name="leave-empty" />
+          </IconButton>
+          <IconButton :title="t('editor.resetTargetHint')" @mousedown.prevent @click="onReset">
+            <EditorGlyph name="reset" />
+          </IconButton>
+        </div>
+      </div>
+
+      <div
+        class="col target-col"
+        :class="{ 'col--armed': columnFocus === 'target' }"
+        @mousedown="armColumn('target')"
+      >
+        <div class="target-header">
+          <div class="header-start">
+            <TmVariantPicker
+              :matches="activeSeg ? matchesFor(activeSeg) : []"
+              :current-target="activeSeg?.target ?? ''"
+              @pick="activeSeg && onPick(activeSeg, $event)"
+            />
+          </div>
+          <div class="header-center header-center--reveal">
+            <StyleToolbar
+              :disabled="styleDisabled"
+              :has-selection="!!hasStyleSelection"
+              :bold-active="!!boldActive"
+              :italic-active="!!italicActive"
+              :underline-active="!!underlineActive"
+              @toggle="emit('toggleStyle', $event)"
+            />
+          </div>
+          <div class="header-end">
+            <div
+              v-if="activeSeg"
+              class="seg-history"
+              role="group"
+              :aria-label="t('editor.undoHint')"
+            >
+              <IconButton
+                :title="t('editor.undoHint')"
+                :disabled="!undoAvailable(activeSeg.id)"
+                @mousedown.prevent
+                @click="onUndo"
+              >
+                <EditorGlyph name="undo" />
+              </IconButton>
+              <IconButton
+                class="redo-btn"
+                :title="
+                  stepsToTip(activeSeg.id) > 0
+                    ? t('editor.redoStepsHint', { n: stepsToTip(activeSeg.id) })
+                    : t('editor.redoHint')
+                "
+                :disabled="!redoAvailable(activeSeg.id)"
+                @mousedown.prevent
+                @click="onRedo"
+              >
+                <EditorGlyph name="redo" />
+                <span
+                  v-if="stepsToTip(activeSeg.id) > 0"
+                  class="redo-badge"
+                  aria-hidden="true"
+                >{{ stepsToTip(activeSeg.id) }}</span>
+              </IconButton>
+            </div>
+            <IconButton
+              v-show="canSaveToTm(activeSeg)"
+              class="tm-save-btn"
+              :title="t('editor.tmCommitHint')"
+              @mousedown.prevent
+              @click="onSaveToTm"
+            >
+              <EditorGlyph name="tm-commit" />
+            </IconButton>
+          </div>
+        </div>
+        <div
+          class="pane target-pane"
+          :class="{ filled: sorted[0] && filled(sorted[0]) }"
+        >
+          <div
+            v-for="seg in sorted"
+            :key="`tgt-${seg.id}`"
+            class="slot target-slot"
+            :class="{ 'slot-active': seg.id === activeId }"
+            @mousedown="emit('activate', seg.id)"
+            @focusin="emit('activate', seg.id)"
+          >
+            <RichTargetEditor
+              :ref="(el) => { editors[seg.id] = el as any }"
+              :model-value="seg.target"
+              :styles="seg.targetStyles"
+              @change="onTargetUpdate(seg.id, $event.target, $event.styles)"
+              @selection-change="onTargetSelection(seg.id, $event)"
+            />
+          </div>
         </div>
       </div>
     </div>
@@ -355,10 +478,9 @@ function onRedo() {
 </template>
 
 <style scoped lang="scss">
-$row-grid: 1fr auto 1fr;
+$rail-col-width: 2rem;
 $row-gap: 0.65rem;
 $toolbar-icon-size: 1.75rem;
-$toolbar-col-width: 2rem;
 
 .row {
   border-radius: 12px;
@@ -372,91 +494,152 @@ $toolbar-col-width: 2rem;
   box-shadow: 0 0 0 2px rgba(91, 159, 212, 0.35);
 }
 
-.meta {
+.row.concordance-open,
+.row.audit-open {
+  position: relative;
+  z-index: 14;
+}
+
+.segment-workspace {
   display: grid;
-  grid-template-columns: $row-grid;
+  grid-template-columns: 1fr $rail-col-width 1fr;
+  grid-template-rows: auto minmax(6rem, auto);
   column-gap: $row-gap;
-  align-items: center;
-  margin-bottom: 0.45rem;
-  font-size: 0.8rem;
-  /* Keep row height stable when badge / TM-save appear */
-  min-height: 1.5rem;
+  row-gap: 0.35rem;
+  align-items: stretch;
 }
 
-.meta-source,
-.meta-target {
-  display: flex;
-  align-items: center;
-  gap: 0.45rem;
+/* Flatten columns into the parent grid so both panes share one row (same top). */
+.source-col,
+.target-col {
+  display: contents;
+}
+
+.source-header {
+  grid-column: 1;
+  grid-row: 1;
+}
+
+.target-header {
+  grid-column: 3;
+  grid-row: 1;
+}
+
+.source-pane {
+  grid-column: 1;
+  grid-row: 2;
   min-width: 0;
-  min-height: 1.5rem;
 }
 
-.meta-source {
-  flex-wrap: wrap;
+.target-pane {
+  grid-column: 3;
+  grid-row: 2;
+  min-width: 0;
 }
 
-.meta-center {
+.source-header,
+.target-header {
   display: flex;
-  justify-content: center;
   align-items: center;
-  gap: 0.2rem;
-  justify-self: center;
-  min-width: $toolbar-col-width;
+  justify-content: space-between;
+  gap: 0.35rem;
+  min-height: 1.5rem;
+  font-size: 0.8rem;
+}
+
+.header-start,
+.header-center,
+.header-end {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
+.header-start {
+  flex: 0 1 auto;
+}
+
+.header-center {
+  justify-content: center;
+  flex: 1 1 auto;
+}
+
+/* Search / audit / styles — hide by default. */
+.source-col > .source-header > .header-center--reveal,
+.target-col > .target-header > .header-center--reveal {
   opacity: 0;
   pointer-events: none;
   transition: opacity 0.12s ease;
 }
 
-.row:hover .meta-center,
-.row.active .meta-center,
-.row.concordance-open .meta-center,
-.row.audit-open .meta-center,
-.meta-center:focus-within,
-.meta-center:has(.markers-flash) {
+/* Idle: first segment in viewport shows dimmed icons (no focus / not clickable). */
+.row.viewport-anchor .header-center--reveal {
+  opacity: 0.35;
+  pointer-events: none;
+}
+
+/*
+ * Engaged: whole row (source, gaps, rail gutter, target).
+ * Do not key off `.target-col:hover` — columns use `display: contents` and don't receive hover.
+ */
+.row.owns-chrome:hover .header-center--reveal,
+.row.owns-chrome:focus-within .header-center--reveal,
+.row.owns-chrome:has(.col--armed) .header-center--reveal,
+.row.owns-chrome.concordance-open .header-center--reveal,
+.row.owns-chrome.audit-open .header-center--reveal,
+.row.force-chrome .header-center--reveal {
   opacity: 1;
   pointer-events: auto;
 }
 
-.meta-center :deep(.icon-btn) {
-  width: 1.5rem;
-  height: 1.5rem;
+.header-end {
+  justify-content: flex-end;
+  flex: 0 0 auto;
+  margin-left: auto;
+  gap: 0.15rem;
 }
 
-.meta-center :deep(.icon-btn.active) {
+.kinds {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.rail-gutter {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  width: $rail-col-width;
+  justify-self: center;
+  align-self: stretch;
+  /* Keep a hoverable strip even when empty (desktop magnetic rail lives outside the row). */
+  min-height: 100%;
+}
+
+.rail-gutter--stacked {
+  width: auto;
+  justify-self: stretch;
+  display: flex;
+  justify-content: center;
+  padding: 0.15rem 0;
+}
+
+.stacked-actions {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+}
+
+.stacked-actions :deep(.icon-btn) {
+  width: $toolbar-icon-size;
+  height: $toolbar-icon-size;
+  border-radius: 6px;
+}
+
+.stacked-actions :deep(.icon-btn.active) {
   color: var(--accent);
-}
-
-/* Triggered via .markers-flash (pointerenter) — class lands on IconButton root. */
-.meta-center :deep(.markers-btn.markers-flash) {
-  animation: markers-hover-flash 0.28s ease-out;
-}
-
-@keyframes markers-hover-flash {
-  0% {
-    color: var(--text-muted);
-    filter: none;
-    text-shadow: none;
-  }
-  30% {
-    color: #9fe8ff;
-    filter: drop-shadow(0 0 2px #fff) drop-shadow(0 0 6px #5b9fd4)
-      drop-shadow(0 0 14px #3d8ecf) drop-shadow(0 0 22px rgba(91, 159, 212, 0.85));
-    text-shadow:
-      0 0 4px #fff,
-      0 0 10px #7ec8ff,
-      0 0 18px #5b9fd4;
-  }
-  100% {
-    color: var(--text-muted);
-    filter: none;
-    text-shadow: none;
-  }
-}
-
-.meta-target {
-  flex-wrap: nowrap;
-  justify-content: flex-start;
 }
 
 .tm-save-btn {
@@ -467,17 +650,6 @@ $toolbar-col-width: 2rem;
   display: inline-flex;
   align-items: center;
   gap: 0.1rem;
-  margin-left: auto;
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 0.12s ease;
-}
-
-.row:hover .seg-history,
-.row.active .seg-history,
-.seg-history:focus-within {
-  opacity: 1;
-  pointer-events: auto;
 }
 
 .redo-btn {
@@ -501,8 +673,8 @@ $toolbar-col-width: 2rem;
   pointer-events: none;
 }
 
-.tm-save-btn :deep(.icon-btn),
-.meta-target :deep(.icon-btn) {
+.header-end :deep(.icon-btn),
+.header-center :deep(.icon-btn) {
   width: 1.5rem;
   height: 1.5rem;
 }
@@ -554,53 +726,6 @@ $toolbar-col-width: 2rem;
   color: var(--kind-caption);
 }
 
-.segment-workspace {
-  display: grid;
-  grid-template-columns: $row-grid;
-  column-gap: $row-gap;
-  align-items: stretch;
-}
-
-.mid-toolbar {
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  align-items: center;
-  gap: 0.35rem;
-  width: $toolbar-col-width;
-  justify-self: center;
-  padding: 0.2rem 0;
-  align-self: center;
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 0.12s ease;
-}
-
-.row:hover .mid-toolbar,
-.row.active .mid-toolbar,
-.row.concordance-open .mid-toolbar,
-.row.audit-open .mid-toolbar,
-.mid-toolbar:focus-within {
-  opacity: 1;
-  pointer-events: auto;
-}
-
-.row.concordance-open,
-.row.audit-open {
-  position: relative;
-  z-index: 14;
-}
-
-.mid-toolbar :deep(.icon-btn) {
-  width: $toolbar-icon-size;
-  height: $toolbar-icon-size;
-  border-radius: 6px;
-}
-
-.mid-toolbar :deep(.icon-btn.active) {
-  color: var(--accent);
-}
-
 .pane {
   width: 100%;
   min-width: 0;
@@ -617,7 +742,6 @@ $toolbar-col-width: 2rem;
   background: var(--surface-2);
 }
 
-/* Same base metrics so Word font/size from spans aren't skewed by pane chrome. */
 .source-pane,
 .target-pane {
   font-family: 'Times New Roman', Times, serif;
@@ -627,12 +751,11 @@ $toolbar-col-width: 2rem;
 
 .target-pane {
   cursor: text;
-  /* Beat parent .editor-readonly pointer-events:none when lease is ok;
-     also ensure clicks reach the contenteditable under overlays. */
   pointer-events: auto;
+  background: var(--target-pane-bg);
 }
 
-.pane.filled {
+.target-pane.filled {
   background: var(--target-filled-bg);
 }
 
@@ -641,21 +764,41 @@ $toolbar-col-width: 2rem;
 }
 
 @media (max-width: 800px) {
-  .meta,
   .segment-workspace {
     grid-template-columns: 1fr;
+    grid-template-rows: none;
     row-gap: 0.45rem;
   }
 
-  .meta-center {
-    justify-self: stretch;
-    width: 100%;
+  .source-col,
+  .target-col {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    min-width: 0;
   }
 
-  .mid-toolbar {
-    flex-direction: row;
+  .source-header,
+  .source-pane,
+  .target-header,
+  .target-pane,
+  .rail-gutter {
+    grid-column: auto;
+    grid-row: auto;
+  }
+
+  .source-col {
+    order: 1;
+  }
+
+  .rail-gutter {
+    order: 2;
     width: auto;
-    justify-content: center;
+    align-self: stretch;
+  }
+
+  .target-col {
+    order: 3;
   }
 }
 </style>

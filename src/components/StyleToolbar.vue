@@ -22,6 +22,7 @@ const can = () => !props.disabled && props.hasSelection
 <template>
   <div class="style-toolbar" role="toolbar" :aria-label="t('editor.styleToolbarLabel')">
     <IconButton
+      ghost
       title="Bold (Ctrl+B)"
       :active="boldActive"
       :disabled="!can()"
@@ -31,6 +32,7 @@ const can = () => !props.disabled && props.hasSelection
       <span class="glyph">B</span>
     </IconButton>
     <IconButton
+      ghost
       title="Italic (Ctrl+I)"
       :active="italicActive"
       :disabled="!can()"
@@ -40,6 +42,7 @@ const can = () => !props.disabled && props.hasSelection
       <span class="glyph glyph-i">I</span>
     </IconButton>
     <IconButton
+      ghost
       title="Underline (Ctrl+U)"
       :active="underlineActive"
       :disabled="!can()"
@@ -56,11 +59,10 @@ const can = () => !props.disabled && props.hasSelection
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 0.15rem;
-  padding: 0.15rem 0.35rem;
-  border-radius: 6px;
-  background: var(--surface-2);
-  border: 1px solid var(--border);
+  gap: 0.1rem;
+  padding: 0;
+  background: transparent;
+  border: none;
 }
 
 .glyph {
