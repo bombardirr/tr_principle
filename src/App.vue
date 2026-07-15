@@ -24,6 +24,7 @@ const showNameNudge = computed(() => needsDisplayName(user.value))
 
 const settingsOpen = ref(false)
 const settingsRoot = ref<HTMLElement | null>(null)
+const settingsTab = ref<'account' | 'keys'>('account')
 const nameDraft = ref('')
 const settingsBusy = ref(false)
 const settingsError = ref('')
@@ -57,6 +58,7 @@ function onToggleLocale() {
 
 function openSettings() {
   nameDraft.value = user.value?.display_name ?? ''
+  settingsTab.value = 'account'
   settingsError.value = ''
   settingsSaved.value = false
   settingsOpen.value = true
@@ -120,35 +122,64 @@ async function onLogout() {
               <EditorGlyph name="settings" />
               <span v-if="showNameNudge" class="settings-dot" aria-hidden="true" />
             </IconButton>
-            <div v-if="settingsOpen" class="settings-pop" role="dialog" :aria-label="t('auth.settingsTitle')">
-              <p class="settings-title">{{ t('auth.settingsTitle') }}</p>
-              <label class="settings-field">
-                <span>{{ t('auth.displayName') }}</span>
-                <input
-                  v-model="nameDraft"
-                  type="text"
-                  maxlength="80"
-                  :placeholder="t('auth.displayNamePlaceholder')"
-                  @keydown.enter.prevent="saveDisplayName"
-                />
-                <span v-if="showNameNudge" class="settings-hint settings-hint--nudge">{{
-                  t('auth.displayNameNudge')
-                }}</span>
-                <span v-else class="settings-hint">{{ t('auth.displayNameHint') }}</span>
-              </label>
-              <p class="settings-email">
-                <span>{{ t('auth.email') }}</span>
-                {{ user?.email }}
-              </p>
-              <p v-if="settingsError" class="settings-error">{{ settingsError }}</p>
-              <p v-else-if="settingsSaved" class="settings-ok">{{ t('auth.save') }} ✓</p>
-              <div class="settings-actions">
-                <button type="button" class="primary" :disabled="settingsBusy" @click="saveDisplayName">
-                  {{ t('auth.save') }}
+            <div v-if="settingsOpen" class="settings-pop" role="dialog" :aria-label="t('auth.settings')">
+              <p class="settings-title">{{ t('auth.settings') }}</p>
+              <div class="settings-tabs" role="tablist">
+                <button
+                  type="button"
+                  role="tab"
+                  class="settings-tab"
+                  :class="{ active: settingsTab === 'account' }"
+                  :aria-selected="settingsTab === 'account'"
+                  @click="settingsTab = 'account'"
+                >
+                  {{ t('auth.settingsTabAccount') }}
                 </button>
-                <button type="button" class="ghost danger" :disabled="settingsBusy" @click="onLogout">
-                  {{ t('auth.logout') }}
+                <button
+                  type="button"
+                  role="tab"
+                  class="settings-tab"
+                  :class="{ active: settingsTab === 'keys' }"
+                  :aria-selected="settingsTab === 'keys'"
+                  @click="settingsTab = 'keys'"
+                >
+                  {{ t('auth.settingsTabKeys') }}
                 </button>
+              </div>
+
+              <div v-if="settingsTab === 'account'" role="tabpanel" class="settings-panel">
+                <label class="settings-field">
+                  <span>{{ t('auth.displayName') }}</span>
+                  <input
+                    v-model="nameDraft"
+                    type="text"
+                    maxlength="80"
+                    :placeholder="t('auth.displayNamePlaceholder')"
+                    @keydown.enter.prevent="saveDisplayName"
+                  />
+                  <span v-if="showNameNudge" class="settings-hint settings-hint--nudge">{{
+                    t('auth.displayNameNudge')
+                  }}</span>
+                  <span v-else class="settings-hint">{{ t('auth.displayNameHint') }}</span>
+                </label>
+                <p class="settings-email">
+                  <span>{{ t('auth.email') }}</span>
+                  {{ user?.email }}
+                </p>
+                <p v-if="settingsError" class="settings-error">{{ settingsError }}</p>
+                <p v-else-if="settingsSaved" class="settings-ok">{{ t('auth.save') }} ✓</p>
+                <div class="settings-actions">
+                  <button type="button" class="primary" :disabled="settingsBusy" @click="saveDisplayName">
+                    {{ t('auth.save') }}
+                  </button>
+                  <button type="button" class="ghost danger" :disabled="settingsBusy" @click="onLogout">
+                    {{ t('auth.logout') }}
+                  </button>
+                </div>
+              </div>
+
+              <div v-else role="tabpanel" class="settings-panel">
+                <p class="settings-stub">{{ t('auth.settingsKeysStub') }}</p>
               </div>
             </div>
           </div>
@@ -274,9 +305,48 @@ async function onLogout() {
 }
 
 .settings-title {
-  margin: 0 0 0.75rem;
+  margin: 0 0 0.55rem;
   font-size: 0.95rem;
   font-weight: 600;
+}
+
+.settings-tabs {
+  display: flex;
+  gap: 0.15rem;
+  margin-bottom: 0.75rem;
+  padding: 0.15rem;
+  border-radius: 8px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+}
+
+.settings-tab {
+  flex: 1;
+  border: 0;
+  border-radius: 6px;
+  padding: 0.35rem 0.5rem;
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--text-muted);
+  background: transparent;
+  cursor: pointer;
+}
+
+.settings-tab.active {
+  color: var(--text);
+  background: var(--surface);
+  box-shadow: 0 0 0 1px var(--border-strong);
+}
+
+.settings-panel {
+  min-height: 4rem;
+}
+
+.settings-stub {
+  margin: 0.25rem 0 0;
+  font-size: 0.82rem;
+  line-height: 1.4;
+  color: var(--text-muted);
 }
 
 .settings-field {

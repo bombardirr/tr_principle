@@ -6,6 +6,7 @@ import {
   Check,
   ChevronLeft,
   CircleX,
+  Clipboard,
   CloudDownload,
   CloudUpload,
   Contrast,
@@ -21,11 +22,14 @@ import {
   History,
   ListRestart,
   Percent,
+  Redo2,
   RefreshCw,
   Save,
+  Search,
   Settings,
   SquareCheck,
   Trash2,
+  Undo2,
   Upload,
   X,
 } from '@lucide/vue'
@@ -33,6 +37,7 @@ import {
 export type GlyphName =
   | 'back'
   | 'copy'
+  | 'clipboard'
   | 'leave-empty'
   | 'reset'
   | 'preview'
@@ -58,6 +63,9 @@ export type GlyphName =
   | 'cloud-upload'
   | 'cloud-download'
   | 'audit'
+  | 'concordance'
+  | 'undo'
+  | 'redo'
 
 const props = defineProps<{
   name: GlyphName
@@ -66,6 +74,7 @@ const props = defineProps<{
 const icons: Record<GlyphName, Component> = {
   back: ChevronLeft,
   copy: ArrowRightFromLine,
+  clipboard: Clipboard,
   'leave-empty': SquareCheck,
   reset: CircleX,
   preview: Eye,
@@ -91,6 +100,9 @@ const icons: Record<GlyphName, Component> = {
   'cloud-upload': CloudUpload,
   'cloud-download': CloudDownload,
   audit: History,
+  concordance: Search,
+  undo: Undo2,
+  redo: Redo2,
 }
 </script>
 

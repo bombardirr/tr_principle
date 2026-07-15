@@ -19,6 +19,7 @@ import { useProjectAccess } from '@/composables/useProjectAccess'
 import { withSegmentAudit } from '@/utils/segmentAudit'
 import { scheduleProjectBackup, pushProjectBackup } from '@/projects/backup'
 import { useTmSettings } from '@/composables/useTmSettings'
+import { useSegmentHistory } from '@/composables/useSegmentHistory'
 import { findTmMatches } from '@/tm/match'
 import { findLangPairPreset, langPairLabel } from '@/tm/langPairs'
 import { tmLookupKey } from '@/tm/normalize'
@@ -56,7 +57,10 @@ let saveTimer: ReturnType<typeof setTimeout> | null = null
 let loadGen = 0
 
 const SAVE_IDLE_MS = 3000
+const UNDO_SAVE_IDLE_MS = 1500
 const PREVIEW_STORAGE_KEY = 'appzac-preview-enabled'
+
+const segHistory = useSegmentHistory()
 
 const previewEnabled = ref(
   typeof localStorage !== 'undefined' && localStorage.getItem(PREVIEW_STORAGE_KEY) === '1',
@@ -439,7 +443,7 @@ function patchSegment(segId: string, patch: Partial<Segment>) {
   }
 }
 
-function scheduleSave() {
+function scheduleSave(idleMs = SAVE_IDLE_MS) {
   if (!record.value || projectLease.blocked.value) return
   allSaved.value = false
   notice.value = ''
@@ -454,7 +458,7 @@ function scheduleSave() {
     } finally {
       saving.value = false
     }
-  }, SAVE_IDLE_MS)
+  }, idleMs)
 }
 
 function editActor() {
@@ -464,6 +468,7 @@ function editActor() {
 function updateTarget(seg: Segment, value: string) {
   if (!record.value || projectLease.blocked.value) return
   notice.value = ''
+  segHistory.seed(seg)
   const by = editActor()
   patchSegment(seg.id, {
     target: value,
@@ -479,6 +484,8 @@ function updateTarget(seg: Segment, value: string) {
       after: value,
     }),
   })
+  const after = record.value?.segments.find((s) => s.id === seg.id)
+  if (after) segHistory.commit(after, { coalesce: true })
   markTmAutosave(seg.id)
   scheduleSave()
 }
@@ -491,6 +498,7 @@ function updateTargetById(segId: string, value: string) {
 function copySource(seg: Segment) {
   if (!record.value || projectLease.blocked.value) return
   notice.value = ''
+  segHistory.seed(seg)
   const by = editActor()
   patchSegment(seg.id, {
     target: seg.source,
@@ -506,6 +514,8 @@ function copySource(seg: Segment) {
       after: seg.source,
     }),
   })
+  const after = record.value?.segments.find((s) => s.id === seg.id)
+  if (after) segHistory.commit(after)
   markTmAutosave(seg.id)
   scheduleSave()
 }
@@ -519,6 +529,7 @@ function leaveEmpty(seg: Segment) {
   if (!record.value || projectLease.blocked.value) return
   notice.value = ''
   clearTmAutosave(seg.id)
+  segHistory.seed(seg)
   const by = editActor()
   patchSegment(seg.id, {
     target: '',
@@ -534,6 +545,8 @@ function leaveEmpty(seg: Segment) {
       after: '',
     }),
   })
+  const after = record.value?.segments.find((s) => s.id === seg.id)
+  if (after) segHistory.commit(after)
   scheduleSave()
 }
 
@@ -546,6 +559,7 @@ function resetTarget(seg: Segment) {
   if (!record.value || projectLease.blocked.value) return
   notice.value = ''
   clearTmAutosave(seg.id)
+  segHistory.seed(seg)
   const by = editActor()
   patchSegment(seg.id, {
     target: '',
@@ -561,6 +575,8 @@ function resetTarget(seg: Segment) {
       after: '',
     }),
   })
+  const after = record.value?.segments.find((s) => s.id === seg.id)
+  if (after) segHistory.commit(after)
   void removeSegmentFromTm(seg)
   scheduleSave()
 }
@@ -637,11 +653,40 @@ const tmHintSegmentIds = computed(() => {
     .map((seg) => seg.id)
 })
 
+function insertConcordanceTarget(segId: string, target: string) {
+  if (!record.value || projectLease.blocked.value) return
+  const seg = record.value.segments.find((s) => s.id === segId)
+  if (!seg) return
+  notice.value = ''
+  segHistory.seed(seg)
+  const by = editActor()
+  patchSegment(segId, {
+    target,
+    status: 'draft',
+    tmSavePending: false,
+    origin: 'tm',
+    updatedBy: by,
+    updatedAt: new Date().toISOString(),
+    ...withSegmentAudit(seg, {
+      action: 'tm',
+      by,
+      detail: 'concordance',
+      before: seg.target,
+      after: target,
+    }),
+  })
+  const after = record.value?.segments.find((s) => s.id === segId)
+  if (after) segHistory.commit(after)
+  activateSegment(segId)
+  scheduleSave()
+}
+
 function applyTmMatch(segId: string, match: TmMatch) {
   if (!record.value || projectLease.blocked.value) return
   const seg = record.value.segments.find((s) => s.id === segId)
   if (!seg) return
   notice.value = ''
+  segHistory.seed(seg)
   const by = match.unitId ? `tm:${match.unitId}` : 'tm'
   patchSegment(segId, {
     target: match.target,
@@ -658,7 +703,36 @@ function applyTmMatch(segId: string, match: TmMatch) {
       after: match.target,
     }),
   })
+  const after = record.value?.segments.find((s) => s.id === segId)
+  if (after) segHistory.commit(after)
   scheduleSave()
+}
+
+function restoreSegmentSnapshot(segId: string, snap: { target: string; status: Segment['status'] }) {
+  if (!record.value || projectLease.blocked.value) return
+  patchSegment(segId, {
+    target: snap.target,
+    status: snap.status,
+    tmSavePending: false,
+    origin: 'manual',
+    updatedBy: editActor(),
+    updatedAt: new Date().toISOString(),
+  })
+  if (snap.target.trim()) markTmAutosave(segId)
+  else clearTmAutosave(segId)
+  scheduleSave(UNDO_SAVE_IDLE_MS)
+}
+
+function undoSegment(segId: string) {
+  if (!record.value || projectLease.blocked.value) return
+  const snap = segHistory.undo(segId)
+  if (snap) restoreSegmentSnapshot(segId, snap)
+}
+
+function redoSegment(segId: string) {
+  if (!record.value || projectLease.blocked.value) return
+  const snap = segHistory.redo(segId)
+  if (snap) restoreSegmentSnapshot(segId, snap)
 }
 
 async function saveSegmentToTmById(segId: string) {
@@ -737,6 +811,8 @@ async function withSaving<T>(fn: () => Promise<T>): Promise<T | undefined> {
 }
 
 function activateSegment(segId: string) {
+  const seg = record.value?.segments.find((s) => s.id === segId)
+  if (seg) segHistory.seed(seg)
   if (activeSegmentId.value === segId) return
   activeSegmentId.value = segId
   scheduleScrollPersist()
@@ -826,6 +902,10 @@ async function downloadProject() {
 
 async function exportDocx() {
   if (!record.value) return
+  if (!allSaved.value) {
+    const ok = window.confirm(t('editor.exportUnsavedConfirm'))
+    if (!ok) return
+  }
   await withSaving(async () => {
     const blob = await buildTranslatedDocx(record.value!.docx, record.value!.segments)
     downloadBlob(blob, `${record.value!.meta.name}.translated.docx`)
@@ -1027,6 +1107,7 @@ async function goBack() {
       :class="{ 'with-preview': previewEnabled, 'editor-readonly': projectLease.blocked.value }"
     >
       <div class="editor-main">
+        <div id="editor-concordance-root" class="editor-concordance-root" />
         <ParagraphBlock
           v-for="(seg, i) in record.segments"
           :key="seg.id"
@@ -1035,12 +1116,19 @@ async function goBack() {
           :active-segment-id="activeSegmentId"
           :matches-for="matchesFor"
           :needs-tm-save="needsTmSave"
+          :tm-units="tmUnits"
+          :can-undo="segHistory.canUndo"
+          :can-redo="segHistory.canRedo"
+          :redo-count="segHistory.redoCount"
           @update-target="updateTargetById"
           @copy-source="copySourceById"
           @leave-empty="leaveEmptyById"
           @reset-target="resetTargetById"
           @apply-tm="(id, match) => applyTmMatch(id, match)"
           @save-to-tm="saveSegmentToTmById"
+          @insert-concordance="insertConcordanceTarget"
+          @undo="undoSegment"
+          @redo="redoSegment"
           @activate="activateSegment"
         />
       </div>
@@ -1372,11 +1460,19 @@ h1.doc-title {
 }
 
 .editor-main {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: 0.45rem;
   min-width: 0;
   width: 100%;
+}
+
+.editor-concordance-root {
+  position: absolute;
+  inset: 0;
+  z-index: 12;
+  pointer-events: none;
 }
 
 .lease-notice {

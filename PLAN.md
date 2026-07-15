@@ -46,7 +46,14 @@
 - [x] Штраф за теги
 - [x] Match metadata в UI
 - [x] Segment edit audit
-- [ ] Concordance panel
+- [x] Concordance panel (`FEATURE_TM_CONCORDANCE` в `src/features.ts` — выключить = скрыть UI)
+- [x] Undo/redo перевода на сегменте (RAM вкладки, ~30 шагов; не в `.tcat`)
+- [x] Копирование target из concordance в буфер (без замены сегмента)
+- [x] Предупреждение при экспорте DOCX, если проект ещё не сохранён (`!allSaved`)
+
+**UX backlog (после B2 p2)**
+
+- [ ] **Issues tray** в шапке редактора: must / recommended (числа). Must — блокирующие (напр. несбалансированные маркеры); recommended — советы (длинный source / короткий target и т.п.). Не делать сейчас — отдельный срез после styles/E или параллельно по приоритету.
 
 **Обмен форматами (после MVP)**
 
@@ -336,8 +343,8 @@
 4. Project lock + backup ✓
 5. Prod + security pass ✓
 6. Telegram: link + password reset (конец MVP) — отложено
-7. B2 p2: audit + concordance ← дальше
-8. **Фаза E: стили ≠ маркеры**
+7. B2 p2: audit + concordance ✓ (concordance — флаг `FEATURE_TM_CONCORDANCE`)
+8. **Фаза E: стили ≠ маркеры** ← дальше
 9. **Фаза F: общий проект / другие аккаунты** (F1 файл → F2 invite+sync → F3 team TM)
 10. Глоссарий; форматы; MT; multi-TM; SRX; админка ТМ; CAT placeables (E5)
 

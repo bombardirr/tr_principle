@@ -1,13 +1,16 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import type { TmMatch } from '@/types/tm'
+import type { TmMatch, TmUnit } from '@/types/tm'
 import type { Segment } from '@/types/project'
 import IconButton from './IconButton.vue'
 import EditorGlyph from './EditorGlyph.vue'
 import TaggedEditor from './TaggedEditor.vue'
 import TmVariantPicker from './TmVariantPicker.vue'
 import SegmentAuditPopover from './SegmentAuditPopover.vue'
+import TmConcordancePanel from './TmConcordancePanel.vue'
+import { FEATURE_TM_CONCORDANCE } from '@/features'
+import { plainSource } from '@/tm/fragments'
 import { isSegmentTranslated } from '@/utils/segmentStatus'
 import { resolveSegmentKinds, type SegmentKind } from '@/utils/segmentKind'
 
@@ -18,6 +21,10 @@ const props = defineProps<{
   activeSegmentId?: string | null
   matchesFor: (seg: Segment) => TmMatch[]
   needsTmSave: (seg: Segment) => boolean
+  tmUnits?: TmUnit[]
+  canUndo?: (segId: string) => boolean
+  canRedo?: (segId: string) => boolean
+  redoCount?: (segId: string) => number
 }>()
 
 const emit = defineEmits<{
@@ -28,7 +35,12 @@ const emit = defineEmits<{
   activate: [segId: string]
   applyTm: [segId: string, match: TmMatch]
   saveToTm: [segId: string]
+  insertConcordance: [segId: string, target: string]
+  undo: [segId: string]
+  redo: [segId: string]
 }>()
+
+const showConcordance = FEATURE_TM_CONCORDANCE
 
 const { t, locale } = useI18n()
 
@@ -110,13 +122,66 @@ function onSaveToTm() {
   if (!activeSeg.value || !canSaveToTm(activeSeg.value)) return
   emit('saveToTm', activeSeg.value.id)
 }
+
+const concordanceSeed = computed(() =>
+  activeSeg.value ? plainSource(activeSeg.value.source) : '',
+)
+
+const concordanceOpen = ref(false)
+
+function onConcordanceOpenChange(open: boolean) {
+  concordanceOpen.value = open
+}
+
+function onConcordanceInsert(target: string) {
+  if (!activeSeg.value) return
+  concordanceOpen.value = false
+  emit('insertConcordance', activeSeg.value.id, target)
+  nextTick(() => {
+    editors.value[activeSeg.value!.id]?.sync()
+    editors.value[activeSeg.value!.id]?.focus()
+  })
+}
+
+function undoAvailable(segId: string) {
+  return props.canUndo?.(segId) ?? false
+}
+
+function redoAvailable(segId: string) {
+  return props.canRedo?.(segId) ?? false
+}
+
+function stepsToTip(segId: string) {
+  return props.redoCount?.(segId) ?? 0
+}
+
+function onUndo() {
+  if (!activeSeg.value || !undoAvailable(activeSeg.value.id)) return
+  emit('undo', activeSeg.value.id)
+  nextTick(() => {
+    editors.value[activeSeg.value!.id]?.sync()
+    editors.value[activeSeg.value!.id]?.focus()
+  })
+}
+
+function onRedo() {
+  if (!activeSeg.value || !redoAvailable(activeSeg.value.id)) return
+  emit('redo', activeSeg.value.id)
+  nextTick(() => {
+    editors.value[activeSeg.value!.id]?.sync()
+    editors.value[activeSeg.value!.id]?.focus()
+  })
+}
 </script>
 
 <template>
   <article
     :id="`segment-${sorted[0]?.id}`"
     class="row"
-    :class="{ active: sorted.some((s) => s.id === activeSegmentId) }"
+    :class="{
+      active: sorted.some((s) => s.id === activeSegmentId),
+      'concordance-open': concordanceOpen,
+    }"
   >
     <div class="meta">
       <div class="meta-source">
@@ -135,6 +200,39 @@ function onSaveToTm() {
           :current-target="activeSeg?.target ?? ''"
           @pick="activeSeg && onPick(activeSeg, $event)"
         />
+        <div
+          v-if="activeSeg"
+          class="seg-history"
+          role="group"
+          :aria-label="t('editor.undoHint')"
+        >
+          <IconButton
+            :title="t('editor.undoHint')"
+            :disabled="!undoAvailable(activeSeg.id)"
+            @mousedown.prevent
+            @click="onUndo"
+          >
+            <EditorGlyph name="undo" />
+          </IconButton>
+          <IconButton
+            class="redo-btn"
+            :title="
+              stepsToTip(activeSeg.id) > 0
+                ? t('editor.redoStepsHint', { n: stepsToTip(activeSeg.id) })
+                : t('editor.redoHint')
+            "
+            :disabled="!redoAvailable(activeSeg.id)"
+            @mousedown.prevent
+            @click="onRedo"
+          >
+            <EditorGlyph name="redo" />
+            <span
+              v-if="stepsToTip(activeSeg.id) > 0"
+              class="redo-badge"
+              aria-hidden="true"
+            >{{ stepsToTip(activeSeg.id) }}</span>
+          </IconButton>
+        </div>
         <IconButton
           v-show="canSaveToTm(activeSeg)"
           class="tm-save-btn"
@@ -180,6 +278,14 @@ function onSaveToTm() {
         <IconButton :title="t('editor.resetTargetHint')" @mousedown.prevent @click="onReset">
           <EditorGlyph name="reset" />
         </IconButton>
+        <TmConcordancePanel
+          v-if="showConcordance"
+          :units="tmUnits ?? []"
+          :seed-query="concordanceSeed"
+          :enabled="!!activeSeg"
+          @insert="onConcordanceInsert"
+          @open-change="onConcordanceOpenChange"
+        />
         <SegmentAuditPopover :entries="activeSeg?.audit ?? []" />
       </div>
 
@@ -262,8 +368,45 @@ $toolbar-col-width: 2rem;
 }
 
 .tm-save-btn {
-  margin-left: auto;
   flex: 0 0 auto;
+}
+
+.seg-history {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.1rem;
+  margin-left: auto;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.12s ease;
+}
+
+.row:hover .seg-history,
+.row.active .seg-history,
+.seg-history:focus-within {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.redo-btn {
+  position: relative;
+}
+
+.redo-badge {
+  position: absolute;
+  top: -0.05rem;
+  right: -0.1rem;
+  min-width: 0.7rem;
+  height: 0.7rem;
+  padding: 0 0.12rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--text-muted) 22%, var(--surface));
+  color: var(--text-muted);
+  font-size: 0.5rem;
+  font-weight: 600;
+  line-height: 0.7rem;
+  text-align: center;
+  pointer-events: none;
 }
 
 .tm-save-btn :deep(.icon-btn),
@@ -336,6 +479,22 @@ $toolbar-col-width: 2rem;
   justify-self: center;
   padding: 0.2rem 0;
   align-self: center;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.12s ease;
+}
+
+.row:hover .mid-toolbar,
+.row.active .mid-toolbar,
+.row.concordance-open .mid-toolbar,
+.mid-toolbar:focus-within {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.row.concordance-open {
+  position: relative;
+  z-index: 14;
 }
 
 .mid-toolbar :deep(.icon-btn) {
