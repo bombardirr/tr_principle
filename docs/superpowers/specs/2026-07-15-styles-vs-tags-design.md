@@ -22,7 +22,7 @@ Status: draft for review (перед кодом)
 - Превью результата остаётся; в той же панели — **swap** оригинал ↔ перевод. Отдельный полный инспектор Word — не цель.
 - Pop-out превью — то же содержимое (drag + resize, min size); зум страницы важнее жёсткого aspect-lock.
 - В UI и i18n: «маркеры форматирования» вместо «теги», где речь о `{n}`. Колонтитулы / `kind` не называть tags.
-- TM «штраф за теги» сегодня = штраф за **различие последовательностей `{n}`**, не за bold/italic. После E0 в словаре и позже в UI — «штраф за маркеры» (или эквивалент).
+- TM «штраф за маркеры» = штраф за **различие последовательностей `{n}`**, не за bold/italic и не CAT-placeables. Копирайт UI/PLAN — «маркеры»; код может ещё называться `tag*`.
 
 ## Current state (as-is)
 
@@ -154,7 +154,7 @@ MVP E2: поддержать **bold / italic / underline**; font/size — есл
 
 | Phase | Deliverable | Done when |
 |-------|-------------|-----------|
-| **E0** | Спека + i18n словарь («маркеры»); сноска в PLAN про TM penalty | Нет поведения «теги = Bold» в копирайте |
+| **E0** | Спека + i18n/PLAN/README («маркеры»); словарь B2 | Нет «теги = Bold / placeables» в пользовательском копирайте |
 | **E1** | Plain display source/target; predominant style на export без `targetStyles`; markers toggle | Старые `.tcat` открываются; round-trip tests green; дефолт без чипов |
 | **E2** | Toolbar над target; `targetStyles`; B/I/U persist + export rebuild runs; undo snapshot includes styles | Выделил слово → Bold → export/preview shows bold |
 | **E3** | Preview swap + pop-out | Один viewport; pop-out не ломает sync сегмента |

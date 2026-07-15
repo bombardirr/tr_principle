@@ -150,7 +150,7 @@ export function describeFingerprint(
 }
 
 /**
- * Tag numbers: {1}{2} = span0 open/close, {3}{4} = span1, …
+ * Marker numbers: {1}{2} = span0 open/close, {3}{4} = span1, …
  */
 export function lookForTag(
   tagToken: string,

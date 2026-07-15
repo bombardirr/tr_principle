@@ -3,7 +3,7 @@ import type { TmPunctuationMode } from './settings'
 
 const TRAILING_PUNCT_RE = /[.,;:!?…]+$/u
 
-/** Normalize segment source for TM lookup (tags stripped, case/spacing). */
+/** Normalize segment source for TM lookup (formatting markers stripped, case/spacing). */
 export function normalizeTmSource(text: string): string {
   return text.replace(TAG_RE, '').replace(/\s+/g, ' ').trim().toLowerCase()
 }

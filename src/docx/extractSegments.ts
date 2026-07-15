@@ -34,7 +34,7 @@ function groupSpans(runs: Element[]): RunSpan[] {
   return mergeMinorSpans(spans.filter((s) => s.text.length > 0))
 }
 
-/** Word often splits "Кому" and ":" into different runs — don't force tags for that. */
+/** Word often splits "Кому" and ":" into different runs — don't force markers for that. */
 function isMinorSpanText(text: string): boolean {
   const t = text.trim()
   if (!t) return true

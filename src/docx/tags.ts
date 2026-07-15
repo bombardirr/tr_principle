@@ -1,6 +1,6 @@
 export const TAG_RE = /\{(\d+)\}/g
 
-/** Build tagged source from format spans. Single span → plain text (no tags). */
+/** Build source with formatting markers `{n}` from spans. Single span → plain text (no markers). */
 export function buildTaggedText(spanTexts: string[]): string {
   if (spanTexts.length === 0) return ''
   if (spanTexts.length === 1) return spanTexts[0] ?? ''
@@ -19,7 +19,7 @@ export function extractTagIds(text: string): number[] {
   return [...text.matchAll(TAG_RE)].map((m) => Number(m[1]))
 }
 
-/** True if target has the same tag id sequence as source. */
+/** True if target has the same formatting-marker id sequence as source. */
 export function tagsMatch(source: string, target: string): boolean {
   const a = extractTagIds(source)
   const b = extractTagIds(target)
@@ -27,12 +27,12 @@ export function tagsMatch(source: string, target: string): boolean {
   return a.every((id, i) => id === b[i])
 }
 
-/** Max fuzzy score reduction when tag sequences differ completely. */
+/** Max fuzzy score reduction when formatting-marker sequences differ completely. */
 export const TAG_MISMATCH_PENALTY_MAX = 0.15
 
 /**
- * Score reduction (0…TAG_MISMATCH_PENALTY_MAX) when `{n}` tag sequences differ.
- * Identical or both-empty → 0.
+ * Score reduction (0…TAG_MISMATCH_PENALTY_MAX) when `{n}` marker sequences differ.
+ * Product name: «штраф за маркеры» (not CAT placeable tags). Identical or both-empty → 0.
  */
 export function tagMismatchPenalty(a: string, b: string): number {
   const ta = extractTagIds(a)
