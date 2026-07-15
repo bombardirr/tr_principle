@@ -18,6 +18,7 @@ import {
   Eye,
   EyeOff,
   FileDown,
+  History,
   ListRestart,
   Percent,
   RefreshCw,
@@ -56,6 +57,7 @@ export type GlyphName =
   | 'close'
   | 'cloud-upload'
   | 'cloud-download'
+  | 'audit'
 
 const props = defineProps<{
   name: GlyphName
@@ -88,6 +90,7 @@ const icons: Record<GlyphName, Component> = {
   close: X,
   'cloud-upload': CloudUpload,
   'cloud-download': CloudDownload,
+  audit: History,
 }
 </script>
 

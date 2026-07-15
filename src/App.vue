@@ -8,7 +8,7 @@ import EditorGlyph from '@/components/EditorGlyph.vue'
 import LocaleToggleLabel from '@/components/LocaleToggleLabel.vue'
 import ThemeToggleGlyph from '@/components/ThemeToggleGlyph.vue'
 import { getTheme, toggleTheme, type Theme } from '@/theme'
-import { displayLabel, useAuth } from '@/auth/session'
+import { displayLabel, needsDisplayName, useAuth } from '@/auth/session'
 import { ApiError } from '@/auth/api'
 
 const { t, locale } = useI18n()
@@ -20,6 +20,7 @@ const isEditorRoute = computed(() => route.name === 'editor')
 const isLanding = computed(() => route.name === 'landing')
 const brandTo = computed(() => (isAuthenticated.value ? '/projects' : '/'))
 const headerName = computed(() => displayLabel(user.value))
+const showNameNudge = computed(() => needsDisplayName(user.value))
 
 const settingsOpen = ref(false)
 const settingsRoot = ref<HTMLElement | null>(null)
@@ -110,11 +111,14 @@ async function onLogout() {
           <span class="account" :title="user?.email">{{ headerName }}</span>
           <div ref="settingsRoot" class="settings-wrap">
             <IconButton
-              :title="t('auth.settings')"
+              :title="showNameNudge ? t('auth.settingsNudge') : t('auth.settings')"
               ghost
+              class="settings-btn"
+              :class="{ 'has-nudge': showNameNudge }"
               @click="settingsOpen ? closeSettings() : openSettings()"
             >
               <EditorGlyph name="settings" />
+              <span v-if="showNameNudge" class="settings-dot" aria-hidden="true" />
             </IconButton>
             <div v-if="settingsOpen" class="settings-pop" role="dialog" :aria-label="t('auth.settingsTitle')">
               <p class="settings-title">{{ t('auth.settingsTitle') }}</p>
@@ -127,7 +131,10 @@ async function onLogout() {
                   :placeholder="t('auth.displayNamePlaceholder')"
                   @keydown.enter.prevent="saveDisplayName"
                 />
-                <span class="settings-hint">{{ t('auth.displayNameHint') }}</span>
+                <span v-if="showNameNudge" class="settings-hint settings-hint--nudge">{{
+                  t('auth.displayNameNudge')
+                }}</span>
+                <span v-else class="settings-hint">{{ t('auth.displayNameHint') }}</span>
               </label>
               <p class="settings-email">
                 <span>{{ t('auth.email') }}</span>
@@ -231,6 +238,26 @@ async function onLogout() {
 
 .settings-wrap {
   position: relative;
+}
+
+.settings-wrap :deep(.settings-btn) {
+  position: relative;
+}
+
+.settings-dot {
+  position: absolute;
+  top: 0.2rem;
+  right: 0.2rem;
+  width: 0.42rem;
+  height: 0.42rem;
+  border-radius: 50%;
+  background: #e05555;
+  box-shadow: 0 0 0 2px var(--topbar);
+  pointer-events: none;
+}
+
+.settings-hint--nudge {
+  color: #d89a5a;
 }
 
 .settings-pop {

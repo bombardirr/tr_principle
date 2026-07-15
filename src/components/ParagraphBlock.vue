@@ -7,6 +7,7 @@ import IconButton from './IconButton.vue'
 import EditorGlyph from './EditorGlyph.vue'
 import TaggedEditor from './TaggedEditor.vue'
 import TmVariantPicker from './TmVariantPicker.vue'
+import SegmentAuditPopover from './SegmentAuditPopover.vue'
 import { isSegmentTranslated } from '@/utils/segmentStatus'
 import { resolveSegmentKinds, type SegmentKind } from '@/utils/segmentKind'
 
@@ -179,6 +180,7 @@ function onSaveToTm() {
         <IconButton :title="t('editor.resetTargetHint')" @mousedown.prevent @click="onReset">
           <EditorGlyph name="reset" />
         </IconButton>
+        <SegmentAuditPopover :entries="activeSeg?.audit ?? []" />
       </div>
 
       <div

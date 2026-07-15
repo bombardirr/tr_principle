@@ -2,6 +2,19 @@ export type SegmentStatus = 'empty' | 'draft' | 'done'
 
 export type SegmentOrigin = 'manual' | 'tm' | 'copy-source' | 'leave-empty' | 'reset'
 
+/** One append-only edit event for segment audit (MVP local history). */
+export interface SegmentAuditEntry {
+  at: string
+  action: SegmentOrigin
+  by?: string
+  /** Short label, e.g. TM "101%" or "87%". */
+  detail?: string
+  /** Target text before the change (may be clipped). */
+  before?: string
+  /** Target text after the change (may be clipped). */
+  after?: string
+}
+
 export interface RunSpan {
   /** Indices of w:r elements (with text) within the paragraph, in document order */
   runIndices: number[]
@@ -30,6 +43,8 @@ export interface Segment {
   updatedAt?: string
   updatedBy?: string
   origin?: SegmentOrigin
+  /** Recent edit events (capped); oldest dropped when over limit. */
+  audit?: SegmentAuditEntry[]
   /** @deprecated Composite TM defer — remove after sentence UX rewrite. */
   tmSavePending?: boolean
 }

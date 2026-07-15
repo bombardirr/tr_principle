@@ -14,8 +14,9 @@ import { packProjectFile } from '@/storage/projectFile'
 import IconButton from '@/components/IconButton.vue'
 import EditorGlyph from '@/components/EditorGlyph.vue'
 import TooltipWrap from '@/components/TooltipWrap.vue'
-import { displayLabel, useAuth } from '@/auth/session'
+import { publicActorLabel, useAuth } from '@/auth/session'
 import { useProjectAccess } from '@/composables/useProjectAccess'
+import { withSegmentAudit } from '@/utils/segmentAudit'
 import { scheduleProjectBackup, pushProjectBackup } from '@/projects/backup'
 import { useTmSettings } from '@/composables/useTmSettings'
 import { findTmMatches } from '@/tm/match'
@@ -339,7 +340,7 @@ async function persistNow(): Promise<void> {
       sourceLang: record.value.meta.sourceLang,
       targetLang: record.value.meta.targetLang,
       projectId: record.value.meta.id,
-      actor: displayLabel(user.value) || 'local',
+      actor: publicActorLabel(user.value),
       onlyIds,
     })
     markTmDirty(...dirty)
@@ -456,16 +457,27 @@ function scheduleSave() {
   }, SAVE_IDLE_MS)
 }
 
+function editActor() {
+  return publicActorLabel(user.value)
+}
+
 function updateTarget(seg: Segment, value: string) {
   if (!record.value || projectLease.blocked.value) return
   notice.value = ''
+  const by = editActor()
   patchSegment(seg.id, {
     target: value,
     status: value.trim() ? 'draft' : seg.status === 'done' ? 'draft' : 'empty',
     tmSavePending: false,
     origin: 'manual',
-    updatedBy: 'local',
+    updatedBy: by,
     updatedAt: new Date().toISOString(),
+    ...withSegmentAudit(seg, {
+      action: 'manual',
+      by,
+      before: seg.target,
+      after: value,
+    }),
   })
   markTmAutosave(seg.id)
   scheduleSave()
@@ -479,13 +491,20 @@ function updateTargetById(segId: string, value: string) {
 function copySource(seg: Segment) {
   if (!record.value || projectLease.blocked.value) return
   notice.value = ''
+  const by = editActor()
   patchSegment(seg.id, {
     target: seg.source,
     status: 'draft',
     tmSavePending: false,
     origin: 'copy-source',
-    updatedBy: 'local',
+    updatedBy: by,
     updatedAt: new Date().toISOString(),
+    ...withSegmentAudit(seg, {
+      action: 'copy-source',
+      by,
+      before: seg.target,
+      after: seg.source,
+    }),
   })
   markTmAutosave(seg.id)
   scheduleSave()
@@ -500,13 +519,20 @@ function leaveEmpty(seg: Segment) {
   if (!record.value || projectLease.blocked.value) return
   notice.value = ''
   clearTmAutosave(seg.id)
+  const by = editActor()
   patchSegment(seg.id, {
     target: '',
     status: 'done',
     tmSavePending: false,
     origin: 'leave-empty',
-    updatedBy: 'local',
+    updatedBy: by,
     updatedAt: new Date().toISOString(),
+    ...withSegmentAudit(seg, {
+      action: 'leave-empty',
+      by,
+      before: seg.target,
+      after: '',
+    }),
   })
   scheduleSave()
 }
@@ -520,13 +546,20 @@ function resetTarget(seg: Segment) {
   if (!record.value || projectLease.blocked.value) return
   notice.value = ''
   clearTmAutosave(seg.id)
+  const by = editActor()
   patchSegment(seg.id, {
     target: '',
     status: 'empty',
     tmSavePending: false,
     origin: 'reset',
-    updatedBy: 'local',
+    updatedBy: by,
     updatedAt: new Date().toISOString(),
+    ...withSegmentAudit(seg, {
+      action: 'reset',
+      by,
+      before: seg.target,
+      after: '',
+    }),
   })
   void removeSegmentFromTm(seg)
   scheduleSave()
@@ -606,14 +639,24 @@ const tmHintSegmentIds = computed(() => {
 
 function applyTmMatch(segId: string, match: TmMatch) {
   if (!record.value || projectLease.blocked.value) return
+  const seg = record.value.segments.find((s) => s.id === segId)
+  if (!seg) return
   notice.value = ''
+  const by = match.unitId ? `tm:${match.unitId}` : 'tm'
   patchSegment(segId, {
     target: match.target,
     status: 'draft',
     tmSavePending: false,
     origin: 'tm',
-    updatedBy: match.unitId ? `tm:${match.unitId}` : 'tm',
+    updatedBy: by,
     updatedAt: new Date().toISOString(),
+    ...withSegmentAudit(seg, {
+      action: 'tm',
+      by,
+      detail: `${Math.round(match.score * 100)}%`,
+      before: seg.target,
+      after: match.target,
+    }),
   })
   scheduleSave()
 }
@@ -633,7 +676,7 @@ async function saveSegmentToTmById(segId: string) {
       sourceLang: record.value.meta.sourceLang,
       targetLang: record.value.meta.targetLang,
       projectId: record.value.meta.id,
-      actor: displayLabel(user.value) || 'local',
+      actor: publicActorLabel(user.value),
       onlyIds: [segId],
     })
     markTmDirty(...dirty)

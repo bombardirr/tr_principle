@@ -70,6 +70,14 @@ export function cloneProjectRecord(record: ProjectRecord): ProjectRecord {
       updatedAt: s.updatedAt,
       updatedBy: s.updatedBy,
       origin: s.origin,
+      audit: s.audit?.map((e) => ({
+        at: e.at,
+        action: e.action,
+        by: e.by,
+        detail: e.detail,
+        before: e.before,
+        after: e.after,
+      })),
       spans: s.spans.map((sp) => ({
         runIndices: [...sp.runIndices],
         fingerprint: sp.fingerprint,

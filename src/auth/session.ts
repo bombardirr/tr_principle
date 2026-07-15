@@ -12,6 +12,7 @@ import {
 } from '@/auth/api'
 import { setStorageAccountId } from '@/storage/scope'
 import { syncTm } from '@/tm/sync'
+import { publicActorRef } from '@/utils/actorLabel'
 
 const user = ref<AuthUser | null>(null)
 const ready = ref(false)
@@ -76,11 +77,21 @@ export async function updateDisplayName(displayName: string) {
   return next
 }
 
+/** UI label: nickname, else email (header / own account only — never write to projects/TM). */
 export function displayLabel(u: AuthUser | null | undefined): string {
   if (!u) return ''
   const name = u.display_name?.trim()
   if (name) return name
   return u.email
+}
+
+/** Attribution for audit / TM — nickname or opaque anon id. Never email. */
+export function publicActorLabel(u: AuthUser | null | undefined): string {
+  return publicActorRef(u)
+}
+
+export function needsDisplayName(u: AuthUser | null | undefined): boolean {
+  return Boolean(u && !u.display_name?.trim())
 }
 
 export function useAuth() {
@@ -93,5 +104,7 @@ export function useAuth() {
     logout,
     updateDisplayName,
     displayLabel,
+    publicActorLabel,
+    needsDisplayName,
   }
 }
