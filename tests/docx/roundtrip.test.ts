@@ -99,10 +99,10 @@ describe('docx round-trip', () => {
     expect(segments.every((s) => s.inTable)).toBe(true)
   })
 
-  it('merges trailing punctuation into previous span (no bogus tags)', () => {
+  it('merges trailing punctuation only when format matches', () => {
     const xml = minimalDocumentXml(
       `<w:p>
-        <w:r><w:rPr><w:b/></w:rPr><w:t>Кому</w:t></w:r>
+        <w:r><w:t>Кому</w:t></w:r>
         <w:r><w:t>:</w:t></w:r>
       </w:p>`,
     )
@@ -111,6 +111,51 @@ describe('docx round-trip', () => {
     ])
     expect(segments[0]!.source).toBe('Кому:')
     expect(segments[0]!.source.includes('{')).toBe(false)
+  })
+
+  it('keeps colon outside underlined run (НУЖНОЕ ПОДПИСАТЬ:)', async () => {
+    const xml = minimalDocumentXml(
+      `<w:p>
+        <w:r><w:rPr><w:b/><w:u w:val="single"/></w:rPr><w:t>НУЖНОЕ ПОДПИСАТЬ</w:t></w:r>
+        <w:r><w:rPr><w:b/></w:rPr><w:t>:</w:t></w:r>
+      </w:p>`,
+    )
+    const segments = extractSegmentsFromStories([
+      { key: 'document', path: 'word/document.xml', xml },
+    ])
+    expect(segments[0]!.source).toBe('{1}НУЖНОЕ ПОДПИСАТЬ{2}{3}:{4}')
+    const uSpan = segments[0]!.spans.find((s) => s.fingerprint.includes('u:'))
+    expect(uSpan?.text).toBe('НУЖНОЕ ПОДПИСАТЬ')
+    expect(segments[0]!.spans.some((s) => s.text === ':')).toBe(true)
+
+    const updated = applyTranslationsToStories({ 'word/document.xml': xml }, segments)
+    const out = updated['word/document.xml']!
+    const underlined = [...out.matchAll(/<w:r[\s>][\s\S]*?<\/w:r>/g)]
+      .map((m) => m[0]!)
+      .filter((r) => /<w:u[\s/>]/.test(r))
+      .map((r) =>
+        [...r.matchAll(/<w:t[^>]*>([\s\S]*?)<\/w:t>/g)].map((x) => x[1]!).join(''),
+      )
+      .join('')
+    expect(underlined).toBe('НУЖНОЕ ПОДПИСАТЬ')
+    expect(underlined.includes(':')).toBe(false)
+  })
+
+  it('keeps underlined whitespace blanks as their own marker span', () => {
+    const xml = minimalDocumentXml(
+      `<w:p>
+        <w:r><w:t xml:space="preserve">метод работы </w:t></w:r>
+        <w:r><w:rPr><w:u w:val="single"/></w:rPr><w:t xml:space="preserve">        </w:t></w:r>
+        <w:r><w:t xml:space="preserve"> календарных дней</w:t></w:r>
+      </w:p>`,
+    )
+    const segments = extractSegmentsFromStories([
+      { key: 'document', path: 'word/document.xml', xml },
+    ])
+    expect(segments[0]!.source).toBe(
+      '{1}метод работы {2}{3}        {4}{5} календарных дней{6}',
+    )
+    expect(segments[0]!.spans.some((s) => s.fingerprint.startsWith('u:'))).toBe(true)
   })
 
   it('opens sample vacation schedule fixture when present', async () => {
@@ -125,5 +170,24 @@ describe('docx round-trip', () => {
     const blob = await buildTranslatedDocx(opened.zipBytes, opened.segments)
     const outZip = await JSZip.loadAsync(blob)
     expect(outZip.file('word/document.xml')).toBeTruthy()
+  })
+
+  it('keeps вахтовый fill-in underline blank from local notification fixture', async () => {
+    const { readFileSync, existsSync } = await import('node:fs')
+    const fixture =
+      'D:/DEV/Rosatom/Документы/Уведомление о наступлении отпуска.docx'
+    if (!existsSync(fixture)) return
+
+    const zip = await JSZip.loadAsync(readFileSync(fixture))
+    const xml = await zip.file('word/document.xml')!.async('string')
+    const segments = extractSegmentsFromStories([
+      { key: 'document', path: 'word/document.xml', xml },
+    ])
+    const hit = segments.find((s) => s.source.includes('вахтовый'))
+    expect(hit).toBeTruthy()
+    expect(hit!.source).toContain('{18}{19}        {20}{21}')
+    expect(hit!.spans.some((s) => /u:/.test(s.fingerprint) && /^\s+$/.test(s.text))).toBe(
+      true,
+    )
   })
 })

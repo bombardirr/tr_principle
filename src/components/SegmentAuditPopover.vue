@@ -13,11 +13,16 @@ const props = defineProps<{
   entries: SegmentAuditEntry[]
 }>()
 
+const emit = defineEmits<{
+  openChange: [open: boolean]
+}>()
+
 const { t, locale } = useI18n()
 const { user } = useAuth()
 const open = ref(false)
 const hoverKey = ref<string | null>(null)
 const root = ref<HTMLElement | null>(null)
+const hasScrimHost = ref(false)
 
 const ordered = computed(() => [...props.entries].reverse())
 
@@ -56,9 +61,20 @@ function hasDiff(entry: SegmentAuditEntry): boolean {
   return entry.before !== undefined || entry.after !== undefined
 }
 
+function setOpen(next: boolean) {
+  if (open.value === next) return
+  open.value = next
+  if (!next) hoverKey.value = null
+  emit('openChange', next)
+}
+
 function toggle() {
-  open.value = !open.value
-  if (!open.value) hoverKey.value = null
+  if (!props.entries.length) return
+  setOpen(!open.value)
+}
+
+function close() {
+  setOpen(false)
 }
 
 function onRowEnter(key: string) {
@@ -70,15 +86,31 @@ function onDocPointerDown(ev: PointerEvent) {
   const el = root.value
   if (!el) return
   if (ev.target instanceof Node && el.contains(ev.target)) return
-  open.value = false
-  hoverKey.value = null
+  const scrim = document.getElementById('editor-audit-scrim')
+  if (scrim && ev.target instanceof Node && scrim.contains(ev.target)) {
+    close()
+    return
+  }
+  if (hasScrimHost.value) return
+  close()
+}
+
+function onWheelCapture(ev: WheelEvent) {
+  if (!open.value) return
+  const el = root.value
+  if (el && ev.target instanceof Node && el.contains(ev.target)) return
+  ev.preventDefault()
 }
 
 onMounted(() => {
+  hasScrimHost.value = !!document.getElementById('editor-concordance-root')
   document.addEventListener('pointerdown', onDocPointerDown, true)
+  document.addEventListener('wheel', onWheelCapture, { capture: true, passive: false })
 })
 onUnmounted(() => {
   document.removeEventListener('pointerdown', onDocPointerDown, true)
+  document.removeEventListener('wheel', onWheelCapture, true)
+  if (open.value) emit('openChange', false)
 })
 </script>
 
@@ -136,6 +168,15 @@ onUnmounted(() => {
         </div>
       </aside>
     </div>
+
+    <Teleport v-if="open && hasScrimHost" to="#editor-concordance-root">
+      <div
+        id="editor-audit-scrim"
+        class="audit-scrim"
+        aria-hidden="true"
+        @pointerdown.prevent="close"
+      />
+    </Teleport>
   </div>
 </template>
 
@@ -247,5 +288,16 @@ onUnmounted(() => {
   line-height: 1.35;
   white-space: pre-wrap;
   word-break: break-word;
+}
+</style>
+
+<style lang="scss">
+.audit-scrim {
+  position: absolute;
+  inset: 0;
+  z-index: 12;
+  pointer-events: auto;
+  background: rgba(0, 0, 0, 0.28);
+  cursor: default;
 }
 </style>

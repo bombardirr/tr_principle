@@ -9,7 +9,6 @@ import {
   normalizePreviewText,
   PREVIEW_DONE_CLASS,
   PREVIEW_HIT_CLASS,
-  PREVIEW_TM_CLASS,
   resolvePreviewSegmentClick,
 } from '@/docx/previewHighlight'
 
@@ -84,21 +83,6 @@ describe('previewHighlight', () => {
     expect(isSegmentDone(segments[1])).toBe(false)
   })
 
-  it('marks tm segments with amber class', () => {
-    const dom = new JSDOM('<div id="host"><p>Hello</p><p>Other</p></div>')
-    const host = dom.window.document.getElementById('host')!
-    const segments = [seg('seg-1', 'Hello'), seg('seg-2', 'Other')]
-    const map = indexPreviewSegments(host, segments)
-
-    highlightPreviewSegment(host, map, segments, null, {
-      scroll: false,
-      tmSegmentIds: new Set(['seg-1']),
-    })
-
-    expect(map.get('seg-1')?.classList.contains(PREVIEW_TM_CLASS)).toBe(true)
-    expect(map.get('seg-2')?.classList.contains(PREVIEW_TM_CLASS)).toBe(false)
-  })
-
   it('marks intentionally empty done segments as done', () => {
     const segment = seg('seg-1', 'Hello', '', 'done')
     expect(isSegmentDone(segment)).toBe(true)
@@ -155,15 +139,10 @@ describe('previewHighlight', () => {
     expect(map.get('1')?.textContent?.trim()).toBe('We like you.')
     expect(map.get('2')?.textContent?.trim()).toBe('We really like you.')
 
-    highlightPreviewSegment(host, map, segments, '2', {
-      scroll: false,
-      tmSegmentIds: new Set(['2', '3']),
-    })
+    highlightPreviewSegment(host, map, segments, '2', { scroll: false })
 
     expect(map.get('1')?.classList.contains(PREVIEW_DONE_CLASS)).toBe(true)
     expect(map.get('2')?.classList.contains(PREVIEW_HIT_CLASS)).toBe(true)
-    expect(map.get('2')?.classList.contains(PREVIEW_TM_CLASS)).toBe(true)
-    expect(map.get('3')?.classList.contains(PREVIEW_TM_CLASS)).toBe(true)
     expect(map.get('1')?.classList.contains(PREVIEW_HIT_CLASS)).toBe(false)
     expect(resolvePreviewSegmentClick(map.get('2')!)).toBe('2')
   })

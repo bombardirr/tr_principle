@@ -92,11 +92,9 @@ targetStyles?: TargetStyleRange[]
 
 ### Export strategy (два слоя)
 
-**E1 (минимальный сдвиг, без ручных styles в UI):**
+**E1 (plain UI — сделано):** маркеры скрыты по умолчанию; export path пока как раньше (`splitTaggedText` / `coerceTargetTags` / `setRunText`, `rPr` не трогаем).
 
-1. Как сейчас: `splitTaggedText` → текст по span-ам → `setRunText` на существующих runs.
-2. Если маркеры target испорчены — `coerceTargetTags` (уже есть).
-3. Пока нет `targetStyles`: не трогать `rPr`.
+**E1b (после E3 swap превью):** без ручных `targetStyles` весь target → predominant style source-сегмента; не ломать старые проекты.
 
 **E2+ (с ручными styles):**
 
@@ -155,13 +153,14 @@ MVP E2: поддержать **bold / italic / underline**; font/size — есл
 | Phase | Deliverable | Done when |
 |-------|-------------|-----------|
 | **E0** | Спека + i18n/PLAN/README («маркеры»); словарь B2 | Нет «теги = Bold / placeables» в пользовательском копирайте |
-| **E1** | Plain display source/target; predominant style на export без `targetStyles`; markers toggle | Старые `.tcat` открываются; round-trip tests green; дефолт без чипов |
+| **E1** | Plain display + per-block markers toggle | Дефолт без чипов; toggle в meta-center |
 | **E2** | Toolbar над target; `targetStyles`; B/I/U persist + export rebuild runs; undo snapshot includes styles | Выделил слово → Bold → export/preview shows bold |
-| **E3** | Preview swap + pop-out | Один viewport; pop-out не ломает sync сегмента |
-| **E4** | Preview → style card → apply to selection | Не блокирует E1–E3 |
-| **E5** | CAT placeables; rename TM penalty in UI | Параллельно / после |
+| **E3** | Preview swap (кнопка TL шапки) + независимый scroll source/target + ↑↓ справа; pop-out позже | Один viewport; скролл каждого режима свой |
+| **E1b** | Predominant style на export (без `targetStyles`) | После E3 — валидация глазами через swap; старые `.tcat` + round-trip green |
+| **E4** | Preview → style card → apply to selection | После E2 + E1b |
+| **E5** | CAT placeables | Параллельно / после |
 
-Порядок: `E0 → E1 → E2 → E3 → E4`; E5 не блокирует.
+Порядок: `E0 → E1 → (E2 ↔ E3) → E1b → E4`; E5 не блокирует. **E1b не раньше E3.**
 
 ## Testing
 

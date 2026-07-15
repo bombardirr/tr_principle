@@ -109,12 +109,21 @@ function onDocPointerDown(ev: PointerEvent) {
   close()
 }
 
+function onWheelCapture(ev: WheelEvent) {
+  if (!open.value) return
+  const el = root.value
+  if (el && ev.target instanceof Node && el.contains(ev.target)) return
+  ev.preventDefault()
+}
+
 onMounted(() => {
   hasScrimHost.value = !!document.getElementById('editor-concordance-root')
   document.addEventListener('pointerdown', onDocPointerDown, true)
+  document.addEventListener('wheel', onWheelCapture, { capture: true, passive: false })
 })
 onUnmounted(() => {
   document.removeEventListener('pointerdown', onDocPointerDown, true)
+  document.removeEventListener('wheel', onWheelCapture, true)
   if (open.value) emit('openChange', false)
 })
 </script>

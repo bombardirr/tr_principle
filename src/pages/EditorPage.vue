@@ -646,13 +646,6 @@ function needsTmSave(seg: Segment): boolean {
   return !tmUnits.value.some((u) => u.sourceKey === key && u.target === seg.target)
 }
 
-const tmHintSegmentIds = computed(() => {
-  if (!record.value) return []
-  return record.value.segments
-    .filter((seg) => matchesFor(seg).length > 0 && !isSegmentTranslated(seg))
-    .map((seg) => seg.id)
-})
-
 function insertConcordanceTarget(segId: string, target: string) {
   if (!record.value || projectLease.blocked.value) return
   const seg = record.value.segments.find((s) => s.id === segId)
@@ -1138,7 +1131,6 @@ async function goBack() {
         :record="record"
         :refresh-token="previewToken"
         :active-segment-id="activeSegmentId"
-        :tm-segment-ids="tmHintSegmentIds"
         @select-segment="onPreviewSelectSegment"
       />
     </div>

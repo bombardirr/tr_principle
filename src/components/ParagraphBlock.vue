@@ -172,9 +172,14 @@ function onRowPointerEnter() {
 }
 
 const concordanceOpen = ref(false)
+const auditOpen = ref(false)
 
 function onConcordanceOpenChange(open: boolean) {
   concordanceOpen.value = open
+}
+
+function onAuditOpenChange(open: boolean) {
+  auditOpen.value = open
 }
 
 function onConcordanceInsert(target: string) {
@@ -225,6 +230,7 @@ function onRedo() {
     :class="{
       active: sorted.some((s) => s.id === activeSegmentId),
       'concordance-open': concordanceOpen,
+      'audit-open': auditOpen,
       'has-markers': blockHasMarkers,
     }"
     @pointerenter="onRowPointerEnter"
@@ -262,7 +268,10 @@ function onRedo() {
           @insert="onConcordanceInsert"
           @open-change="onConcordanceOpenChange"
         />
-        <SegmentAuditPopover :entries="activeSeg?.audit ?? []" />
+        <SegmentAuditPopover
+          :entries="activeSeg?.audit ?? []"
+          @open-change="onAuditOpenChange"
+        />
       </div>
       <div class="meta-target">
         <TmVariantPicker
@@ -435,6 +444,7 @@ $toolbar-col-width: 2rem;
 .row:hover .meta-center,
 .row.active .meta-center,
 .row.concordance-open .meta-center,
+.row.audit-open .meta-center,
 .meta-center:focus-within,
 .meta-center:has(.markers-flash) {
   opacity: 1;
@@ -602,12 +612,14 @@ $toolbar-col-width: 2rem;
 .row:hover .mid-toolbar,
 .row.active .mid-toolbar,
 .row.concordance-open .mid-toolbar,
+.row.audit-open .mid-toolbar,
 .mid-toolbar:focus-within {
   opacity: 1;
   pointer-events: auto;
 }
 
-.row.concordance-open {
+.row.concordance-open,
+.row.audit-open {
   position: relative;
   z-index: 14;
 }

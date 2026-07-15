@@ -1,6 +1,9 @@
 export interface EditorScrollSnapshot {
   pageY: number
+  /** Scroll of translation (result) preview. */
   previewY: number
+  /** Scroll of source (original) preview — independent of previewY. */
+  previewSourceY: number
   activeSegmentId: string | null
 }
 
@@ -13,6 +16,7 @@ function storageKey(projectId: string): string {
 const emptySnapshot = (): EditorScrollSnapshot => ({
   pageY: 0,
   previewY: 0,
+  previewSourceY: 0,
   activeSegmentId: null,
 })
 
@@ -25,6 +29,7 @@ export function readEditorScroll(projectId: string): EditorScrollSnapshot | null
     return {
       pageY: typeof data.pageY === 'number' ? data.pageY : 0,
       previewY: typeof data.previewY === 'number' ? data.previewY : 0,
+      previewSourceY: typeof data.previewSourceY === 'number' ? data.previewSourceY : 0,
       activeSegmentId: typeof data.activeSegmentId === 'string' ? data.activeSegmentId : null,
     }
   } catch {

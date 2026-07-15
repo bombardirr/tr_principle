@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { nextTick, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { renderAsync } from 'docx-preview'
 import { buildTranslatedDocx } from '@/docx/exportDocx'
@@ -11,13 +11,16 @@ import {
 } from '@/docx/previewHighlight'
 import { readEditorScroll, writeEditorScroll } from '@/storage/editorScroll'
 import type { ProjectRecord } from '@/types/project'
+import IconButton from '@/components/IconButton.vue'
+import EditorGlyph from '@/components/EditorGlyph.vue'
+
+type PreviewMode = 'target' | 'source'
 
 const props = defineProps<{
   projectId: string
   record: ProjectRecord
   refreshToken: number
   activeSegmentId?: string | null
-  tmSegmentIds?: string[]
 }>()
 
 const emit = defineEmits<{
@@ -28,24 +31,73 @@ const { t } = useI18n()
 const scroller = ref<HTMLElement | null>(null)
 const host = ref<HTMLElement | null>(null)
 const loading = ref(false)
+/** Shown only when initial load exceeds LOADING_MESSAGE_DELAY_MS. */
+const showLoadingMessage = ref(false)
 const refreshing = ref(false)
 const hasContent = ref(false)
 const error = ref('')
+const mode = ref<PreviewMode>('target')
+const LOADING_MESSAGE_DELAY_MS = 1000
 let gen = 0
 let segmentIndex = new Map<string, HTMLElement>()
-let pendingPreviewScroll: number | null = null
+let pendingTargetScroll: number | null = null
+let pendingSourceScroll: number | null = null
 let scrollSaveTimer: ReturnType<typeof setTimeout> | null = null
+let loadingMessageTimer: ReturnType<typeof setTimeout> | null = null
 let scrollerScrollTarget: HTMLElement | null = null
 let fitObserver: ResizeObserver | null = null
 let lastPreviewScale = 1
 let scrollPreviewOnHighlight = true
 
+function clearLoadingMessageTimer() {
+  if (loadingMessageTimer) {
+    clearTimeout(loadingMessageTimer)
+    loadingMessageTimer = null
+  }
+}
+
+function beginLoading() {
+  loading.value = true
+  showLoadingMessage.value = false
+  clearLoadingMessageTimer()
+  loadingMessageTimer = setTimeout(() => {
+    loadingMessageTimer = null
+    if (loading.value && !hasContent.value) showLoadingMessage.value = true
+  }, LOADING_MESSAGE_DELAY_MS)
+}
+
+function endLoading() {
+  loading.value = false
+  showLoadingMessage.value = false
+  clearLoadingMessageTimer()
+}
+
+const modeLabel = computed(() =>
+  mode.value === 'source' ? t('editor.previewModeSource') : t('editor.previewModeTarget'),
+)
+
+const swapTitle = computed(() =>
+  mode.value === 'source' ? t('editor.previewSwapToTarget') : t('editor.previewSwapToSource'),
+)
+
 function loadPendingPreviewScroll() {
   const snap = readEditorScroll(props.projectId)
-  pendingPreviewScroll = snap?.previewY ?? null
+  pendingTargetScroll = snap?.previewY ?? null
+  pendingSourceScroll = snap?.previewSourceY ?? null
+}
+
+function persistCurrentScroll() {
+  if (!scroller.value) return
+  const y = scroller.value.scrollTop
+  if (mode.value === 'source') {
+    writeEditorScroll(props.projectId, { previewSourceY: y })
+  } else {
+    writeEditorScroll(props.projectId, { previewY: y })
+  }
 }
 
 function onPreviewClick(e: MouseEvent) {
+  if (mode.value !== 'target') return
   const segmentId = resolvePreviewSegmentClick(e.target)
   if (!segmentId) return
   scrollPreviewOnHighlight = false
@@ -53,29 +105,34 @@ function onPreviewClick(e: MouseEvent) {
 }
 
 function applyHighlight(scroll = false) {
+  if (mode.value !== 'target') return
   if (!scroller.value || !host.value) return
   highlightPreviewSegment(
     scroller.value,
     segmentIndex,
     props.record.segments,
     props.activeSegmentId ?? null,
-    {
-      scroll,
-      tmSegmentIds: new Set(props.tmSegmentIds ?? []),
-    },
+    { scroll },
   )
 }
 
 function schedulePreviewScrollPersist() {
   if (!scroller.value) return
   if (scrollSaveTimer) clearTimeout(scrollSaveTimer)
-  scrollSaveTimer = setTimeout(() => {
-    if (!scroller.value) return
-    writeEditorScroll(props.projectId, { previewY: scroller.value.scrollTop })
-  }, 200)
+  scrollSaveTimer = setTimeout(() => persistCurrentScroll(), 200)
 }
 
 function onScrollerScroll() {
+  schedulePreviewScrollPersist()
+}
+
+function scrollPreviewTo(edge: 'top' | 'bottom') {
+  const el = scroller.value
+  if (!el) return
+  el.scrollTo({
+    top: edge === 'top' ? 0 : el.scrollHeight,
+    behavior: 'smooth',
+  })
   schedulePreviewScrollPersist()
 }
 
@@ -147,16 +204,25 @@ function bindScrollerScroll(el: HTMLElement | null) {
   scrollerScrollTarget = el
 }
 
-async function renderPreview() {
+async function previewBlob(): Promise<Blob> {
+  if (mode.value === 'source') {
+    return new Blob([props.record.docx], {
+      type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    })
+  }
+  return buildTranslatedDocx(props.record.docx, props.record.segments)
+}
+
+async function renderPreview(options?: { forcePendingScroll?: boolean }) {
   if (!host.value || !scroller.value) return
   const run = ++gen
-  const isRefresh = hasContent.value
+  const isRefresh = hasContent.value && !options?.forcePendingScroll
   if (isRefresh) refreshing.value = true
-  else loading.value = true
+  else beginLoading()
   error.value = ''
 
   try {
-    const blob = await buildTranslatedDocx(props.record.docx, props.record.segments)
+    const blob = await previewBlob()
     if (run !== gen || !host.value || !scroller.value) return
 
     const staging = document.createElement('div')
@@ -169,9 +235,18 @@ async function renderPreview() {
     if (run !== gen || !host.value || !scroller.value) return
 
     let scrollTop = scroller.value.scrollTop
-    if (!isRefresh && pendingPreviewScroll !== null) {
-      scrollTop = pendingPreviewScroll
-      pendingPreviewScroll = null
+    if (!isRefresh || options?.forcePendingScroll) {
+      if (mode.value === 'source') {
+        if (pendingSourceScroll !== null) {
+          scrollTop = pendingSourceScroll
+          pendingSourceScroll = null
+        } else {
+          scrollTop = 0
+        }
+      } else if (pendingTargetScroll !== null) {
+        scrollTop = pendingTargetScroll
+        pendingTargetScroll = null
+      }
     }
     const pageScrollY = window.scrollY
     host.value.replaceChildren(...staging.childNodes)
@@ -180,9 +255,13 @@ async function renderPreview() {
     fitPreviewSheet()
     scroller.value.scrollTop = scrollTop
     window.scrollTo(0, pageScrollY)
-    segmentIndex = indexPreviewSegments(host.value, props.record.segments)
-    markPreviewSegments(segmentIndex)
-    applyHighlight(false)
+    if (mode.value === 'target') {
+      segmentIndex = indexPreviewSegments(host.value, props.record.segments)
+      markPreviewSegments(segmentIndex)
+      applyHighlight(false)
+    } else {
+      segmentIndex = new Map()
+    }
   } catch (e) {
     if (run === gen) {
       error.value = e instanceof Error ? e.message : String(e)
@@ -190,10 +269,25 @@ async function renderPreview() {
     }
   } finally {
     if (run === gen) {
-      loading.value = false
+      endLoading()
       refreshing.value = false
     }
   }
+}
+
+async function toggleMode() {
+  if (!scroller.value) return
+  persistCurrentScroll()
+  const snap = readEditorScroll(props.projectId)
+  if (mode.value === 'target') {
+    pendingSourceScroll = snap?.previewSourceY ?? 0
+    mode.value = 'source'
+  } else {
+    pendingTargetScroll = snap?.previewY ?? 0
+    mode.value = 'target'
+  }
+  hasContent.value = false
+  await renderPreview({ forcePendingScroll: true })
 }
 
 loadPendingPreviewScroll()
@@ -203,6 +297,7 @@ watch(
   () => {
     loadPendingPreviewScroll()
     hasContent.value = false
+    mode.value = 'target'
   },
 )
 
@@ -213,7 +308,11 @@ watch(scroller, (el) => {
 
 watch(
   () => props.refreshToken,
-  () => nextTick(() => renderPreview()),
+  () => {
+    // Translation edits only affect result preview.
+    if (mode.value !== 'target') return
+    nextTick(() => renderPreview())
+  },
   { immediate: true },
 )
 
@@ -225,33 +324,60 @@ watch(
   },
 )
 
-watch(
-  () => props.tmSegmentIds,
-  () => applyHighlight(false),
-  { deep: true },
-)
-
 onBeforeUnmount(() => {
   gen++
   bindScrollerScroll(null)
   bindFitObserver(null)
   if (scrollSaveTimer) clearTimeout(scrollSaveTimer)
-  if (scroller.value) {
-    writeEditorScroll(props.projectId, { previewY: scroller.value.scrollTop })
-  }
+  clearLoadingMessageTimer()
+  persistCurrentScroll()
 })
 </script>
 
 <template>
-  <aside class="preview-panel" aria-label="preview">
+  <aside
+    class="preview-panel"
+    :class="mode === 'source' ? 'is-source' : 'is-target'"
+    :aria-label="modeLabel"
+  >
+    <div class="preview-chrome">
+      <IconButton
+        class="preview-swap"
+        :title="swapTitle"
+        ghost
+        @mousedown.prevent
+        @click="toggleMode"
+      >
+        <EditorGlyph name="swap" />
+      </IconButton>
+      <span class="preview-mode">{{ modeLabel }}</span>
+      <div class="preview-chrome-end">
+        <IconButton
+          :title="t('editor.previewScrollTop')"
+          ghost
+          @mousedown.prevent
+          @click="scrollPreviewTo('top')"
+        >
+          <EditorGlyph name="scroll-top" />
+        </IconButton>
+        <IconButton
+          :title="t('editor.previewScrollBottom')"
+          ghost
+          @mousedown.prevent
+          @click="scrollPreviewTo('bottom')"
+        >
+          <EditorGlyph name="scroll-bottom" />
+        </IconButton>
+      </div>
+    </div>
     <p v-if="error" class="preview-error">{{ error }}</p>
     <div ref="scroller" class="preview-body">
       <div
-        v-if="loading && !hasContent"
+        v-if="showLoadingMessage && !hasContent"
         class="preview-status"
         aria-live="polite"
       >
-        {{ t('editor.previewLoading') }}
+        {{ mode === 'source' ? t('editor.previewLoadingSource') : t('editor.previewLoading') }}
       </div>
       <div ref="host" class="preview-host docx-host" @click="onPreviewClick" />
       <div
@@ -279,18 +405,76 @@ onBeforeUnmount(() => {
   min-height: 0;
 }
 
+.preview-chrome {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  flex: 0 0 auto;
+  width: 100%;
+  margin-bottom: 0.3rem;
+  min-height: 1.6rem;
+  padding: 0.1rem 0.2rem;
+  border-radius: 5px;
+  transition:
+    background 0.18s ease,
+    color 0.18s ease;
+}
+
+.preview-panel.is-source .preview-chrome {
+  background: var(--preview-chrome-source-bg);
+}
+
+.preview-swap {
+  flex: 0 0 auto;
+}
+
+.preview-mode {
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+  transition: color 0.18s ease;
+}
+
+.preview-panel.is-source .preview-mode {
+  color: var(--preview-chrome-source-fg);
+}
+
+.preview-chrome-end {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.05rem;
+  margin-left: auto;
+  flex: 0 0 auto;
+}
+
+.preview-chrome :deep(.icon-btn) {
+  width: 1.45rem;
+  height: 1.45rem;
+}
+
 .preview-body {
   position: relative;
   flex: 0 0 auto;
   width: fit-content;
   max-width: 100%;
-  max-height: calc(100vh - 5.5rem);
+  max-height: calc(100vh - 7rem);
   overflow-x: hidden;
   overflow-y: hidden;
   overscroll-behavior: contain;
   border-radius: 6px;
   background: var(--preview-desk);
   isolation: isolate;
+  box-shadow: inset 0 0 0 1px transparent;
+  transition: box-shadow 0.18s ease;
+}
+
+.preview-panel.is-source .preview-body {
+  box-shadow: inset 0 0 0 1.5px var(--preview-frame-source);
 }
 
 .preview-body.is-scrollable {
@@ -311,7 +495,7 @@ onBeforeUnmount(() => {
 }
 
 .preview-error {
-  margin: 0;
+  margin: 0 0 0.3rem;
   font-size: 0.8rem;
   color: var(--danger);
 }
@@ -372,9 +556,7 @@ onBeforeUnmount(() => {
 .docx-host :deep([data-appzac-segment-id]) {
   cursor: pointer;
   border-radius: 2px;
-  transition:
-    background 0.15s ease,
-    text-decoration-color 0.15s ease;
+  transition: background 0.15s ease;
 }
 
 /* Keep marker spans layout-neutral so Word run styles stay intact. */
@@ -392,32 +574,11 @@ onBeforeUnmount(() => {
   background: var(--preview-done-bg);
 }
 
-.docx-host :deep(.appzac-preview-tm) {
-  text-decoration: underline;
-  text-decoration-color: var(--preview-tm-underline);
-  text-underline-offset: 0.28em;
-  text-decoration-thickness: 1.5px;
-  text-decoration-skip-ink: none;
-}
-
-/* Gaps between neighbouring sentence underlines (not on whole-paragraph fallback). */
-.docx-host :deep(span.appzac-preview-tm) {
-  padding-inline: 0.14em;
-  box-decoration-break: clone;
-  -webkit-box-decoration-break: clone;
-}
-
-.docx-host :deep(.appzac-preview-tm:hover) {
-  text-decoration-color: var(--preview-tm-underline-hover);
-}
-
 .docx-host :deep(.appzac-preview-hit) {
   background: var(--preview-hit-bg);
 }
 
-.docx-host :deep(
-  [data-appzac-segment-id]:not(.appzac-preview-tm):not(.appzac-preview-done):hover
-) {
+.docx-host :deep([data-appzac-segment-id]:not(.appzac-preview-done):hover) {
   background: var(--preview-hit-bg);
 }
 </style>

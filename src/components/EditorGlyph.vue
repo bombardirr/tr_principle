@@ -2,7 +2,10 @@
 import type { Component } from 'vue'
 import {
   Archive,
+  ArrowDownToLine,
+  ArrowLeftRight,
   ArrowRightFromLine,
+  ArrowUpToLine,
   Braces,
   Check,
   ChevronLeft,
@@ -68,6 +71,9 @@ export type GlyphName =
   | 'undo'
   | 'redo'
   | 'markers'
+  | 'swap'
+  | 'scroll-top'
+  | 'scroll-bottom'
 
 const props = defineProps<{
   name: GlyphName
@@ -106,6 +112,9 @@ const icons: Record<GlyphName, Component> = {
   undo: Undo2,
   redo: Redo2,
   markers: Braces,
+  swap: ArrowLeftRight,
+  'scroll-top': ArrowUpToLine,
+  'scroll-bottom': ArrowDownToLine,
 }
 </script>
 

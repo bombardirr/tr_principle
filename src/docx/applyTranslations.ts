@@ -1,7 +1,7 @@
 import type { Segment } from '@/types/project'
 import { isIntentionallyEmpty } from '@/utils/segmentStatus'
 import { joinSentenceTargets } from '@/tm/sentences'
-import { splitTaggedText } from './tags'
+import { buildTaggedText, coerceTargetTags, splitTaggedText } from './tags'
 import {
   allParagraphsLoose,
   collectRunsWithT,
@@ -21,7 +21,17 @@ function translationParts(segment: Segment): string[] | null {
     if (segment.spans.length === 0) return null
     return segment.spans.map(() => '')
   }
-  return splitTaggedText(segment.source, effectiveTarget(segment))
+  // Untranslated: write original span texts (avoids broken sentence-marker rejoin).
+  if (segment.target.trim() === '') {
+    return segment.spans.map((s) => s.text)
+  }
+  const parts = splitTaggedText(segment.source, effectiveTarget(segment))
+  if (parts && parts.length === segment.spans.length) return parts
+  // Mismatched marker join — fall back to span texts when target still equals source.
+  if (effectiveTarget(segment) === segment.source) {
+    return segment.spans.map((s) => s.text)
+  }
+  return parts
 }
 
 /** Merge sentence siblings that share a Word paragraph into one apply unit. */
@@ -30,14 +40,26 @@ export function mergeParagraphGroup(segments: Segment[]): Segment | null {
   const sorted = [...segments].sort((a, b) => a.sentenceIndex - b.sentenceIndex)
   const head = sorted[0]!
   const paragraphSpans = head.paragraphSpans ?? head.spans
-  const fullSource =
-    sorted.length === 1
-      ? head.source
-      : joinSentenceTargets(sorted.map((s) => s.source))
+  // Structural source from Word spans — not rejoined sentence markup.
+  const fullSource = buildTaggedText(paragraphSpans.map((s) => s.text))
   const allEmptyIntentional = sorted.every(isIntentionallyEmpty)
-  const fullTarget = allEmptyIntentional
-    ? ''
-    : joinSentenceTargets(sorted.map((s) => effectiveTarget(s)))
+  // After prepareSegmentsForExport, empty segments get target=source — treat as untranslated.
+  const untranslated = sorted.every(
+    (s) => isIntentionallyEmpty(s) || s.target.trim() === '' || s.target === s.source,
+  )
+  let fullTarget = ''
+  if (allEmptyIntentional) {
+    fullTarget = ''
+  } else if (untranslated) {
+    fullTarget = fullSource
+  } else {
+    const joined = joinSentenceTargets(sorted.map((s) => effectiveTarget(s)))
+    const parts = splitTaggedText(fullSource, joined)
+    fullTarget =
+      parts && parts.length === paragraphSpans.length
+        ? joined
+        : coerceTargetTags(fullSource, joined)
+  }
 
   return {
     ...head,

@@ -66,10 +66,11 @@ html[data-theme="dark"] {
   --target-filled-border: rgba(125, 190, 138, 0.42);
   --preview-desk: linear-gradient(168deg, #1a2433 0%, #1f3044 42%, #172636 100%);
   --preview-page-shadow: 0 4px 18px rgba(0, 0, 0, 0.32), 0 0 0 1px rgba(91, 159, 212, 0.1);
+  --preview-chrome-source-bg: rgba(212, 168, 90, 0.14);
+  --preview-chrome-source-fg: #e6c78a;
+  --preview-frame-source: rgba(212, 168, 90, 0.42);
   --preview-hit-bg: rgba(91, 159, 212, 0.2);
   --preview-done-bg: rgba(125, 190, 138, 0.18);
-  --preview-tm-underline: rgba(212, 168, 90, 0.55);
-  --preview-tm-underline-hover: rgba(212, 168, 90, 0.9);
   --kind-table: #d4a85a;
   --kind-header: #7eb8e8;
   --kind-footer: #b39ddb;
@@ -117,10 +118,11 @@ html[data-theme="light"] {
   --target-filled-border: rgba(47, 90, 47, 0.32);
   --preview-desk: linear-gradient(168deg, #edf3fa 0%, #e0ecf7 40%, #d4e3f2 100%);
   --preview-page-shadow: 0 4px 20px rgba(44, 95, 138, 0.14), 0 0 0 1px rgba(44, 95, 138, 0.08);
+  --preview-chrome-source-bg: rgba(184, 134, 11, 0.12);
+  --preview-chrome-source-fg: #8a6a2f;
+  --preview-frame-source: rgba(184, 134, 11, 0.38);
   --preview-hit-bg: rgba(44, 95, 138, 0.14);
   --preview-done-bg: rgba(47, 90, 47, 0.1);
-  --preview-tm-underline: rgba(184, 134, 11, 0.45);
-  --preview-tm-underline-hover: rgba(184, 134, 11, 0.85);
   --kind-table: #9a6b1a;
   --kind-header: #2c5f8a;
   --kind-footer: #6b4c9a;

@@ -46,12 +46,19 @@ function mergeMinorSpans(spans: RunSpan[]): RunSpan[] {
   const out: RunSpan[] = []
   for (const span of spans) {
     const prev = out[out.length - 1]
-    if (prev && isMinorSpanText(span.text)) {
+    // Only fold punctuation/whitespace into a neighbour with the SAME format.
+    // Cross-format merges (underlined «АТЬ» + plain «:») would extend underline on export.
+    if (prev && isMinorSpanText(span.text) && prev.fingerprint === span.fingerprint) {
       prev.text += span.text
       prev.runIndices.push(...span.runIndices)
       continue
     }
-    if (prev && isMinorSpanText(prev.text) && !isMinorSpanText(span.text)) {
+    if (
+      prev &&
+      isMinorSpanText(prev.text) &&
+      !isMinorSpanText(span.text) &&
+      prev.fingerprint === span.fingerprint
+    ) {
       span.text = prev.text + span.text
       span.runIndices = [...prev.runIndices, ...span.runIndices]
       out[out.length - 1] = span

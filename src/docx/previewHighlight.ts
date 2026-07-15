@@ -7,7 +7,6 @@ export { isSegmentDone } from '@/utils/segmentStatus'
 
 export const PREVIEW_HIT_CLASS = 'appzac-preview-hit'
 export const PREVIEW_DONE_CLASS = 'appzac-preview-done'
-export const PREVIEW_TM_CLASS = 'appzac-preview-tm'
 export const PREVIEW_SEG_CLASS = 'appzac-preview-seg'
 export const PREVIEW_SEGMENT_ATTR = 'data-appzac-segment-id'
 
@@ -278,11 +277,9 @@ export function resolvePreviewSegmentClick(target: EventTarget | null): string |
 }
 
 export function clearPreviewHighlights(host: HTMLElement): void {
-  host
-    .querySelectorAll(`.${PREVIEW_HIT_CLASS}, .${PREVIEW_DONE_CLASS}, .${PREVIEW_TM_CLASS}`)
-    .forEach((el) => {
-      el.classList.remove(PREVIEW_HIT_CLASS, PREVIEW_DONE_CLASS, PREVIEW_TM_CLASS)
-    })
+  host.querySelectorAll(`.${PREVIEW_HIT_CLASS}, .${PREVIEW_DONE_CLASS}`).forEach((el) => {
+    el.classList.remove(PREVIEW_HIT_CLASS, PREVIEW_DONE_CLASS)
+  })
 }
 
 function scrollWithinContainer(el: HTMLElement, container: HTMLElement): void {
@@ -298,7 +295,7 @@ export function highlightPreviewSegment(
   index: Map<string, HTMLElement>,
   segments: Segment[],
   segmentId: string | null,
-  options?: { scroll?: boolean; tmSegmentIds?: ReadonlySet<string> },
+  options?: { scroll?: boolean },
 ): void {
   clearPreviewHighlights(host)
 
@@ -307,10 +304,6 @@ export function highlightPreviewSegment(
     if (!el) continue
     if (isSegmentDone(segment)) {
       el.classList.add(PREVIEW_DONE_CLASS)
-      continue
-    }
-    if (options?.tmSegmentIds?.has(segment.id)) {
-      el.classList.add(PREVIEW_TM_CLASS)
     }
   }
 
