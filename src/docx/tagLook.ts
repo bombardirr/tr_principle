@@ -41,8 +41,8 @@ const RU: Dict = {
   highlight: 'Выделение',
   cf: 'Форматирование символа',
   other: 'Стиль',
-  open: 'открывающий тег',
-  close: 'закрывающий тег',
+  open: 'открывающий маркер',
+  close: 'закрывающий маркер',
 }
 
 const EN: Dict = {
@@ -60,8 +60,8 @@ const EN: Dict = {
   highlight: 'Highlight',
   cf: 'Character formatting',
   other: 'Style',
-  open: 'opening tag',
-  close: 'closing tag',
+  open: 'opening marker',
+  close: 'closing marker',
 }
 
 function dict(locale: string): Dict {

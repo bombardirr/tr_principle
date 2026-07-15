@@ -42,7 +42,7 @@ export default {
     features: {
       docx: {
         title: 'DOCX round-trip',
-        text: 'Import, translate, export — formatting tags stay in place.',
+        text: 'Import, translate, export — formatting markers stay in place.',
       },
       tm: {
         title: 'Translation memory',
@@ -65,7 +65,7 @@ export default {
       },
       translate: {
         title: 'Translate with help',
-        text: 'Reuse TM hits, keep tags intact, check progress as you go.',
+        text: 'Reuse TM hits, keep formatting markers intact, check progress as you go.',
       },
       export: {
         title: 'Export cleanly',
@@ -187,7 +187,7 @@ export default {
     resegmentDone: 'Project re-segmented into sentences',
     resegmentAmbiguous: 'Re-segmented. Check paragraphs where the translation could not be split cleanly ({n}).',
     copySource: 'Copy source',
-    copySourceHint: 'Copy source with tags into the translation field',
+    copySourceHint: 'Copy source with formatting markers into the translation field',
     leaveEmpty: 'Leave empty',
     leaveEmptyHint: 'Mark the segment as translated (empty). Does not change TM',
     resetTarget: 'Reset',
