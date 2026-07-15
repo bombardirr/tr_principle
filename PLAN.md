@@ -43,8 +43,8 @@
 
 - [x] Настраиваемый порог fuzzy (дефолт 75%, слайдер 50–100%)
 - [x] Context match (101%)
-- [ ] Штраф за теги
-- [ ] Match metadata в UI
+- [x] Штраф за теги
+- [x] Match metadata в UI
 - [ ] Segment edit audit
 - [ ] Concordance panel
 

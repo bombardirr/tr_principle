@@ -131,6 +131,7 @@ function onSaveToTm() {
       <div class="meta-target">
         <TmVariantPicker
           :matches="activeSeg ? matchesFor(activeSeg) : []"
+          :current-target="activeSeg?.target ?? ''"
           @pick="activeSeg && onPick(activeSeg, $event)"
         />
         <IconButton

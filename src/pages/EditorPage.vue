@@ -14,6 +14,7 @@ import { packProjectFile } from '@/storage/projectFile'
 import IconButton from '@/components/IconButton.vue'
 import EditorGlyph from '@/components/EditorGlyph.vue'
 import TooltipWrap from '@/components/TooltipWrap.vue'
+import { displayLabel, useAuth } from '@/auth/session'
 import { useProjectAccess } from '@/composables/useProjectAccess'
 import { scheduleProjectBackup, pushProjectBackup } from '@/projects/backup'
 import { useTmSettings } from '@/composables/useTmSettings'
@@ -42,6 +43,7 @@ import type { TmMatch, TmUnit } from '@/types/tm'
 const props = defineProps<{ id: string }>()
 const { t } = useI18n()
 const router = useRouter()
+const { user } = useAuth()
 
 /** shallowRef: deep ref() proxies break IndexedDB structured clone */
 const record = shallowRef<ProjectRecord | null>(null)
@@ -337,6 +339,7 @@ async function persistNow(): Promise<void> {
       sourceLang: record.value.meta.sourceLang,
       targetLang: record.value.meta.targetLang,
       projectId: record.value.meta.id,
+      actor: displayLabel(user.value) || 'local',
       onlyIds,
     })
     markTmDirty(...dirty)
@@ -630,6 +633,7 @@ async function saveSegmentToTmById(segId: string) {
       sourceLang: record.value.meta.sourceLang,
       targetLang: record.value.meta.targetLang,
       projectId: record.value.meta.id,
+      actor: displayLabel(user.value) || 'local',
       onlyIds: [segId],
     })
     markTmDirty(...dirty)

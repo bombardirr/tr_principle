@@ -1,19 +1,21 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import type { TmMatch } from '@/types/tm'
+import type { TmMatch, TmMatchKind } from '@/types/tm'
 import IconButton from './IconButton.vue'
 import EditorGlyph from './EditorGlyph.vue'
 
 const props = defineProps<{
   matches: TmMatch[]
+  /** Current segment target — badge dims when it already matches a TM option. */
+  currentTarget?: string
 }>()
 
 const emit = defineEmits<{
   pick: [match: TmMatch]
 }>()
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
 const open = ref(false)
 const expandedId = ref<string | null>(null)
 
@@ -23,6 +25,43 @@ const bestPct = computed(() => {
 })
 
 const label = computed(() => `${props.matches.length} · ${bestPct.value}%`)
+
+/** Translation already equals one of the listed TM variants. */
+const alreadyApplied = computed(() => {
+  const target = props.currentTarget?.trim() ?? ''
+  if (!target) return false
+  return props.matches.some((m) => m.target.trim() === target)
+})
+
+function kindLabel(kind: TmMatchKind): string {
+  switch (kind) {
+    case 'context':
+      return t('editor.tmKindContext')
+    case 'exact':
+      return t('editor.tmKindExact')
+    case 'fragment':
+      return t('editor.tmKindFragment')
+    default:
+      return t('editor.tmKindFuzzy')
+  }
+}
+
+function authorLabel(match: TmMatch): string {
+  const raw = (match.updatedBy || match.createdBy || '').trim()
+  if (!raw || raw === 'local') return t('editor.tmAuthorLocal')
+  return raw
+}
+
+function formatDate(iso: string | undefined): string {
+  if (!iso) return ''
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return iso.slice(0, 10)
+  return d.toLocaleDateString(locale.value, {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+  })
+}
 
 function toggle() {
   open.value = !open.value
@@ -41,7 +80,13 @@ function toggleContext(id: string | undefined) {
 
 <template>
   <div v-show="matches.length" class="tm-picker">
-    <button type="button" class="tm-badge" :title="t('editor.tmVariantsHint')" @click.stop="toggle">
+    <button
+      type="button"
+      class="tm-badge"
+      :class="{ 'is-applied': alreadyApplied }"
+      :title="t('editor.tmVariantsHint')"
+      @click.stop="toggle"
+    >
       {{ label }}
     </button>
     <div v-show="open" class="tm-panel" role="listbox">
@@ -53,12 +98,15 @@ function toggleContext(id: string | undefined) {
         role="option"
         @click="pick(m)"
       >
-        <span class="tm-pct">{{ Math.round(m.score * 100) }}%</span>
+        <span class="tm-score">
+          <span class="tm-pct">{{ Math.round(m.score * 100) }}%</span>
+          <span class="tm-kind" :data-kind="m.kind">{{ kindLabel(m.kind) }}</span>
+        </span>
         <span class="tm-body">
           <span class="tm-target">{{ m.target }}</span>
           <span class="tm-meta">
-            {{ m.updatedBy || m.createdBy || 'local' }}
-            <template v-if="m.updatedAt"> · {{ m.updatedAt.slice(0, 10) }}</template>
+            {{ authorLabel(m) }}
+            <template v-if="m.updatedAt"> · {{ formatDate(m.updatedAt) }}</template>
           </span>
           <button
             v-if="m.contextBefore || m.contextAfter"
@@ -107,6 +155,12 @@ function toggleContext(id: string | undefined) {
   line-height: 1.5rem;
   height: 1.5rem;
   white-space: nowrap;
+  transition: color 0.15s ease;
+}
+
+.tm-badge.is-applied {
+  color: var(--tm-accent-muted);
+  font-weight: 500;
 }
 
 .tm-panel {
@@ -127,7 +181,7 @@ function toggleContext(id: string | undefined) {
 
 .tm-row {
   display: flex;
-  gap: 0.5rem;
+  gap: 0.55rem;
   width: 100%;
   text-align: left;
   border: 0;
@@ -142,12 +196,33 @@ function toggleContext(id: string | undefined) {
   background: var(--surface-2);
 }
 
-.tm-pct {
+.tm-score {
   flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.1rem;
+  min-width: 3.4rem;
+}
+
+.tm-pct {
   font-size: 0.72rem;
   font-weight: 700;
   color: var(--tm-accent);
   font-variant-numeric: tabular-nums;
+}
+
+.tm-kind {
+  font-size: 0.62rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--text-muted);
+  text-transform: lowercase;
+}
+
+.tm-kind[data-kind='context'],
+.tm-kind[data-kind='exact'] {
+  color: var(--tm-accent);
 }
 
 .tm-body {

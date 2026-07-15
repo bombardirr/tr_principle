@@ -62,6 +62,51 @@ describe('tm match', () => {
     expect(match).toBeNull()
   })
 
+  it('does not treat tag-mismatched same text as exact', () => {
+    const match = findTmMatch(
+      [unit('{1}Hello{2}', 'Привет')],
+      'Hello',
+      'ru',
+      'en',
+      { punctuationMode: 'strict' },
+    )
+    expect(match?.kind).toBe('fuzzy')
+    expect(match?.score).toBeLessThan(1)
+    expect(match?.score).toBeGreaterThanOrEqual(0.85)
+  })
+
+  it('keeps exact when tag sequences match', () => {
+    const match = findTmMatch(
+      [unit('{1}Hello{2}{3} world{4}', '{1}Привет{2}{3} мир{4}')],
+      '{1}Hello{2}{3} world{4}',
+      'ru',
+      'en',
+      { punctuationMode: 'strict' },
+    )
+    expect(match?.kind).toBe('exact')
+    expect(match?.score).toBe(1)
+  })
+
+  it('lowers fuzzy score when tags differ', () => {
+    const withTags = findTmMatch(
+      [unit('{1}Hello world{2}', 'Привет мир')],
+      'Hello worl',
+      'ru',
+      'en',
+      { punctuationMode: 'strict', fuzzyMinScore: 0.5 },
+    )
+    const plain = findTmMatch(
+      [unit('Hello world', 'Привет мир')],
+      'Hello worl',
+      'ru',
+      'en',
+      { punctuationMode: 'strict', fuzzyMinScore: 0.5 },
+    )
+    expect(withTags?.kind).toBe('fuzzy')
+    expect(plain?.kind).toBe('fuzzy')
+    expect(withTags!.score).toBeLessThan(plain!.score)
+  })
+
   it('soft mode treats trailing punctuation as exact', () => {
     const match = findTmMatch(
       [unit(S1, 'We like you.')],

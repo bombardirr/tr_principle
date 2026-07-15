@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { buildTaggedText, splitTaggedText, tagsMatch } from '../../src/docx/tags'
+import {
+  buildTaggedText,
+  splitTaggedText,
+  tagMismatchPenalty,
+  tagsMatch,
+} from '../../src/docx/tags'
 
 describe('tags', () => {
   it('leaves single span untagged', () => {
@@ -14,6 +19,13 @@ describe('tags', () => {
     const source = '{1}A{2}{3}B{4}'
     expect(tagsMatch(source, '{1}X{2}{3}Y{4}')).toBe(true)
     expect(tagsMatch(source, '{1}X{2}')).toBe(false)
+  })
+
+  it('computes tag mismatch penalty', () => {
+    expect(tagMismatchPenalty('Hello', 'Hello')).toBe(0)
+    expect(tagMismatchPenalty('{1}Hello{2}', '{1}Hello{2}')).toBe(0)
+    expect(tagMismatchPenalty('{1}Hello{2}', 'Hello')).toBe(0.15)
+    expect(tagMismatchPenalty('{1}A{2}{3}B{4}', '{1}A{2}')).toBe(0.075)
   })
 
   it('splits tagged target into parts', () => {

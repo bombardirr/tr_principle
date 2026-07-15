@@ -1,3 +1,4 @@
+import { tagMismatchPenalty, tagsMatch } from '@/docx/tags'
 import type { TmMatch, TmMatchOptions, TmUnit } from '@/types/tm'
 import { splitTmFragments, plainSource } from './fragments'
 import { normalizeTmForMatch, normalizeTmSource, tmLookupKey } from './normalize'
@@ -52,6 +53,27 @@ function isExactSource(
     normalizeTmForMatch(source, punctuationMode) ===
     normalizeTmForMatch(unit.source, punctuationMode)
   )
+}
+
+/** Exact text (after normalize) and identical `{n}` tag sequence. */
+function isExactMatch(
+  source: string,
+  unit: TmUnit,
+  punctuationMode: TmPunctuationMode,
+): boolean {
+  return isExactSource(source, unit, punctuationMode) && tagsMatch(source, unit.source)
+}
+
+function fuzzyScore(
+  needle: string,
+  unitSource: string,
+  punctuationMode: TmPunctuationMode,
+): number {
+  const base = similarity(
+    normalizeTmForMatch(needle, punctuationMode),
+    normalizeTmForMatch(unitSource, punctuationMode),
+  )
+  return Math.max(0, base - tagMismatchPenalty(needle, unitSource))
 }
 
 function neighborsEqual(a?: string | null, b?: string | null): boolean {
@@ -147,7 +169,7 @@ function findExactForNeedle(
   const hits = units.filter(
     (unit) =>
       langsMatch(unit, sourceLang, targetLang) &&
-      isExactSource(needle, unit, punctuationMode),
+      isExactMatch(needle, unit, punctuationMode),
   )
   const exact = pickBestExact(needle, hits, punctuationMode, contextBefore, contextAfter)
   if (!exact) return null
@@ -169,13 +191,16 @@ function findFuzzyForNeedle(
   let best: TmMatch | null = null
   for (const unit of units) {
     if (!langsMatch(unit, sourceLang, targetLang)) continue
-    const score = similarity(
-      normalizedNeedle,
-      normalizeTmForMatch(unit.source, punctuationMode),
-    )
+    const score = fuzzyScore(needle, unit.source, punctuationMode)
     if (score < fuzzyMinScore) continue
     if (!best || score > best.score) {
-      best = { target: unit.target, kind: extras?.kind ?? 'fuzzy', score, ...extras }
+      best = {
+        target: unit.target,
+        kind: extras?.kind ?? 'fuzzy',
+        score,
+        ...matchMeta(unit),
+        ...extras,
+      }
     }
   }
   return best
@@ -263,16 +288,13 @@ export function findTmMatches(
 
   for (const unit of units) {
     if (!langsMatch(unit, sourceLang, targetLang)) continue
-    if (isExactSource(source, unit, punctuationMode)) {
+    if (isExactMatch(source, unit, punctuationMode)) {
       results.push(
         toExactOrContextMatch(unit, options?.contextBefore, options?.contextAfter),
       )
       continue
     }
-    const score = similarity(
-      normalizeTmForMatch(source, punctuationMode),
-      normalizeTmForMatch(unit.source, punctuationMode),
-    )
+    const score = fuzzyScore(source, unit.source, punctuationMode)
     if (score >= fuzzyMinScore) {
       results.push({
         target: unit.target,

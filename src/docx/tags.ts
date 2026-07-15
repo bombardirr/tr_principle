@@ -27,6 +27,30 @@ export function tagsMatch(source: string, target: string): boolean {
   return a.every((id, i) => id === b[i])
 }
 
+/** Max fuzzy score reduction when tag sequences differ completely. */
+export const TAG_MISMATCH_PENALTY_MAX = 0.15
+
+/**
+ * Score reduction (0…TAG_MISMATCH_PENALTY_MAX) when `{n}` tag sequences differ.
+ * Identical or both-empty → 0.
+ */
+export function tagMismatchPenalty(a: string, b: string): number {
+  const ta = extractTagIds(a)
+  const tb = extractTagIds(b)
+  if (ta.length === 0 && tb.length === 0) return 0
+  if (ta.length === tb.length && ta.every((id, i) => id === tb[i]!)) return 0
+
+  const maxLen = Math.max(ta.length, tb.length)
+  if (maxLen === 0) return 0
+
+  let matched = 0
+  const n = Math.min(ta.length, tb.length)
+  for (let i = 0; i < n; i++) {
+    if (ta[i] === tb[i]) matched++
+  }
+  return (1 - matched / maxLen) * TAG_MISMATCH_PENALTY_MAX
+}
+
 /**
  * Split tagged text into span texts matching source tag structure.
  * Untagged single-span source → one part = full target (tags stripped if any).
