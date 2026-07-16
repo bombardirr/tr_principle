@@ -82,8 +82,7 @@ let previewTimer: ReturnType<typeof setTimeout> | null = null
 let pageScrollSaveTimer: ReturnType<typeof setTimeout> | null = null
 const activeSegmentId = ref<string | null>(null)
 const projectLease = useProjectAccess(() => props.id)
-const { settings: tmSettings, togglePunctuationMode: toggleTmPunctuation, toggleAutoSaveToTm } =
-  useTmSettings()
+const { settings: tmSettings, toggleAutoSaveToTm } = useTmSettings()
 const { bindings: shortcutBindings, reload: reloadShortcuts } = useShortcutBindings()
 const tmUnits = shallowRef<TmUnit[]>([])
 const tmImportInput = ref<HTMLInputElement | null>(null)
@@ -1389,14 +1388,11 @@ async function goBack() {
           >
             <EditorGlyph name="cloud-upload" />
           </IconButton>
-          <IconButton :title="t('editor.exportDocxHint')" @click="exportDocx">
-            <EditorGlyph name="download-docx" />
+          <IconButton :title="t('editor.importTmxHint')" @click="openTmxImport">
+            <EditorGlyph name="upload-tmx" />
           </IconButton>
           <IconButton :title="t('editor.exportTmxHint')" @click="exportTmxFile">
             <EditorGlyph name="download-tmx" />
-          </IconButton>
-          <IconButton :title="t('editor.importTmxHint')" @click="openTmxImport">
-            <EditorGlyph name="upload-tmx" />
           </IconButton>
           <IconButton
             :title="
@@ -1409,16 +1405,9 @@ async function goBack() {
           >
             <EditorGlyph name="tm-commit" />
           </IconButton>
-          <IconButton
-            :title="
-              tmSettings.punctuationMode === 'soft'
-                ? t('editor.tmPunctSoftHint')
-                : t('editor.tmPunctStrictHint')
-            "
-            :active="tmSettings.punctuationMode === 'soft'"
-            @click="toggleTmPunctuation()"
-          >
-            <EditorGlyph name="tm" />
+          <!-- Final deliverable: translated DOCX — always rightmost in this zone. -->
+          <IconButton :title="t('editor.exportDocxHint')" @click="exportDocx">
+            <EditorGlyph name="download-docx" />
           </IconButton>
           <input
             ref="tmImportInput"

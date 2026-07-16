@@ -112,31 +112,26 @@ Outbox / очередь push — **не** в этом пункте («позже
 
 **Сделано:** таблица `subscriptions`; register → free/active; `/me` отдаёт effective `plan` + `plan_status`; клиент `isPro` + бейдж; admin ≠ Pro; CAT для free не режется. Выдача Pro — SQL.
 
-#### 3) Полировка ТМ-тулбара (убрать лишнее) ← **следующий**
+#### 3) Полировка ТМ-тулбара (убрать лишнее) ← **в работе**
 
-**Зачем:** в `#app-header-center` зона actions перегружена редкими ТМ-контролами. Soft/strict punct — power-user шум (дефолт уже soft). **Autosave ТМ оставляем в шапке**: это режим работы, его важно видеть (active-состояние иконки), не прятать в настройки.
+**Зачем:** убрать редкий soft/strict punct из шапки; **autosave ТМ оставить видимым**; **export DOCX — финальное действие справа** в зоне actions.
 
-**Сейчас в шапке (actions), ТМ-связанное:**
+**Порядок actions (LTR → справа финал):**  
+preview → refresh → archive → cloud → TMX import → TMX export → TM autosave → **export DOCX**
 
-| Кнопка | Что делает | Вердикт |
-|--------|------------|---------|
-| Export TMX | Скачать память | **Оставить** |
-| Import TMX | Залить TMX | **Оставить** |
-| TM autosave toggle | Вкл/выкл автозапись в ТМ | **Оставить в шапке** (видимый режим; active = on) |
-| Soft/strict punct | Режим нормализации match | **Убрать из шапки**; дефолт **soft**; strict без UI (код/тесты оставить) |
+| Кнопка | Вердикт |
+|--------|---------|
+| Soft/strict punct | **Убрать** из шапки; дефолт soft |
+| TM autosave | **Оставить** в шапке (видимый режим) |
+| Export DOCX | **Край справа** — готовый документ |
+| TMX in/out | Оставить (левее DOCX) |
 
-**Не трогать:** preview, refresh, archive, cloud backup, export DOCX; meta: progress / TM%·done% / lang pair / threshold `%`; сегментный бейдж / ручной commit / concordance.
+**Минимум:**
+1. [x] Порядок: DOCX справа; punct-кнопка убрана из шапки  
+2. [ ] Дефолт soft без UI; мёртвые i18n punct-hint’ов убрать или оставить для будущего advanced  
+3. Autosave / TMX / match — без регрессий  
 
-**Минимум среза:**
-1. Удалить из тулбара кнопку **punctuation soft/strict**; дефолт `soft` в `tm/settings` без UI.
-2. Autosave TM — **не переносить**; при желании чуть яснее glyph/title, но место в шапке сохраняем.
-3. TMX import/export — оставить.
-4. i18n: убрать мёртвые hint’ы punct-кнопки.
-5. Смоук: soft match как раньше; autosave toggle в шапке; TMX in/out.
-
-**Явно не в срезе:** админка ТМ, multi-TM, Issues tray, прятать autosave в настройки.
-
-**Критерий:** в шапке нет punct-toggle; autosave по-прежнему виден и кликабелен; soft punct работает; тесты match зелёные.
+**Критерий:** DOCX — правая кнопка actions; нет punct-toggle; autosave виден.
 
 ---
 
