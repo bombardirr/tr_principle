@@ -21,6 +21,7 @@ import { useTmSettings } from '@/composables/useTmSettings'
 import { useShortcutBindings } from '@/composables/useShortcutBindings'
 import { matchesBinding } from '@/shortcuts/bindings'
 import { useSegmentHistory } from '@/composables/useSegmentHistory'
+import { readPreviewEnabled, writePreviewEnabled } from '@/editor/previewPreference'
 import { findTmMatches } from '@/tm/match'
 import { findLangPairPreset, langPairLabel } from '@/tm/langPairs'
 import { tmLookupKey } from '@/tm/normalize'
@@ -73,13 +74,9 @@ let loadGen = 0
 
 const SAVE_IDLE_MS = 3000
 const UNDO_SAVE_IDLE_MS = 1500
-const PREVIEW_STORAGE_KEY = 'appzac-preview-enabled'
-
 const segHistory = useSegmentHistory()
 
-const previewEnabled = ref(
-  typeof localStorage !== 'undefined' && localStorage.getItem(PREVIEW_STORAGE_KEY) === '1',
-)
+const previewEnabled = ref(readPreviewEnabled())
 const previewToken = ref(0)
 let previewTimer: ReturnType<typeof setTimeout> | null = null
 let pageScrollSaveTimer: ReturnType<typeof setTimeout> | null = null
@@ -1201,7 +1198,7 @@ function schedulePreviewRefresh() {
 
 function togglePreview() {
   previewEnabled.value = !previewEnabled.value
-  localStorage.setItem(PREVIEW_STORAGE_KEY, previewEnabled.value ? '1' : '0')
+  writePreviewEnabled(previewEnabled.value)
   if (previewEnabled.value) previewToken.value++
 }
 
