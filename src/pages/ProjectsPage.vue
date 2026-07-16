@@ -174,7 +174,7 @@ function formatDate(iso: string) {
 </script>
 
 <template>
-  <section>
+  <section class="projects-page">
     <div class="head">
       <h1>{{ t('projects.title') }}</h1>
       <div class="actions">
@@ -276,6 +276,10 @@ function formatDate(iso: string) {
 </template>
 
 <style scoped lang="scss">
+.projects-page {
+  padding-top: clamp(1.1rem, 2.5vw, 1.65rem);
+}
+
 .head {
   display: flex;
   flex-wrap: wrap;
@@ -299,7 +303,7 @@ h1 {
 }
 
 button {
-  border: none;
+  border: 1px solid var(--border);
   background: var(--surface);
   border-radius: 8px;
   padding: 0.45rem 0.85rem;
@@ -312,6 +316,7 @@ button {
 button.primary {
   background: var(--accent-strong);
   color: var(--accent-text);
+  border-color: var(--accent-strong);
 }
 
 .error {
@@ -341,14 +346,16 @@ button.primary {
   align-items: center;
   gap: 0.35rem;
   background: var(--surface-soft);
+  border: 1px solid var(--border);
   border-radius: 10px;
   padding: 0.5rem 0.35rem 0.5rem 0.65rem;
   margin-bottom: 0.45rem;
-  transition: background 0.15s ease;
+  transition: background 0.15s ease, border-color 0.15s ease;
 }
 
 .item:hover {
   background: var(--surface);
+  border-color: var(--border-strong);
 }
 
 .item-link {

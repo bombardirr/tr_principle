@@ -365,7 +365,10 @@ const showIdleViewportChrome = computed(
           </div>
           <div class="header-end" aria-hidden="true" />
         </div>
-        <div class="pane source-pane">
+        <div
+          class="pane source-pane"
+          :class="{ filled: sorted[0] && filled(sorted[0]) }"
+        >
           <div
             v-for="seg in sorted"
             :key="`src-${seg.id}`"
@@ -780,6 +783,7 @@ $toolbar-icon-size: 1.75rem;
   width: 100%;
   min-width: 0;
   box-sizing: border-box;
+  border: 1px solid var(--border);
   border-radius: 8px;
   padding: 0.45rem 0.55rem;
   line-height: 1.5;
@@ -789,7 +793,7 @@ $toolbar-icon-size: 1.75rem;
   display: flex;
   flex-direction: column;
   gap: 0.35rem;
-  background: var(--surface-2);
+  background: var(--surface);
 }
 
 .source-pane,
@@ -803,10 +807,13 @@ $toolbar-icon-size: 1.75rem;
   cursor: text;
   pointer-events: auto;
   background: var(--target-pane-bg);
+  border-color: color-mix(in srgb, var(--accent) 28%, var(--border));
 }
 
+.source-pane.filled,
 .target-pane.filled {
   background: var(--target-filled-bg);
+  border-color: var(--target-filled-border);
 }
 
 .slot {
