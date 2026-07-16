@@ -112,6 +112,24 @@ Outbox / очередь push — **не** в этом пункте («позже
 
 **Сделано:** таблица `subscriptions`; register → free/active; `/me` отдаёт effective `plan` + `plan_status`; клиент `isPro` + бейдж; admin ≠ Pro; CAT для free не режется. Выдача Pro — SQL.
 
+#### 5) Метрики продукта + observability (добавлено)
+
+Два слоя — не смешивать:
+
+**A. Продукт / маркетинг (до или на tag MVP)**  
+- [ ] **Яндекс.Метрика** на лендинге и в SPA (счётчик через env, без хардкода id в git)  
+- [ ] Базовые цели / события: просмотр лендинга, register, login, открытие проекта, export DOCX, (опц.) toggle превью  
+- [ ] Privacy: не слать email/текст сегментов/JWT; только агрегированные действия и page views  
+- [ ] Согласие / cookie-баннер — только если реально нужно по политике хостинга; иначе минимум (счётчик + цели)
+
+**B. Сервер / ops (после tag или параллельно ops, не блокер tag)**  
+- [ ] **Prometheus**: `/metrics` на Go API (request rate/latency/errors, DB pool если есть)  
+- [ ] **Grafana**: дашборд по scrape (compose или отдельный стек на мини-ПК)  
+- [ ] Алерты позже (5xx, latency) — не в первом срезе  
+- [ ] Не путать с продуктовой аналитикой: Prometheus ≠ клики по UI
+
+Спеку/план реализации — перед стартом среза (как для entitlement).
+
 ---
 
 ### Фаза E: стили ≠ «теги» — landing ✓; остаток **после MVP**
@@ -364,6 +382,7 @@ Outbox / очередь push — **не** в этом пункте («позже
 - [ ] Двусторонний sync **проектов** — см. F2 (заменяет голый «только backup»)
 - [ ] Лимиты free; Pro-пакеты
 - [ ] Penalty за числа; TM dedupe/merge; Elasticsearch при масштабе
+- [ ] **Observability ops:** Prometheus `/metrics` + Grafana (см. § «Метрики» B); алерты 5xx/latency
 
 ---
 
@@ -390,8 +409,8 @@ Outbox / очередь push — **не** в этом пункте («позже
 7. B2 p2: audit + concordance ✓ (concordance — флаг `FEATURE_TM_CONCORDANCE`)
 8. Landing стилей (rich source / targetStyles / B/I/U / chrome / swap) ✓
 9. Тулбар стилей — необходимый минимум ✓ (+ preview on by default)
-10. **Дозакрытие cloud MVP** ← **сейчас** (offline banner ✓ → plan entitlement ✓ → 3: TM toolbar → … → tag MVP)
-11. **После MVP:** остаток E (F4, pop-out, E1b, E4, E5) → **фаза C (глоссарий)** → фаза F → MT / multi-TM / SRX / форматы
+10. **Дозакрытие cloud MVP** ← **сейчас** (offline ✓ → plan entitlement ✓ → TM toolbar → Word checklist → Яндекс.Метрика/события → tag MVP)
+11. **После MVP:** Prometheus/Grafana (ops) → остаток E → **фаза C** → фаза F → MT / multi-TM / SRX / форматы
 
 ---
 
