@@ -114,31 +114,29 @@ Outbox / очередь push — **не** в этом пункте («позже
 
 #### 3) Полировка ТМ-тулбара (убрать лишнее) ← **следующий**
 
-**Зачем:** в `#app-header-center` зона actions перегружена: рядом с превью/бэкапом/DOCX висят редкие ТМ-тогглы. Пунктуация уже soft by default; toggle в шапке — шум. Цель среза — **убрать/перенести** лишнее, логику match не ломать.
+**Зачем:** в `#app-header-center` зона actions перегружена редкими ТМ-контролами. Soft/strict punct — power-user шум (дефолт уже soft). **Autosave ТМ оставляем в шапке**: это режим работы, его важно видеть (active-состояние иконки), не прятать в настройки.
 
 **Сейчас в шапке (actions), ТМ-связанное:**
 
 | Кнопка | Что делает | Вердикт |
 |--------|------------|---------|
-| Export TMX | Скачать память | **Оставить** (или свернуть в «⋯» / меню ТМ — опц.) |
-| Import TMX | Залить TMX | **Оставить** (то же) |
-| TM autosave toggle | Вкл/выкл автозапись в ТМ | **Убрать из шапки** → в настройки проекта (язык/порог уже там) или account settings |
-| Soft/strict punct | Режим нормализации match | **Убрать из шапки**; оставить **soft** дефолтом; strict — только если очень нужно в настройках (advanced), иначе YAGNI |
+| Export TMX | Скачать память | **Оставить** |
+| Import TMX | Залить TMX | **Оставить** |
+| TM autosave toggle | Вкл/выкл автозапись в ТМ | **Оставить в шапке** (видимый режим; active = on) |
+| Soft/strict punct | Режим нормализации match | **Убрать из шапки**; дефолт **soft**; strict без UI (код/тесты оставить) |
 
-**Не трогать в этом срезе (не «лишнее ТМ»):** preview, refresh, archive, cloud backup, export DOCX; meta: progress / TM%·done% / lang pair / threshold `%`.
-
-**Сегментный UX (уже ок, не ломать):** бейдж вариантов, ручной commit в ТМ у бейджа, concordance по флагу.
+**Не трогать:** preview, refresh, archive, cloud backup, export DOCX; meta: progress / TM%·done% / lang pair / threshold `%`; сегментный бейдж / ручной commit / concordance.
 
 **Минимум среза:**
-1. Удалить из тулбара кнопку **punctuation soft/strict**; дефолт `soft` в `tm/settings` без UI (strict код/тесты оставить).
-2. Убрать из тулбара **autosave TM**; перенести toggle в `ProjectSettingsDialog` (или глобальные settings аккаунта — выбрать одно место; предпочтение: **настройки проекта**, рядом с порогом).
-3. TMX import/export — **оставить** в шапке в этом срезе (нужны freelancers); если после этого всё ещё тесно — следующий микросрез: меню «ТМ».
-4. i18n: убрать мёртвые hint’ы кнопок или перенести подписи в диалог настроек.
-5. Ручной смоук: match soft как раньше; autosave on/off из настроек; TMX in/out.
+1. Удалить из тулбара кнопку **punctuation soft/strict**; дефолт `soft` в `tm/settings` без UI.
+2. Autosave TM — **не переносить**; при желании чуть яснее glyph/title, но место в шапке сохраняем.
+3. TMX import/export — оставить.
+4. i18n: убрать мёртвые hint’ы punct-кнопки.
+5. Смоук: soft match как раньше; autosave toggle в шапке; TMX in/out.
 
-**Явно не в срезе:** админка ТМ, multi-TM, менять алгоритм soft punct, Issues tray.
+**Явно не в срезе:** админка ТМ, multi-TM, Issues tray, прятать autosave в настройки.
 
-**Критерий:** в шапке нет punct-toggle и нет autosave-иконки; autosave управляется из настроек; soft punct работает; тесты match зелёные.
+**Критерий:** в шапке нет punct-toggle; autosave по-прежнему виден и кликабелен; soft punct работает; тесты match зелёные.
 
 ---
 
