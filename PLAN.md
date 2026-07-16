@@ -87,8 +87,8 @@
 Порядок внутри среза (по одному):
 
 1. **Баннер offline** ← ✓  
-2. Feature flags / plan entitlement (free / Pro) ← **следующий**  
-3. Полировка ТМ-тулбара (убрать лишнее)  
+2. Feature flags / plan entitlement (free / Pro) ← ✓  
+3. Полировка ТМ-тулбара (убрать лишнее) ← **следующий**  
 4. Ручной чеклист Word на реальных файлах  
 5. Tag MVP  
 
@@ -105,20 +105,11 @@ Telegram password reset — **отложен** до бота (не блокер 
 
 Outbox / очередь push — **не** в этом пункте («позже»).
 
-#### 2) Feature flags / plan entitlement (free / Pro) ← **следующий**
+#### 2) Feature flags / plan entitlement (free / Pro) ← ✓
 
 Спека: [`docs/superpowers/specs/2026-07-16-plan-entitlement-design.md`](docs/superpowers/specs/2026-07-16-plan-entitlement-design.md)
 
-**Зачем:** identity ≠ billing. `is_admin` — RBAC; план — таблица `subscriptions`. Новый user → `free`/`active`, продукт пока **без** ограничений. Бейдж Pro при effective pro. Stripe/лимиты — позже на тех же колонках.
-
-**Минимум среза:**
-- [ ] Миграция `subscriptions` + create row on register
-- [ ] `/me` (login/register): `plan`, `plan_status` (effective plan)
-- [ ] Клиент `isPro` + бейдж; не путать с `FEATURE_*` / `is_admin`
-- [ ] Тесты store/helper/`isPro`
-- [ ] Выдача Pro — SQL (без UI)
-
-**Не в срезе:** Stripe, paywall, Pro-middleware на TM/backup, admin→Pro mapping.
+**Сделано:** таблица `subscriptions`; register → free/active; `/me` отдаёт effective `plan` + `plan_status`; клиент `isPro` + бейдж; admin ≠ Pro; CAT для free не режется. Выдача Pro — SQL.
 
 ---
 
@@ -350,7 +341,7 @@ Outbox / очередь push — **не** в этом пункте («позже
 - [x] Лендинг + auth UI (auth-first, без гостя); привязка Telegram — позже
 - [x] TM sync после login + dirty push при записи в ТМ
 - [x] Баннер offline ← см. «Дозакрытие cloud MVP»; позже outbox
-- [ ] Feature flags / plan entitlement (`subscriptions`, бейдж Pro) — см. спеку `2026-07-16-plan-entitlement-design.md`
+- [x] Feature flags / plan entitlement (`subscriptions`, бейдж Pro) — см. спеку `2026-07-16-plan-entitlement-design.md`
 
 #### Docker
 
@@ -398,7 +389,7 @@ Outbox / очередь push — **не** в этом пункте («позже
 7. B2 p2: audit + concordance ✓ (concordance — флаг `FEATURE_TM_CONCORDANCE`)
 8. Landing стилей (rich source / targetStyles / B/I/U / chrome / swap) ✓
 9. Тулбар стилей — необходимый минимум ✓ (+ preview on by default)
-10. **Дозакрытие cloud MVP** ← **сейчас** (offline banner ✓ → 2: feature flags → … → tag MVP)
+10. **Дозакрытие cloud MVP** ← **сейчас** (offline banner ✓ → plan entitlement ✓ → 3: TM toolbar → … → tag MVP)
 11. **После MVP:** остаток E (F4, pop-out, E1b, E4, E5) → **фаза C (глоссарий)** → фаза F → MT / multi-TM / SRX / форматы
 
 ---

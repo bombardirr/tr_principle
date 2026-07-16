@@ -22,7 +22,7 @@ import {
 const { t, locale } = useI18n()
 const route = useRoute()
 const router = useRouter()
-const { user, isAuthenticated, logout, ready, updateDisplayName } = useAuth()
+const { user, isAuthenticated, isPro, logout, ready, updateDisplayName } = useAuth()
 const theme = ref<Theme>('dark')
 const isEditorRoute = computed(() => route.name === 'editor')
 const isLanding = computed(() => route.name === 'landing')
@@ -151,7 +151,10 @@ async function onLogout() {
       <div id="app-header-center" class="header-center" />
       <div class="top-actions">
         <template v-if="ready && isAuthenticated && !isLanding">
-          <span class="account" :title="user?.email">{{ headerName }}</span>
+          <span class="account" :title="user?.email">
+            {{ headerName }}
+            <span v-if="isPro" class="plan-badge" :title="t('auth.planPro')">{{ t('auth.planPro') }}</span>
+          </span>
           <div ref="settingsRoot" class="settings-wrap">
             <IconButton
               :title="showNameNudge ? t('auth.settingsNudge') : t('auth.settings')"
@@ -206,6 +209,12 @@ async function onLogout() {
                 <div class="settings-block">
                   <span class="settings-label">{{ t('auth.email') }}</span>
                   <span class="settings-block-value">{{ user?.email }}</span>
+                </div>
+                <div v-if="isPro" class="settings-block">
+                  <span class="settings-label">{{ t('auth.planLabel') }}</span>
+                  <span class="settings-block-value">
+                    <span class="plan-badge plan-badge--block">{{ t('auth.planPro') }}</span>
+                  </span>
                 </div>
                 <p v-if="settingsError" class="settings-error">{{ settingsError }}</p>
                 <p v-else-if="settingsSaved" class="settings-ok">{{ t('auth.save') }} ✓</p>
@@ -348,13 +357,32 @@ async function onLogout() {
 }
 
 .account {
-  max-width: 12rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  max-width: 14rem;
   margin-right: 0.15rem;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  min-width: 0;
   font-size: 0.85rem;
   color: var(--text-muted);
+}
+
+.plan-badge {
+  flex: 0 0 auto;
+  padding: 0.05rem 0.35rem;
+  border-radius: 4px;
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--border));
+  background: color-mix(in srgb, var(--accent) 16%, var(--surface));
+  color: var(--accent);
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  line-height: 1.2;
+}
+
+.plan-badge--block {
+  font-size: 0.72rem;
 }
 
 .settings-wrap {

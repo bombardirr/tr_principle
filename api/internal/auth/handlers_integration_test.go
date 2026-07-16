@@ -38,6 +38,7 @@ func TestAuthFlow(t *testing.T) {
 	}
 
 	_, _ = pool.Exec(ctx, `DELETE FROM users WHERE email LIKE 'test_%@example.com'`)
+	// subscriptions cascade on user delete
 
 	handler := &auth.Handler{
 		Store:   auth.NewStore(pool),
@@ -58,6 +59,15 @@ func TestAuthFlow(t *testing.T) {
 	me := mustGET(t, srv.URL+"/api/auth/me", token)
 	if me["email"] != email {
 		t.Fatalf("me=%v", me)
+	}
+	if me["plan"] != "free" {
+		t.Fatalf("expected plan=free, got %v", me["plan"])
+	}
+	if me["plan_status"] != "active" {
+		t.Fatalf("expected plan_status=active, got %v", me["plan_status"])
+	}
+	if me["is_admin"] != false {
+		t.Fatalf("expected is_admin=false, got %v", me["is_admin"])
 	}
 
 	// Second login bumps sv — old token dies

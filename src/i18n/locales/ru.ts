@@ -26,6 +26,8 @@ export default {
     settingsNudge: 'Дозаполните профиль: ник для истории и ТМ',
     save: 'Сохранить',
     email: 'Email',
+    planLabel: 'План',
+    planPro: 'Pro',
   },
   landing: {
     headline: 'Перевод DOCX в браузере — разметка на месте.',

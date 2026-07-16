@@ -27,6 +27,8 @@ export default {
     settingsNudge: 'Finish setup: add a nickname for history and TM',
     save: 'Save',
     email: 'Email',
+    planLabel: 'Plan',
+    planPro: 'Pro',
   },
   landing: {
     headline: 'Translate DOCX in the browser — markup stays intact.',

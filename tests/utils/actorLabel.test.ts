@@ -10,6 +10,8 @@ function user(partial: Partial<AuthUser>): AuthUser {
     email: 'a@b.c',
     display_name: '',
     is_admin: false,
+    plan: 'free',
+    plan_status: 'active',
     ...partial,
   }
 }

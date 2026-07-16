@@ -20,6 +20,8 @@ type PublicUser struct {
 	Email       string `json:"email"`
 	DisplayName string `json:"display_name"`
 	IsAdmin     bool   `json:"is_admin"`
+	Plan        string `json:"plan"`
+	PlanStatus  string `json:"plan_status"`
 }
 
 type Handler struct {
@@ -216,11 +218,17 @@ func clientIP(r *http.Request) string {
 }
 
 func toPublic(u User) PublicUser {
+	status := u.Subscription.Status
+	if status == "" {
+		status = StatusInactive
+	}
 	return PublicUser{
 		ID:          u.ID.String(),
 		Email:       u.Email,
 		DisplayName: u.DisplayName,
 		IsAdmin:     u.IsAdmin,
+		Plan:        EffectivePlan(u.Subscription),
+		PlanStatus:  status,
 	}
 }
 

@@ -13,6 +13,7 @@ import {
 import { setStorageAccountId } from '@/storage/scope'
 import { syncTm } from '@/tm/sync'
 import { publicActorRef } from '@/utils/actorLabel'
+import { isPro } from '@/auth/plan'
 
 const user = ref<AuthUser | null>(null)
 const ready = ref(false)
@@ -99,6 +100,7 @@ export function useAuth() {
     user: readonly(user),
     ready: readonly(ready),
     isAuthenticated: computed(() => !!user.value),
+    isPro: computed(() => isPro(user.value)),
     register,
     login,
     logout,

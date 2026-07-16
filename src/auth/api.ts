@@ -1,10 +1,15 @@
 const TOKEN_KEY = 'appzac-auth-token'
 
+export type PlanId = 'free' | 'pro'
+export type PlanStatus = 'active' | 'trialing' | 'past_due' | 'canceled' | 'inactive'
+
 export type AuthUser = {
   id: string
   email: string
   display_name: string
   is_admin: boolean
+  plan: PlanId
+  plan_status: PlanStatus
 }
 
 function apiBase(): string {
