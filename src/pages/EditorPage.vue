@@ -1834,7 +1834,9 @@ h1.doc-title {
 }
 
 .editor-layout.with-preview {
-  grid-template-columns: minmax(0, 1fr) auto;
+  /* Preview is intrinsic-width; allow the editor column to claim remaining space and shrink. */
+  grid-template-columns: minmax(0, 1fr) minmax(0, auto);
+  min-width: 0;
 }
 
 .editor-main {
@@ -1875,13 +1877,14 @@ h1.doc-title {
   user-select: none;
 }
 
-@media (max-width: 1100px) {
+@media (max-width: 1280px) {
   .editor-layout.with-preview {
     grid-template-columns: 1fr;
   }
 
   .editor-layout.with-preview :deep(.preview-panel) {
     justify-self: center;
+    max-width: 100%;
   }
 }
 </style>

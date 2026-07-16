@@ -554,11 +554,14 @@ $toolbar-icon-size: 1.75rem;
 
 .segment-workspace {
   display: grid;
-  grid-template-columns: 1fr $rail-col-width 1fr;
+  /* minmax(0,1fr): keep equal fluid columns; plain 1fr won't shrink below StyleToolbar min-content. */
+  grid-template-columns: minmax(0, 1fr) $rail-col-width minmax(0, 1fr);
   grid-template-rows: auto minmax(6rem, auto);
   column-gap: $row-gap;
   row-gap: 0.35rem;
   align-items: stretch;
+  min-width: 0;
+  width: 100%;
 }
 
 /* Flatten columns into the parent grid so both panes share one row (same top). */
@@ -595,6 +598,7 @@ $toolbar-icon-size: 1.75rem;
   align-items: center;
   justify-content: space-between;
   gap: 0.35rem;
+  min-width: 0;
   min-height: 1.5rem;
   font-size: 0.8rem;
 }
@@ -615,6 +619,7 @@ $toolbar-icon-size: 1.75rem;
 .header-center {
   justify-content: center;
   flex: 1 1 auto;
+  overflow: hidden;
 }
 
 /* Search / audit / styles — hide by default. */

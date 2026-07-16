@@ -398,7 +398,8 @@ onBeforeUnmount(() => {
   align-self: start;
   width: fit-content;
   max-width: 100%;
-  flex-shrink: 0;
+  min-width: 0;
+  flex-shrink: 1;
   max-height: calc(100vh - 5.5rem);
   display: flex;
   flex-direction: column;

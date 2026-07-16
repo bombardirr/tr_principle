@@ -323,6 +323,7 @@ onUnmounted(() => {
 .style-toolbar {
   display: inline-flex;
   min-width: 0;
+  max-width: 100%;
   flex-wrap: nowrap;
   align-items: center;
   justify-content: center;
@@ -331,19 +332,26 @@ onUnmounted(() => {
   border: none;
   background: transparent;
   white-space: nowrap;
+  overflow: hidden;
 }
 
 .control-group {
   display: inline-flex;
-  flex: 0 0 auto;
+  flex: 0 1 auto;
   align-items: center;
   gap: 0.05rem;
+  min-width: 0;
 }
 
 .separated {
   margin-inline-start: 0.16rem;
   padding-inline-start: 0.16rem;
   border-inline-start: 1px solid var(--border);
+}
+
+.select-group {
+  min-width: 0;
+  flex: 1 1 auto;
 }
 
 .style-toolbar :deep(.icon-btn) {
@@ -399,12 +407,14 @@ onUnmounted(() => {
 
 .font-select {
   width: 7.5rem;
-  max-width: 7.5rem;
+  max-width: min(7.5rem, 100%);
+  flex: 1 1 auto;
 }
 
 .size-select {
   width: 3.5rem;
-  max-width: 3.5rem;
+  max-width: min(3.5rem, 100%);
+  flex: 0 1 auto;
 }
 
 .picker {

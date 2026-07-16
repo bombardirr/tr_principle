@@ -257,7 +257,7 @@ function onCommitTmClick() {
 </template>
 
 <style scoped lang="scss">
-$row-grid: 1fr auto 1fr;
+$row-grid: minmax(0, 1fr) auto minmax(0, 1fr);
 $row-gap: 0.65rem;
 $toolbar-icon-size: 1.75rem;
 $toolbar-col-width: 2rem;

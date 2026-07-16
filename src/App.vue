@@ -605,6 +605,7 @@ async function onLogout() {
 
 .main {
   flex: 1;
+  min-width: 0;
   padding: 0 1.5rem 2rem;
   max-width: 1200px;
   width: 100%;
