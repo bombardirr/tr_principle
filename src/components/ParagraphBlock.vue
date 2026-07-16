@@ -16,6 +16,7 @@ import { plainSource } from '@/tm/fragments'
 import { isIntentionallyEmpty, isSegmentTranslated } from '@/utils/segmentStatus'
 import { resolveSegmentKinds, type SegmentKind } from '@/utils/segmentKind'
 import type { TargetStyleRange } from '@/types/project'
+import { effectiveTargetStyles, type StyleApplyPatch } from '@/docx/runStyle'
 
 const props = defineProps<{
   segments: Segment[]
@@ -35,6 +36,17 @@ const props = defineProps<{
   boldActive?: boolean
   italicActive?: boolean
   underlineActive?: boolean
+  strikeActive?: boolean
+  vertAlign?: 'superscript' | 'subscript' | null
+  font?: string | null
+  fontMixed?: boolean
+  fontSizePt?: number | null
+  fontSizeMixed?: boolean
+  color?: string | null
+  colorMixed?: boolean
+  highlight?: string | null
+  highlightMixed?: boolean
+  fonts: string[]
   /** Force stacked chrome (overrides matchMedia when provided). */
   stacked?: boolean
   /** Idle hint: first segment in viewport (dimmed header icons, no focus). */
@@ -56,9 +68,9 @@ const emit = defineEmits<{
   insertConcordance: [segId: string, target: string]
   undo: [segId: string]
   redo: [segId: string]
-  targetSelection: [segId: string, range: { start: number; end: number } | null]
+  targetSelection: [segId: string, range: { start: number; end: number; collapsed?: boolean } | null]
   rowHover: [segId: string | null]
-  toggleStyle: [prop: 'bold' | 'italic' | 'underline']
+  applyStyle: [patch: StyleApplyPatch]
 }>()
 
 const showConcordance = FEATURE_TM_CONCORDANCE
@@ -90,6 +102,11 @@ const editors = ref<Record<string, { focus: () => void; sync: () => void; blur: 
   {},
 )
 
+/** Paint inherited source styles when targetStyles not yet stored. */
+function displayTargetStyles(seg: Segment): TargetStyleRange[] {
+  return effectiveTargetStyles(seg.target, seg.source, seg.spans, seg.targetStyles)
+}
+
 const mediaStacked = ref(false)
 let mql: MediaQueryList | null = null
 
@@ -103,6 +120,11 @@ onMounted(() => {
   mql = window.matchMedia('(max-width: 800px)')
   onMqChange()
   mql.addEventListener('change', onMqChange)
+  // After session restore, activeSegmentId may be set before editors mount — focus then.
+  const id = props.activeSegmentId
+  if (id && sorted.value.some((s) => s.id === id)) {
+    nextTick(() => editors.value[id]?.focus())
+  }
 })
 onUnmounted(() => {
   mql?.removeEventListener('change', onMqChange)
@@ -120,9 +142,11 @@ watch(
   () => props.stylePaintNonce,
   (nonce) => {
     if (!nonce) return
-    const id = props.activeSegmentId
-    if (!id || !sorted.value.some((s) => s.id === id)) return
-    nextTick(() => editors.value[id]?.sync())
+    nextTick(() => {
+      for (const seg of sorted.value) {
+        editors.value[seg.id]?.sync()
+      }
+    })
   },
 )
 
@@ -188,7 +212,10 @@ function onTargetUpdate(segId: string, value: string, styles?: TargetStyleRange[
   emit('updateTarget', segId, value, styles)
 }
 
-function onTargetSelection(segId: string, range: { start: number; end: number } | null) {
+function onTargetSelection(
+  segId: string,
+  range: { start: number; end: number; collapsed?: boolean } | null,
+) {
   emit('targetSelection', segId, range)
 }
 
@@ -403,7 +430,29 @@ const showIdleViewportChrome = computed(
               :bold-active="!!boldActive"
               :italic-active="!!italicActive"
               :underline-active="!!underlineActive"
-              @toggle="emit('toggleStyle', $event)"
+              :strike-active="!!strikeActive"
+              :vert-align="vertAlign"
+              :font="font"
+              :font-mixed="!!fontMixed"
+              :font-size-pt="fontSizePt"
+              :font-size-mixed="!!fontSizeMixed"
+              :color="color"
+              :color-mixed="!!colorMixed"
+              :highlight="highlight"
+              :highlight-mixed="!!highlightMixed"
+              :fonts="fonts"
+              @toggle="emit('applyStyle', { op: 'toggle', prop: $event })"
+              @set-font="emit('applyStyle', { op: 'set', prop: 'font', value: $event })"
+              @set-font-size-pt="
+                emit('applyStyle', { op: 'set', prop: 'fontSizePt', value: $event })
+              "
+              @set-color="emit('applyStyle', { op: 'set', prop: 'color', value: $event })"
+              @set-highlight="
+                emit('applyStyle', { op: 'set', prop: 'highlight', value: $event })
+              "
+              @set-vert-align="
+                emit('applyStyle', { op: 'set', prop: 'vertAlign', value: $event })
+              "
             />
           </div>
           <div class="header-end">
@@ -466,7 +515,7 @@ const showIdleViewportChrome = computed(
             <RichTargetEditor
               :ref="(el) => { editors[seg.id] = el as any }"
               :model-value="seg.target"
-              :styles="seg.targetStyles"
+              :styles="displayTargetStyles(seg)"
               @change="onTargetUpdate(seg.id, $event.target, $event.styles)"
               @selection-change="onTargetSelection(seg.id, $event)"
             />
@@ -580,9 +629,10 @@ $toolbar-icon-size: 1.75rem;
 }
 
 /*
- * Engaged: whole row (source, gaps, rail gutter, target).
+ * Engaged: active segment (incl. restored from session), hover, focus, armed, popovers, rail.
  * Do not key off `.target-col:hover` — columns use `display: contents` and don't receive hover.
  */
+.row.owns-chrome.active .header-center--reveal,
 .row.owns-chrome:hover .header-center--reveal,
 .row.owns-chrome:focus-within .header-center--reveal,
 .row.owns-chrome:has(.col--armed) .header-center--reveal,

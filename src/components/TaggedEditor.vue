@@ -192,7 +192,12 @@ onMounted(() => {
   if (!host.value) return
   editor = document.createElement('div')
   editor.className = 'tagged-editor'
-  editor.spellcheck = true
+  editor.spellcheck = false
+  editor.setAttribute('autocomplete', 'off')
+  editor.setAttribute('autocorrect', 'off')
+  editor.setAttribute('autocapitalize', 'off')
+  editor.setAttribute('translate', 'no')
+  editor.setAttribute('data-gramm', 'false')
   editor.tabIndex = 0
   const canEdit = props.editable !== false
   editor.contentEditable = canEdit ? 'true' : 'false'

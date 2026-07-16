@@ -112,4 +112,35 @@ describe('targetStyles export', () => {
     expect(out).toMatch(/w:val="C00000"/)
     expect(out).toMatch(/w:val="yellow"/)
   })
+
+  it('writes strike, vertAlign, color, highlight, font, size from targetStyles', () => {
+    const xml = minimalDocumentXml(
+      `<w:p><w:r><w:t>Hello world</w:t></w:r></w:p>`,
+    )
+    const segments = extractSegmentsFromStories([
+      { key: 'document', path: 'word/document.xml', xml },
+    ])
+    segments[0]!.target = 'Hello world'
+    segments[0]!.status = 'done'
+    segments[0]!.targetStyles = [
+      {
+        start: 0,
+        end: 5,
+        strike: true,
+        vertAlign: 'superscript',
+        color: 'FF0000',
+        highlight: 'yellow',
+        font: 'Arial',
+        fontSizePt: 14,
+      },
+    ]
+    const updated = applyTranslationsToStories({ 'word/document.xml': xml }, segments)
+    const out = updated['word/document.xml']!
+    expect(out).toMatch(/<w:strike[\s/>]/)
+    expect(out).toMatch(/w:val="superscript"/)
+    expect(out).toMatch(/w:val="FF0000"/i)
+    expect(out).toMatch(/w:val="yellow"/)
+    expect(out).toMatch(/w:ascii="Arial"/)
+    expect(out).toMatch(/w:val="28"/) // 14pt → 28 half-points
+  })
 })

@@ -8,7 +8,7 @@ import EditorGlyph from './EditorGlyph.vue'
 const props = defineProps<{
   activeSegmentId: string | null
   hoverSegmentId: string | null
-  /** First segment intersecting the viewport (cold load / mouse outside). */
+  /** Idle park target (first segment). */
   viewportAnchorId?: string | null
   leaveEmptyActive: boolean
   listEl: HTMLElement | null
@@ -29,7 +29,11 @@ const cluster = ref<HTMLElement | null>(null)
 /** Absolute Y of the cluster *center* within `.segment-list` (px). CSS uses translateY(-50%). */
 const centerY = ref(0)
 const dimmed = ref(true)
+/** Disable CSS transition for scroll-follow / seeding; keep it for focus/hover retarget. */
+const noMotion = ref(false)
 let lastTargetId: string | null = null
+/** Last segment that held focus — origin for the next focus slide. */
+let lastFocusId: string | null = null
 
 function targetId(): string | null {
   return pickMagnetRowId({
@@ -51,7 +55,13 @@ function paneCenterYInList(list: HTMLElement, row: HTMLElement): number | null {
   return mid - listRect.top + list.scrollTop
 }
 
-function measure() {
+function centerForSegment(list: HTMLElement, id: string): number | null {
+  const row = document.getElementById(`segment-${id}`)
+  if (!row || !list.contains(row)) return null
+  return paneCenterYInList(list, row)
+}
+
+function measure(opts?: { instant?: boolean }) {
   if (props.stacked) return
   const list = props.listEl
   const id = targetId()
@@ -61,13 +71,52 @@ function measure() {
   if (!row || !list.contains(row)) return
   const paneCenter = paneCenterYInList(list, row)
   if (paneCenter == null) return
-  if (id === lastTargetId && Math.abs(paneCenter - centerY.value) < 0.5) {
+
+  const sameTarget = id === lastTargetId
+  if (sameTarget && Math.abs(paneCenter - centerY.value) < 0.5) {
     observeTargetRow(row)
     return
   }
+
+  // Same target (scroll/resize): stick without easing. New target: slide.
+  const instant = opts?.instant ?? sameTarget
+  if (instant) {
+    noMotion.value = true
+    centerY.value = paneCenter
+    // Flush so the next animated move starts from this Y.
+    void cluster.value.offsetHeight
+    noMotion.value = false
+  } else {
+    noMotion.value = false
+    centerY.value = paneCenter
+  }
   lastTargetId = id
-  centerY.value = paneCenter
   observeTargetRow(row)
+}
+
+/**
+ * Focus change: seed at the previous focus row (no motion), then slide to the new active row.
+ * Idle / hover retarget keep normal sliding from the current visual position.
+ */
+function onActiveChange(id: string | null, prev: string | null | undefined) {
+  if (prev) lastFocusId = prev
+
+  if (id && lastFocusId && lastFocusId !== id && props.listEl) {
+    const from = centerForSegment(props.listEl, lastFocusId)
+    if (from != null) {
+      noMotion.value = true
+      centerY.value = from
+      lastTargetId = lastFocusId
+      if (cluster.value) void cluster.value.offsetHeight
+      noMotion.value = false
+      void nextTick(() => {
+        requestAnimationFrame(() => measure({ instant: false }))
+      })
+      return
+    }
+  }
+
+  remasureSoon()
 }
 
 let rowRo: ResizeObserver | null = null
@@ -77,7 +126,7 @@ function observeTargetRow(row: HTMLElement) {
   if (observedRow === row) return
   rowRo?.disconnect()
   observedRow = row
-  if (!rowRo) rowRo = new ResizeObserver(() => measure())
+  if (!rowRo) rowRo = new ResizeObserver(() => measure({ instant: true }))
   rowRo.observe(row)
   const source = row.querySelector('.source-pane')
   const target = row.querySelector('.target-pane')
@@ -97,7 +146,7 @@ let ro: ResizeObserver | null = null
 let scrollParents: HTMLElement[] = []
 
 function onScrollOrResize() {
-  measure()
+  measure({ instant: true })
 }
 
 function bindScroll() {
@@ -123,14 +172,14 @@ function unbindScroll() {
 function remasureSoon() {
   lastTargetId = null
   void nextTick(() => {
-    measure()
-    requestAnimationFrame(() => measure())
+    measure({ instant: false })
+    requestAnimationFrame(() => measure({ instant: false }))
   })
 }
 
 onMounted(() => {
   bindScroll()
-  ro = new ResizeObserver(() => measure())
+  ro = new ResizeObserver(() => measure({ instant: true }))
   if (props.listEl) ro.observe(props.listEl)
   remasureSoon()
 })
@@ -144,7 +193,7 @@ onUnmounted(() => {
   observedRow = null
 })
 
-watch(() => props.activeSegmentId, remasureSoon)
+watch(() => props.activeSegmentId, (id, prev) => onActiveChange(id, prev))
 watch(
   () => props.hoverSegmentId,
   () => {
@@ -179,7 +228,7 @@ watch(() => props.stacked, remasureSoon)
     <div
       ref="cluster"
       class="magnetic-cluster"
-      :class="{ dimmed, locked: !!activeSegmentId }"
+      :class="{ dimmed, 'no-motion': noMotion }"
       :style="{ top: `${centerY}px` }"
     >
       <div
@@ -233,7 +282,7 @@ watch(() => props.stacked, remasureSoon)
   transition: top 180ms ease;
 }
 
-.magnetic-cluster.locked {
+.magnetic-cluster.no-motion {
   transition: none;
 }
 

@@ -41,8 +41,17 @@ import type { ProjectRecord, Segment, TargetStyleRange } from '@/types/project'
 import { SEGMENT_SCHEMA_DATE_SAFE } from '@/types/project'
 import type { TmMatch, TmUnit } from '@/types/tm'
 import { stripMarkers } from '@/docx/tags'
-import { targetStylesFromTaggedSource, toggleStyleRange } from '@/docx/runStyle'
-import { firstSegmentIdInViewport, pickMagnetRowId } from '@/editor/magnetGeometry'
+import {
+  applyStyleRange,
+  collectProjectFonts,
+  effectiveTargetStyles,
+  predominantSourceStyle,
+  selectionHasProp,
+  selectionUniformValue,
+  targetStylesFromTaggedSource,
+  type StyleApplyPatch,
+} from '@/docx/runStyle'
+import { pickMagnetRowId } from '@/editor/magnetGeometry'
 import MagneticSegmentRail from '@/components/MagneticSegmentRail.vue'
 import ParagraphBlock from '@/components/ParagraphBlock.vue'
 
@@ -385,7 +394,6 @@ async function restorePageScroll() {
   restoreWindowScroll(snap.pageY)
   window.setTimeout(() => {
     restoreWindowScroll(snap.pageY)
-    scheduleViewportAnchor()
   }, 150)
 }
 
@@ -403,7 +411,6 @@ async function load() {
   record.value = withNormalizedRecord(found)
   await restorePageScroll()
   await nextTick()
-  scheduleViewportAnchor()
 }
 
 function onBeforeUnload(e: BeforeUnloadEvent) {
@@ -420,16 +427,10 @@ onMounted(() => {
     tmUnits.value = units
   })
   window.addEventListener('scroll', onPageScroll, PAGE_SCROLL_OPTS)
-  window.addEventListener('scroll', scheduleViewportAnchor, PAGE_SCROLL_OPTS)
-  window.addEventListener('resize', scheduleViewportAnchor)
-  window.addEventListener('mousemove', onPointerLive, PAGE_SCROLL_OPTS)
-  document.documentElement.addEventListener('mouseleave', onPointerLeaveWindow)
   window.addEventListener('beforeunload', onBeforeUnload)
   chromeMq = window.matchMedia('(max-width: 800px)')
   onChromeMq()
   chromeMq.addEventListener('change', onChromeMq)
-  idleViewportChrome.value = true
-  void nextTick(() => scheduleViewportAnchor())
 })
 
 watch(() => props.id, () => {
@@ -438,14 +439,9 @@ watch(() => props.id, () => {
 
 onUnmounted(() => {
   window.removeEventListener('scroll', onPageScroll, PAGE_SCROLL_OPTS)
-  window.removeEventListener('scroll', scheduleViewportAnchor, PAGE_SCROLL_OPTS)
-  window.removeEventListener('resize', scheduleViewportAnchor)
-  window.removeEventListener('mousemove', onPointerLive, PAGE_SCROLL_OPTS)
-  document.documentElement.removeEventListener('mouseleave', onPointerLeaveWindow)
   window.removeEventListener('beforeunload', onBeforeUnload)
   chromeMq?.removeEventListener('change', onChromeMq)
   chromeMq = null
-  if (viewportAnchorTimer) clearTimeout(viewportAnchorTimer)
   if (pageScrollSaveTimer) clearTimeout(pageScrollSaveTimer)
   void persistScroll()
   clearSaveTimer()
@@ -754,38 +750,147 @@ function restoreSegmentSnapshot(
   scheduleSave(UNDO_SAVE_IDLE_MS)
 }
 
-const targetSelection = ref<{ segId: string; start: number; end: number } | null>(null)
+const targetSelection = ref<{
+  segId: string
+  start: number
+  end: number
+  collapsed?: boolean
+} | null>(null)
+const projectFonts = computed(() => collectProjectFonts(record.value?.segments ?? []))
 
-function onTargetSelection(segId: string, range: { start: number; end: number } | null) {
-  if (!range || range.start === range.end) {
+function onTargetSelection(
+  segId: string,
+  range: { start: number; end: number; collapsed?: boolean } | null,
+) {
+  if (!range) {
     if (targetSelection.value?.segId === segId) targetSelection.value = null
     return
   }
+  // Collapsed caret counts: styles apply to the whole segment in that mode.
   targetSelection.value = { segId, ...range }
 }
 
 const stylePaintNonce = ref(0)
 
-function toggleActiveStyle(prop: 'bold' | 'italic' | 'underline') {
-  if (!record.value || projectLease.blocked.value) return
-  const sel = targetSelection.value
-  if (!sel || sel.start === sel.end) return
-  const seg = record.value.segments.find((s) => s.id === sel.segId)
-  if (!seg) return
-  const next = toggleStyleRange(seg.targetStyles, seg.target.length, sel.start, sel.end, prop)
-  updateTarget(seg, seg.target, next)
-  stylePaintNonce.value++
+/** Real range selection → that range; collapsed caret / no sel → entire plain target. */
+function styleRangeForApply(
+  sel: { start: number; end: number; collapsed?: boolean } | null | undefined,
+  plainLen: number,
+): { start: number; end: number } {
+  if (sel && !sel.collapsed && sel.start !== sel.end) {
+    return { start: sel.start, end: sel.end }
+  }
+  return { start: 0, end: plainLen }
 }
 
-function stylePropActive(prop: 'bold' | 'italic' | 'underline'): boolean {
-  const sel = targetSelection.value
-  if (!sel || !record.value) return false
-  const seg = record.value.segments.find((s) => s.id === sel.segId)
-  if (!seg?.targetStyles?.length) return false
-  const { start, end } = sel
-  return seg.targetStyles.some(
-    (r) => r[prop] && r.start < end && r.end > start && r.start <= start && r.end >= end,
+type StyleUiState = {
+  segId: string
+  bold: boolean
+  italic: boolean
+  underline: boolean
+  strike: boolean
+  vertAlign: 'superscript' | 'subscript' | null
+  font: string | null
+  fontMixed: boolean
+  fontSizePt: number | null
+  fontSizeMixed: boolean
+  color: string | null
+  colorMixed: boolean
+  highlight: string | null
+  highlightMixed: boolean
+}
+
+function emptyStyleUi(segId: string): StyleUiState {
+  return {
+    segId,
+    bold: false,
+    italic: false,
+    underline: false,
+    strike: false,
+    vertAlign: null,
+    font: null,
+    fontMixed: false,
+    fontSizePt: null,
+    fontSizeMixed: false,
+    color: null,
+    colorMixed: false,
+    highlight: null,
+    highlightMixed: false,
+  }
+}
+
+function stylesForSegmentUi(seg: Segment): TargetStyleRange[] {
+  return effectiveTargetStyles(seg.target, seg.source, seg.spans, seg.targetStyles)
+}
+
+function styleUiFromUniform(
+  segId: string,
+  styles: TargetStyleRange[] | undefined,
+  plainLen: number,
+  start: number,
+  end: number,
+): StyleUiState {
+  const args = [styles, plainLen, start, end] as const
+  const font = selectionUniformValue(...args, 'font')
+  const fontSizePt = selectionUniformValue(...args, 'fontSizePt')
+  const color = selectionUniformValue(...args, 'color')
+  const highlight = selectionUniformValue(...args, 'highlight')
+  const vertAlign = selectionUniformValue(...args, 'vertAlign')
+  return {
+    segId,
+    bold: selectionHasProp(...args, 'bold'),
+    italic: selectionHasProp(...args, 'italic'),
+    underline: selectionHasProp(...args, 'underline'),
+    strike: selectionHasProp(...args, 'strike'),
+    vertAlign: vertAlign ?? null,
+    font: font ?? null,
+    fontMixed: font === undefined,
+    fontSizePt: fontSizePt ?? null,
+    fontSizeMixed: fontSizePt === undefined,
+    color: color ?? null,
+    colorMixed: color === undefined,
+    highlight: highlight ?? null,
+    highlightMixed: highlight === undefined,
+  }
+}
+
+/** Toolbar: selection if any, else whole segment — like Word Select-All (mixed → —). */
+function styleUiForSegment(seg: Segment): StyleUiState {
+  const styles = stylesForSegmentUi(seg)
+  // Empty target: show predominant source style (Word default typing style).
+  if (!seg.target.length) {
+    const pred = predominantSourceStyle(seg.source, seg.spans)
+    if (!Object.keys(pred).length) return emptyStyleUi(seg.id)
+    const one: TargetStyleRange[] = [{ start: 0, end: 1, ...pred }]
+    return styleUiFromUniform(seg.id, one, 1, 0, 1)
+  }
+  const sel = targetSelection.value?.segId === seg.id ? targetSelection.value : null
+  const { start, end } = styleRangeForApply(sel, seg.target.length)
+  if (start >= end) return emptyStyleUi(seg.id)
+  return styleUiFromUniform(seg.id, styles, seg.target.length, start, end)
+}
+
+/** Enable style controls without requiring caret focus — active or hovered row is enough. */
+function styleToolbarLive(segId: string) {
+  return (
+    activeSegmentId.value === segId ||
+    hoverSegmentId.value === segId ||
+    targetSelection.value?.segId === segId
   )
+}
+
+function applyStyleToSegment(segId: string, patch: StyleApplyPatch) {
+  if (!record.value || projectLease.blocked.value) return
+  const seg = record.value.segments.find((s) => s.id === segId)
+  if (!seg) return
+  const sel = targetSelection.value?.segId === segId ? targetSelection.value : null
+  const { start, end } = styleRangeForApply(sel, seg.target.length)
+  if (start >= end) return
+  if (activeSegmentId.value !== segId) activateSegment(segId)
+  const base = stylesForSegmentUi(seg)
+  const next = applyStyleRange(base, seg.target.length, start, end, patch)
+  updateTarget(seg, seg.target, next)
+  stylePaintNonce.value++
 }
 
 function onEditorKeydown(e: KeyboardEvent) {
@@ -793,9 +898,13 @@ function onEditorKeydown(e: KeyboardEvent) {
   if (!(e.ctrlKey || e.metaKey) || e.altKey) return
   const k = e.key.toLowerCase()
   if (k !== 'b' && k !== 'i' && k !== 'u') return
-  if (!targetSelection.value) return
+  const segId = targetSelection.value?.segId ?? activeSegmentId.value
+  if (!segId) return
   e.preventDefault()
-  toggleActiveStyle(k === 'b' ? 'bold' : k === 'i' ? 'italic' : 'underline')
+  applyStyleToSegment(segId, {
+    op: 'toggle',
+    prop: k === 'b' ? 'bold' : k === 'i' ? 'italic' : 'underline',
+  })
 }
 
 function undoSegment(segId: string) {
@@ -910,58 +1019,30 @@ function deactivateEditor() {
   if (el instanceof HTMLElement && el.closest('.target-pane')) {
     el.blur()
   }
+  targetSelection.value = null
   if (activeSegmentId.value === null) return
   activeSegmentId.value = null
   scheduleScrollPersist()
 }
 
 const hoverSegmentId = ref<string | null>(null)
-const viewportAnchorId = ref<string | null>(null)
-/** Dimmed header icons on viewport-anchor only while pointer is idle (no mouse move yet). */
-const idleViewportChrome = ref(true)
+/** Idle magnet + dimmed header icons park on the first segment (no viewport tracking). */
+const idleAnchorId = computed(() => record.value?.segments[0]?.id ?? null)
 /** Pointer over the magnetic rail cluster — light header icons on magnet target. */
 const railHovered = ref(false)
+/**
+ * Dimmed header icons on the first segment while nothing is engaged
+ * (no active segment, no row hover, no rail hover).
+ */
+const idleViewportChrome = computed(
+  () => !activeSegmentId.value && !hoverSegmentId.value && !railHovered.value,
+)
 const segmentListEl = ref<HTMLElement | null>(null)
 const chromeStacked = ref(false)
 let chromeMq: MediaQueryList | null = null
-let viewportAnchorTimer: ReturnType<typeof setTimeout> | null = null
-
-function onPointerLive() {
-  if (idleViewportChrome.value) idleViewportChrome.value = false
-}
-
-function onPointerLeaveWindow(e: MouseEvent) {
-  // RelatedTarget null → left the document; restore idle hint icons.
-  if (e.relatedTarget == null && !activeSegmentId.value) {
-    idleViewportChrome.value = true
-  }
-}
 
 function onChromeMq() {
   chromeStacked.value = chromeMq?.matches ?? false
-}
-
-function refreshViewportAnchor() {
-  const list = segmentListEl.value
-  const ids = record.value?.segments.map((s) => s.id) ?? []
-  if (!list || !ids.length) {
-    viewportAnchorId.value = null
-    return
-  }
-  viewportAnchorId.value = firstSegmentIdInViewport(ids, (id) => {
-    const el = document.getElementById(`segment-${id}`)
-    if (!el) return null
-    const r = el.getBoundingClientRect()
-    return { top: r.top, bottom: r.bottom }
-  })
-}
-
-function scheduleViewportAnchor() {
-  if (viewportAnchorTimer) clearTimeout(viewportAnchorTimer)
-  viewportAnchorTimer = setTimeout(() => {
-    viewportAnchorTimer = null
-    refreshViewportAnchor()
-  }, 50)
 }
 
 function onRowHover(segId: string | null) {
@@ -977,16 +1058,11 @@ watch(activeSegmentId, (id) => {
   hoverSegmentId.value = id
 })
 
-watch(
-  () => record.value?.segments.map((s) => s.id).join('\0') ?? '',
-  () => scheduleViewportAnchor(),
-)
-
 function magnetTargetId() {
   return pickMagnetRowId({
     activeId: activeSegmentId.value,
     hoverId: hoverSegmentId.value,
-    viewportAnchorId: viewportAnchorId.value,
+    viewportAnchorId: idleAnchorId.value,
   })
 }
 
@@ -1299,7 +1375,7 @@ async function goBack() {
             :list-el="segmentListEl"
             :active-segment-id="activeSegmentId"
             :hover-segment-id="hoverSegmentId"
-            :viewport-anchor-id="viewportAnchorId"
+            :viewport-anchor-id="idleAnchorId"
             :leave-empty-active="railLeaveEmptyActive"
             :stacked="chromeStacked"
             @copy="onRailCopy"
@@ -1313,7 +1389,7 @@ async function goBack() {
             :segments="[seg]"
             :display-index="i + 1"
             :active-segment-id="activeSegmentId"
-            :viewport-anchor-id="viewportAnchorId"
+            :viewport-anchor-id="idleAnchorId"
             :idle-viewport-chrome="idleViewportChrome"
             :force-chrome-reveal="railChromeSegId === seg.id"
             :matches-for="matchesFor"
@@ -1323,15 +1399,22 @@ async function goBack() {
             :can-redo="segHistory.canRedo"
             :redo-count="segHistory.redoCount"
             :style-paint-nonce="stylePaintNonce"
-            :style-disabled="projectLease.blocked.value || !activeSegmentId"
-            :has-style-selection="
-              !!targetSelection &&
-              targetSelection.segId === seg.id &&
-              targetSelection.start !== targetSelection.end
-            "
-            :bold-active="targetSelection?.segId === seg.id && stylePropActive('bold')"
-            :italic-active="targetSelection?.segId === seg.id && stylePropActive('italic')"
-            :underline-active="targetSelection?.segId === seg.id && stylePropActive('underline')"
+            :style-disabled="projectLease.blocked.value"
+            :has-style-selection="styleToolbarLive(seg.id)"
+            :bold-active="styleUiForSegment(seg).bold"
+            :italic-active="styleUiForSegment(seg).italic"
+            :underline-active="styleUiForSegment(seg).underline"
+            :strike-active="styleUiForSegment(seg).strike"
+            :vert-align="styleUiForSegment(seg).vertAlign"
+            :font="styleUiForSegment(seg).font"
+            :font-mixed="styleUiForSegment(seg).fontMixed"
+            :font-size-pt="styleUiForSegment(seg).fontSizePt"
+            :font-size-mixed="styleUiForSegment(seg).fontSizeMixed"
+            :color="styleUiForSegment(seg).color"
+            :color-mixed="styleUiForSegment(seg).colorMixed"
+            :highlight="styleUiForSegment(seg).highlight"
+            :highlight-mixed="styleUiForSegment(seg).highlightMixed"
+            :fonts="projectFonts"
             :stacked="chromeStacked"
             @update-target="updateTargetById"
             @copy-source="copySourceById"
@@ -1345,7 +1428,7 @@ async function goBack() {
             @activate="activateSegment"
             @target-selection="onTargetSelection"
             @row-hover="onRowHover"
-            @toggle-style="toggleActiveStyle"
+            @apply-style="(patch) => applyStyleToSegment(seg.id, patch)"
           />
         </div>
       </div>

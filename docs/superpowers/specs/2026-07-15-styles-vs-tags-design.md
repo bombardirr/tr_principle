@@ -53,8 +53,9 @@ export interface TargetStyleRange {
 | F1 rich source | `RichSourceView` + `runStyle.ts` |
 | F2 toolbar + targetStyles + export | `StyleToolbar`, `RichTargetEditor`, styled apply |
 | F3 preview parity | same export blob |
-| F4 format paint / «как в оригинале» | later |
-| F5 font/size etc. | later |
+| F4 format paint / «как в оригинале» | after MVP |
+| Toolbar full props (font/size/color/strike/sup-sub/highlight) | **now** — `2026-07-16-style-toolbar-minimum-design.md` |
+| Rest of E (pop-out, E1b, E4, E5) + phase C | after MVP |
 
 ## Success criteria
 

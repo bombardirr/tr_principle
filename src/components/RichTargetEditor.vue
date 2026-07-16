@@ -23,11 +23,12 @@ const props = withDefaults(
 
 const emit = defineEmits<{
   change: [payload: { target: string; styles: TargetStyleRange[] }]
-  'selection-change': [range: { start: number; end: number } | null]
+  'selection-change': [range: { start: number; end: number; collapsed?: boolean } | null]
 }>()
 
 const editorRef = ref<HTMLDivElement | null>(null)
 let focused = false
+let painting = false
 let lastPlain = ''
 let lastStylesKey = ''
 
@@ -35,8 +36,9 @@ function stylesKey(styles: TargetStyleRange[] | undefined): string {
   return JSON.stringify(styles ?? [])
 }
 
+/** Match caret/style walks — innerText can diverge (br / CSS). */
 function plainFromDom(el: HTMLElement): string {
-  return (el.innerText || '').replace(/\n$/, '')
+  return el.textContent ?? ''
 }
 
 function markPainted() {
@@ -132,21 +134,31 @@ function paint(force = false) {
   const nextStylesKey = stylesKey(props.styles)
   if (!force && props.modelValue === lastPlain && nextStylesKey === lastStylesKey) return
 
-  // Skip only when the focused DOM already matches (user is typing).
-  // External updates (copy source / toolbar) call sync() → force.
-  if (focused && !force && plainFromDom(editor) === props.modelValue) {
-    markPainted()
+  // While typing, the DOM is already the source of truth for plain text.
+  // Do NOT skip when styles changed externally (toolbar) — that used to mark
+  // styles "painted" without updating HTML, so only preview showed them.
+  if (
+    focused &&
+    !force &&
+    plainFromDom(editor) === props.modelValue &&
+    nextStylesKey === lastStylesKey
+  ) {
     return
   }
 
   const html = piecesToHtml(styledPiecesFromTarget(props.modelValue, props.styles)) || '<br>'
   const caret = focused ? saveCaret() : null
-  if (editor.innerHTML !== html) {
-    editor.innerHTML = html
-    if (focused) {
-      if (caret) restoreCaret(caret)
-      else placeCaretEnd()
+  painting = true
+  try {
+    if (editor.innerHTML !== html) {
+      editor.innerHTML = html
+      if (focused) {
+        if (caret) restoreCaret(caret)
+        else placeCaretEnd()
+      }
     }
+  } finally {
+    painting = false
   }
   markPainted()
   syncPlaceholder()
@@ -181,7 +193,12 @@ function stylesFromDom(root: HTMLElement): TargetStyleRange[] {
     const next: RunStyle = { ...cur }
     if (cls.contains('rs-b') || el.tagName === 'B' || el.tagName === 'STRONG') next.bold = true
     if (cls.contains('rs-i') || el.tagName === 'I' || el.tagName === 'EM') next.italic = true
-    if (cls.contains('rs-u') || el.tagName === 'U' || /underline/i.test(el.style.textDecoration)) {
+    if (
+      cls.contains('rs-u') ||
+      el.tagName === 'U' ||
+      /underline/i.test(el.style.textDecoration) ||
+      /underline/i.test(el.style.textDecorationLine)
+    ) {
       next.underline = true
     }
     const uVal = el.getAttribute('data-u')
@@ -198,6 +215,13 @@ function stylesFromDom(root: HTMLElement): TargetStyleRange[] {
     else if (el.style.color) {
       const hex = el.style.color.match(/^#([0-9a-fA-F]{6})$/)
       if (hex) next.color = hex[1]!
+      else {
+        const rgb = el.style.color.match(/^rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/i)
+        if (rgb) {
+          const toHex = (n: string) => Number(n).toString(16).padStart(2, '0')
+          next.color = `${toHex(rgb[1]!)}${toHex(rgb[2]!)}${toHex(rgb[3]!)}`.toUpperCase()
+        }
+      }
     }
     const hl = el.getAttribute('data-highlight')
     if (hl) next.highlight = hl
@@ -242,10 +266,15 @@ function emitSelection() {
   }
   const a = caretPlainOffset(editor, sel.anchorNode!, sel.anchorOffset)
   const b = caretPlainOffset(editor, sel.focusNode!, sel.focusOffset)
-  emit('selection-change', { start: Math.min(a, b), end: Math.max(a, b) })
+  emit('selection-change', {
+    start: Math.min(a, b),
+    end: Math.max(a, b),
+    collapsed: sel.isCollapsed,
+  })
 }
 
 function onInput() {
+  if (painting) return
   const editor = editorRef.value
   if (!editor) return
   const next = plainFromDom(editor)
@@ -279,11 +308,21 @@ function onFocus() {
   emitSelection()
 }
 
-function onBlur() {
+function onBlur(e: FocusEvent) {
   focused = false
-  emit('selection-change', null)
-  // Reconcile model → DOM after leaving the field.
-  void nextTick(() => paint(true))
+  const related = e.relatedTarget
+  if (related instanceof Element && related.closest('.style-toolbar')) {
+    // Native <select>/picker took focus — keep selection so the toolbar stays enabled.
+    return
+  }
+  // relatedTarget is often null when focus moves to <select>; confirm on next frame.
+  requestAnimationFrame(() => {
+    const ae = document.activeElement
+    if (ae instanceof Element && ae.closest('.style-toolbar')) return
+    emit('selection-change', null)
+    // Reconcile model → DOM after leaving the field (not when using the toolbar).
+    void nextTick(() => paint(true))
+  })
 }
 
 function onKeyUp() {
@@ -324,9 +363,11 @@ onMounted(() => {
 })
 
 watch(
-  () => [props.modelValue, props.styles] as const,
-  () => void nextTick(() => paint(false)),
-  { deep: true },
+  () => [props.modelValue, stylesKey(props.styles)] as const,
+  (curr, prev) => {
+    const stylesChanged = Boolean(prev && curr[1] !== prev[1])
+    void nextTick(() => paint(stylesChanged))
+  },
 )
 
 watch(
@@ -357,7 +398,6 @@ function focus() {
 
 function sync() {
   paint(true)
-  if (focused) placeCaretEnd()
 }
 
 function blur() {
@@ -384,7 +424,14 @@ defineExpose({ focus, sync, blur, getSelectionOffsets })
     ref="editorRef"
     class="rich-target-inner"
     contenteditable="true"
-    spellcheck="true"
+    spellcheck="false"
+    autocomplete="off"
+    autocorrect="off"
+    autocapitalize="off"
+    translate="no"
+    data-gramm="false"
+    data-gramm_editor="false"
+    data-enable-grammarly="false"
     tabindex="0"
     @input="onInput"
     @focus="onFocus"
@@ -427,7 +474,14 @@ defineExpose({ focus, sync, blur, getSelectionOffsets })
   font-style: italic;
 }
 .rich-target-inner :deep(.rs-u) {
+  text-decoration: underline;
   text-underline-offset: 0.12em;
+}
+.rich-target-inner :deep(.rs-strike) {
+  text-decoration: line-through;
+}
+.rich-target-inner :deep(.rs-u.rs-strike) {
+  text-decoration: underline line-through;
 }
 .rich-target-inner :deep(.rs-sup) {
   vertical-align: super;

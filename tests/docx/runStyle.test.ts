@@ -3,6 +3,8 @@ import {
   styledPiecesFromTagged,
   targetStylesFromTaggedSource,
   toggleStyleRange,
+  effectiveTargetStyles,
+  predominantSourceStyle,
 } from '../../src/docx/runStyle'
 import type { RunSpan } from '../../src/types/project'
 
@@ -58,6 +60,45 @@ describe('runStyle', () => {
         highlight: 'yellow',
       },
     ])
+  })
+
+  it('inherits source styles onto target when targetStyles absent', () => {
+    const spans: RunSpan[] = [
+      {
+        runIndices: [0],
+        fingerprint: 'b|font:Arial||sz:22',
+        text: 'ab',
+      },
+      {
+        runIndices: [1],
+        fingerprint: 'font:Calibri||sz:20',
+        text: 'cd',
+      },
+    ]
+    const tagged = '{1}ab{2}{3}cd{4}'
+    expect(effectiveTargetStyles('abcd', tagged, spans, undefined)).toEqual(
+      targetStylesFromTaggedSource(tagged, spans),
+    )
+    expect(effectiveTargetStyles('abcd', tagged, spans, [{ start: 0, end: 4, italic: true }])).toEqual([
+      { start: 0, end: 4, italic: true },
+    ])
+    expect(effectiveTargetStyles('abcd', tagged, spans, [])).toEqual([])
+    // Different length → proportional map (first half from first run, etc.)
+    const mapped = effectiveTargetStyles('xxxx', tagged, spans, undefined)
+    expect(mapped[0]).toMatchObject({ start: 0, end: 2, bold: true, font: 'Arial', fontSizePt: 11 })
+    expect(mapped[1]).toMatchObject({ start: 2, end: 4, font: 'Calibri', fontSizePt: 10 })
+  })
+
+  it('predominantSourceStyle picks longest run', () => {
+    const spans: RunSpan[] = [
+      { runIndices: [0], fingerprint: 'font:Arial||sz:20', text: 'a' },
+      { runIndices: [1], fingerprint: 'b|font:Calibri||sz:24', text: 'bbb' },
+    ]
+    expect(predominantSourceStyle('{1}a{2}{3}bbb{4}', spans)).toEqual({
+      bold: true,
+      font: 'Calibri',
+      fontSizePt: 12,
+    })
   })
 
   it('parses strike / vertAlign from fingerprint', () => {

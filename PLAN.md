@@ -70,11 +70,25 @@
 
 ---
 
-### Фаза E: стили ≠ «теги» (после B2 p2) ← **после audit + concordance**
+### Срез: тулбар стилей (минимум) ← **сейчас (дозакрытие визуального CAT перед концом MVP)**
 
-> Обратная связь от практикующего переводчика. Сейчас в appzac `{1}…{2}` в редакторе = границы Word-runs (стили). В Trados/memoQ **«теги»** обычно = *повторяющийся/служебный* контент (колонтитулы, поля, иногда placeables), а стилизация текста — **отдельный слой** (панель форматирования), не «теги в строке». Исходник и перевод по умолчанию **не стилизуют** в поле ввода: берут преобладающий шрифт/стиль сегмента, нужное выделяют и стилизуют руками. Превью DOCX остаётся источником правды по внешнему виду.
+Спека: [`docs/superpowers/specs/2026-07-16-style-toolbar-minimum-design.md`](docs/superpowers/specs/2026-07-16-style-toolbar-minimum-design.md)
 
-Спека: [`docs/superpowers/specs/2026-07-15-styles-vs-tags-design.md`](docs/superpowers/specs/2026-07-15-styles-vs-tags-design.md) — перед кодом; править при расхождении с этим разделом.
+Landing фазы E (rich source, `targetStyles`, B/I/U, segment chrome, swap превью) уже в коде. Перед закрытием MVP добиваем **компактный тулбар** на полный набор модели:
+
+- [x] B/I/U + strike + superscript/subscript + font + size + color + highlight
+- [x] Apply/export/tests для новых props; UI в target header center (одна линия)
+
+Остальной бэклог E (ниже) и фаза C — **после MVP**.
+
+---
+
+### Фаза E: стили ≠ «теги» — landing ✓; остаток **после MVP**
+
+> Обратная связь от практикующего переводчика. Сейчас в appzac `{1}…{2}` = границы Word-runs (внутренняя кухня). Стилизация — панель форматирования; маркеры не в обычном UX. Превью DOCX — источник правды по внешнему виду.
+
+Спека (модель): [`docs/superpowers/specs/2026-07-15-styles-vs-tags-design.md`](docs/superpowers/specs/2026-07-15-styles-vs-tags-design.md)  
+Минимум тулбара (текущий срез): [`2026-07-16-style-toolbar-minimum-design.md`](docs/superpowers/specs/2026-07-16-style-toolbar-minimum-design.md)
 
 #### Словарь (фаза E)
 
@@ -113,44 +127,33 @@
 - [x] Режим отображения source/target без видимых `{n}` (toggle `{}` per-block + поиск/история в meta-center; дефолт скрыты)
 - ~~Преобладающий стиль на export~~ → перенесено после **E3** (нужен swap превью исходника, чтобы сверять результат)
 
-**E2 — панель стилизации (над переводом)** ← **landing (Word-like F1–F2)**
+**E2 — панель стилизации** ← landing ✓; полный минимум — см. срез выше
 
-- [x] Toolbar B / I / U **над колонкой target**, по центру; не в `#app-header`
-- [x] Segment chrome: split source/target headers + magnetic rail for pair-actions
-- [x] Активен при непустом selection в target (+ Ctrl+B/I/U)
-- [x] `targetStyles` на сегменте + undo snapshot; rich source без маркеров в UX
-- [x] Round-trip: styled ranges → rebuild DOCX runs (`tests/docx/targetStyles.test.ts`)
-- [ ] Font/size dropdowns; пипетка / «как в оригинале» (F4)
+- [x] Toolbar B / I / U в target header; не в `#app-header`
+- [x] Segment chrome: split headers + magnetic rail
+- [x] Активен при непустом selection (+ Ctrl+B/I/U)
+- [x] `targetStyles` + undo; rich source без маркеров в UX
+- [x] Round-trip styled ranges (`tests/docx/targetStyles.test.ts`)
+- [x] Расширение тулбара до минимума модели — **текущий срез** (не «после MVP»)
+- [ ] Пипетка / «как в оригинале» (F4) — **после MVP**
 
-**E3 — превью: swap + pop-out** ← **следующее перед predominant-export**
+**E3 — превью: swap + pop-out** ← swap ✓; pop-out **после MVP**
 
-- [x] Swap в **левом верхнем** углу шапки превью (аккуратная кнопка); тот же viewport
-- [x] Независимый scroll: `previewY` (перевод) и `previewSourceY` (оригинал) в sessionStorage; при swap восстанавливать свой
-- [x] В шапке превью **справа**: кнопки «вверх» / «вниз» (оба режима)
-- [ ] Pop-out: отсоединяемое окно/overlay превью (drag), resize с min-width/height; зум страницы важнее aspect-lock — позже
-- [ ] Сохранять положение/размер pop-out в session/localStorage на проект — с pop-out
+- [x] Swap в шапке превью; независимый scroll source/target
+- [x] Кнопки «вверх» / «вниз»
+- [ ] Pop-out (drag/resize) + persist положения — **после MVP**
 
-**E1b — преобладающий стиль на export (после E3)**
+**E1b / E4 / E5 — после MVP**
 
-- [ ] При export без ручных override: весь target → преобладающий стиль source-сегмента
-- [ ] Не ломать текущие проекты: миграция/совместимость spans; round-trip tests green
-- Мотив сдвига: проще валидировать глазами, когда есть swap оригинал ↔ перевод в превью
+- [ ] E1b: predominant style на export без ручных override
+- [ ] E4: инспектор стилей с превью → apply к selection
+- [ ] E5: CAT placeables (lock-fields); колонтитулы уже `kind`
+- [x] TM: копирайт «маркеры» (E0)
 
-**E4 — инспектор стилей с превью (после E2 + E1b)**
+#### Порядок (актуально)
 
-- [ ] Клик по элементу в превью → подсветка + краткая карточка стиля (font, size, bold/italic)
-- [ ] «Применить к выделению» → target selection активного сегмента (через нашу style-модель, не сырой CSS)
-- [ ] Связка клик превью → activate сегмента (уже частично есть) сохранить
-
-**E5 — CAT-«теги» по-настоящему (позже, не блокирует E1–E4)**
-
-- [ ] Не смешивать с маркерами: колонтитулы уже `kind`; дальше — lock-fields / non-translatable placeables по мере нужды
-- [x] TM: копирайт penalty/маркеров в UI и словаре → «маркеры» (E0); structure-placeables — отдельно когда появятся
-
-#### Порядок внутри E
-
-`E0 → E1 (plain) → E2 ↔ E3 → E1b (predominant export) → E4`; E5 параллельно/после.  
-E2 (панель стилей) и E3 (swap превью) можно параллелить; **E1b только после E3**. Не начинать E4 без стабильного E2 + E1b.
+До конца MVP: **тулбар-минимум**.  
+После MVP: `F4 → E3 pop-out → E1b → E4`; E5 по нужде. Фаза C — после MVP (см. ниже).
 
 ---
 
@@ -219,7 +222,7 @@ E2 (панель стилей) и E3 (swap превью) можно паралл
 
 ---
 
-### Фаза C: Глоссарий (после MVP-auth)
+### Фаза C: Глоссарий ← **после MVP** (не блокер закрытия cloud MVP)
 
 - [ ] Локальный termbase + подсветка в source
 - [ ] Backlog: TBX
@@ -320,7 +323,9 @@ E2 (панель стилей) и E3 (swap превью) можно паралл
 
 ### После MVP (фаза D / Pro и отложенное)
 
-- [ ] **Ручная стилизация перевода** (фаза E) — вместо «ручная вставка маркеров `{n}`»
+- [ ] **Остаток фазы E:** F4 «как в оригинале», pop-out превью, E1b predominant export, E4 инспектор, E5 placeables  
+  (landing + тулбар-минимум — до/на границе MVP; см. срезы выше)
+- [ ] **Фаза C: глоссарий** (termbase / TBX)
 - [ ] **Фаза F: общий проект / другие люди** (invite, sync проекта; затем team TM)
 - [ ] MT (подсказки машинного перевода)
 - [ ] multi-TM (несколько памятей с приоритетом) — стыкуется с F3
@@ -352,9 +357,10 @@ E2 (панель стилей) и E3 (swap превью) можно паралл
 5. Prod + security pass ✓
 6. Telegram: link + password reset (конец MVP) — отложено
 7. B2 p2: audit + concordance ✓ (concordance — флаг `FEATURE_TM_CONCORDANCE`)
-8. **Фаза E: стили ≠ маркеры** ← дальше (E1 plain ✓; след. E2 и/или E3 swap; E1b predominant после E3)
-9. **Фаза F: общий проект / другие аккаунты** (F1 файл → F2 invite+sync → F3 team TM)
-10. Глоссарий; форматы; MT; multi-TM; SRX; админка ТМ; CAT placeables (E5)
+8. Landing стилей (rich source / targetStyles / B/I/U / chrome / swap) ✓
+9. **Тулбар стилей — необходимый минимум** ← **сейчас** (`2026-07-16-style-toolbar-minimum-design.md`)
+10. Дозакрытие cloud MVP (offline banner / мелочи по чеклисту) → tag MVP
+11. **После MVP:** остаток E (F4, pop-out, E1b, E4, E5) → **фаза C (глоссарий)** → фаза F → MT / multi-TM / SRX / форматы
 
 ---
 

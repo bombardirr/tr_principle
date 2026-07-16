@@ -128,13 +128,12 @@ function wrapStyled(text: string, style: RunStyle): string {
   if (style.underline) deco.push('underline')
   if (style.strike || style.doubleStrike) deco.push('line-through')
   if (deco.length) {
-    inline.push(`text-decoration-line:${deco.join(' ')}`)
-    if (style.underlineVal === 'thick') inline.push('text-decoration-thickness:2px')
-    if (style.underlineVal === 'double' || style.doubleStrike) {
-      inline.push('text-decoration-style:double')
-    } else if (style.underlineVal === 'wave') {
-      inline.push('text-decoration-style:wavy')
-    }
+    // Shorthand is more reliable inside contenteditable than text-decoration-line alone.
+    let decoCss = `text-decoration:${deco.join(' ')}`
+    if (style.underlineVal === 'thick') decoCss += ' 2px'
+    if (style.underlineVal === 'double' || style.doubleStrike) decoCss += ' double'
+    else if (style.underlineVal === 'wave') decoCss += ' wavy'
+    inline.push(decoCss)
   }
 
   const data: string[] = []
@@ -338,6 +337,55 @@ export function targetStylesFromTaggedSource(
   return out
 }
 
+/** Longest styled run wins (Word “most of the selection” / default typing style). */
+export function predominantSourceStyle(
+  taggedSource: string,
+  spans: RunSpan[],
+): RunStyle {
+  const pieces = styledPiecesFromTagged(taggedSource, spans)
+  if (!pieces.length) return {}
+  let best = pieces[0]!
+  for (const p of pieces) {
+    if (p.text.length > best.text.length) best = p
+  }
+  return { ...best.style }
+}
+
+/**
+ * Styles the target editor should paint / toolbar should reflect.
+ * Stored `targetStyles` win; otherwise inherit from source runs
+ * (1:1 when lengths match, else proportional — Word-like look before overrides).
+ */
+export function effectiveTargetStyles(
+  targetPlain: string,
+  taggedSource: string,
+  spans: RunSpan[],
+  stored?: TargetStyleRange[],
+): TargetStyleRange[] {
+  // Explicit store (including []) wins — otherwise toggle-off / clear snaps back to source.
+  if (stored !== undefined) return stored
+  if (!targetPlain) return []
+  const pieces = styledPiecesFromTagged(taggedSource, spans)
+  const sourcePlain = pieces.map((p) => p.text).join('')
+  if (!sourcePlain) return []
+  if (targetPlain === sourcePlain || targetPlain.length === sourcePlain.length) {
+    return targetStylesFromTaggedSource(taggedSource, spans)
+  }
+  const srcMarks: RunStyle[] = []
+  for (const p of pieces) {
+    for (let k = 0; k < p.text.length; k++) srcMarks.push({ ...p.style })
+  }
+  const marks: RunStyle[] = Array.from({ length: targetPlain.length }, () => ({}))
+  for (let i = 0; i < targetPlain.length; i++) {
+    const srcIdx = Math.min(
+      srcMarks.length - 1,
+      Math.floor((i * srcMarks.length) / targetPlain.length),
+    )
+    marks[i] = { ...srcMarks[srcIdx]! }
+  }
+  return rebuildRangesFromMarks(marks)
+}
+
 export function styledPiecesFromTarget(
   plain: string,
   styles: TargetStyleRange[] | undefined,
@@ -359,6 +407,54 @@ export function styledPiecesFromTarget(
   return pieces
 }
 
+export type StyleToggleProp = 'bold' | 'italic' | 'underline' | 'strike'
+
+export type StyleApplyPatch =
+  | { op: 'toggle'; prop: StyleToggleProp }
+  | { op: 'set'; prop: 'font'; value: string | null }
+  | { op: 'set'; prop: 'fontSizePt'; value: number | null }
+  | { op: 'set'; prop: 'color'; value: string | null }
+  | { op: 'set'; prop: 'highlight'; value: string | null }
+  | { op: 'set'; prop: 'vertAlign'; value: 'superscript' | 'subscript' | null }
+
+export function applyStyleRange(
+  styles: TargetStyleRange[] | undefined,
+  plainLen: number,
+  start: number,
+  end: number,
+  patch: StyleApplyPatch,
+): TargetStyleRange[] {
+  const a = Math.max(0, Math.min(plainLen, Math.min(start, end)))
+  const b = Math.max(0, Math.min(plainLen, Math.max(start, end)))
+  if (a >= b) return styles ? [...styles] : []
+  const marks = flattenStylesToMarks(plainLen, styles)
+
+  if (patch.op === 'toggle') {
+    const coverage = new Array(b - a).fill(false)
+    for (let i = a; i < b; i++) {
+      if (marks[i]![patch.prop]) coverage[i - a] = true
+    }
+    const turnOn = coverage.some((x) => !x)
+    for (let i = a; i < b; i++) {
+      const m = marks[i]!
+      if (turnOn) {
+        ;(m as Record<string, unknown>)[patch.prop] = true
+        if (patch.prop === 'underline' && !m.underlineVal) m.underlineVal = 'single'
+      } else {
+        delete (m as Record<string, unknown>)[patch.prop]
+        if (patch.prop === 'underline') delete m.underlineVal
+      }
+    }
+  } else {
+    for (let i = a; i < b; i++) {
+      const m = marks[i]!
+      if (patch.value == null) delete (m as Record<string, unknown>)[patch.prop]
+      else (m as Record<string, unknown>)[patch.prop] = patch.value
+    }
+  }
+  return rebuildRangesFromMarks(marks)
+}
+
 export function toggleStyleRange(
   styles: TargetStyleRange[] | undefined,
   plainLen: number,
@@ -366,39 +462,49 @@ export function toggleStyleRange(
   end: number,
   prop: 'bold' | 'italic' | 'underline',
 ): TargetStyleRange[] {
+  return applyStyleRange(styles, plainLen, start, end, { op: 'toggle', prop })
+}
+
+export function selectionHasProp(
+  styles: TargetStyleRange[] | undefined,
+  plainLen: number,
+  start: number,
+  end: number,
+  prop: StyleToggleProp,
+): boolean {
   const a = Math.max(0, Math.min(plainLen, Math.min(start, end)))
   const b = Math.max(0, Math.min(plainLen, Math.max(start, end)))
-  if (a >= b) return styles ? [...styles] : []
-
-  const coverage = new Array(b - a).fill(false)
-  for (const r of styles ?? []) {
-    if (!r[prop]) continue
-    const lo = Math.max(a, r.start)
-    const hi = Math.min(b, r.end)
-    for (let i = lo; i < hi; i++) coverage[i - a] = true
-  }
-  const turnOn = coverage.some((x) => !x)
-
+  if (a >= b) return false
   const marks = flattenStylesToMarks(plainLen, styles)
+  for (let i = a; i < b; i++) if (!marks[i]![prop]) return false
+  return true
+}
+
+export function selectionUniformValue<
+  K extends 'font' | 'fontSizePt' | 'color' | 'highlight' | 'vertAlign',
+>(
+  styles: TargetStyleRange[] | undefined,
+  plainLen: number,
+  start: number,
+  end: number,
+  prop: K,
+): TargetStyleRange[K] | null | undefined {
+  const a = Math.max(0, Math.min(plainLen, Math.min(start, end)))
+  const b = Math.max(0, Math.min(plainLen, Math.max(start, end)))
+  if (a >= b) return null
+  const marks = flattenStylesToMarks(plainLen, styles)
+  let seen: TargetStyleRange[K] | null | undefined = undefined
+  let init = false
   for (let i = a; i < b; i++) {
-    const m = marks[i]!
-    if (prop === 'bold') {
-      if (turnOn) m.bold = true
-      else delete m.bold
-    } else if (prop === 'italic') {
-      if (turnOn) m.italic = true
-      else delete m.italic
-    } else if (prop === 'underline') {
-      if (turnOn) {
-        m.underline = true
-        if (!m.underlineVal) m.underlineVal = 'single'
-      } else {
-        delete m.underline
-        delete m.underlineVal
-      }
+    const v = (marks[i]![prop] ?? null) as TargetStyleRange[K] | null
+    if (!init) {
+      seen = v
+      init = true
+      continue
     }
+    if (v !== seen) return undefined
   }
-  return rebuildRangesFromMarks(marks)
+  return seen ?? null
 }
 
 export function shiftTargetStyles(
@@ -435,4 +541,37 @@ export function shiftTargetStyles(
     }
   }
   return out.filter((r) => r.end > r.start)
+}
+
+export const DEFAULT_STYLE_FONTS = [
+  'Calibri',
+  'Arial',
+  'Times New Roman',
+  'Georgia',
+  'Courier New',
+] as const
+
+export const STYLE_SIZE_PRESETS_PT = [
+  8, 9, 10, 11, 12, 14, 16, 18, 20, 24, 28, 36,
+] as const
+
+/** Unique font names from RunSpan fingerprints in segments, sorted, merged with defaults. */
+export function collectProjectFonts(
+  segments: { spans?: RunSpan[]; paragraphSpans?: RunSpan[] }[],
+): string[] {
+  const seen = new Map<string, string>()
+  for (const font of DEFAULT_STYLE_FONTS) seen.set(font.toLocaleLowerCase(), font)
+  for (const seg of segments) {
+    for (const group of [seg.spans, seg.paragraphSpans]) {
+      for (const span of group ?? []) {
+        const font = parseFingerprint(span.fingerprint ?? 'plain').font
+        if (font && !seen.has(font.toLocaleLowerCase())) {
+          seen.set(font.toLocaleLowerCase(), font)
+        }
+      }
+    }
+  }
+  return [...seen.values()].sort((a, b) =>
+    a.localeCompare(b, undefined, { sensitivity: 'base' }),
+  )
 }

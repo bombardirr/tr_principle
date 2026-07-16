@@ -50,8 +50,14 @@ function stylesEqual(
       r.bold === o.bold &&
       r.italic === o.italic &&
       r.underline === o.underline &&
+      r.underlineVal === o.underlineVal &&
       r.font === o.font &&
-      r.fontSizePt === o.fontSizePt
+      r.fontSizePt === o.fontSizePt &&
+      r.color === o.color &&
+      r.strike === o.strike &&
+      r.doubleStrike === o.doubleStrike &&
+      r.vertAlign === o.vertAlign &&
+      r.highlight === o.highlight
     )
   })
 }
