@@ -12,15 +12,6 @@ export function useTmSettings() {
     settings.value = readTmSettings()
   }
 
-  function togglePunctuationMode() {
-    settings.value = {
-      ...settings.value,
-      punctuationMode:
-        settings.value.punctuationMode === 'soft' ? 'strict' : 'soft',
-    }
-    writeTmSettings(settings.value)
-  }
-
   function toggleAutoSaveToTm() {
     settings.value = {
       ...settings.value,
@@ -32,7 +23,6 @@ export function useTmSettings() {
   return {
     settings,
     reload,
-    togglePunctuationMode,
     toggleAutoSaveToTm,
   }
 }

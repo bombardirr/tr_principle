@@ -88,8 +88,8 @@
 
 1. **Баннер offline** ← ✓  
 2. Feature flags / plan entitlement (free / Pro) ← ✓  
-3. Полировка ТМ-тулбара (убрать лишнее) ← **следующий**  
-4. Ручной чеклист Word на реальных файлах  
+3. Полировка ТМ-тулбара (убрать лишнее) ← ✓  
+4. Ручной чеклист Word на реальных файлах ← **следующий**  
 5. Метрики продукта (Яндекс.Метрика + события)  
 6. Tag MVP  
 
@@ -112,28 +112,16 @@ Outbox / очередь push — **не** в этом пункте («позже
 
 **Сделано:** таблица `subscriptions`; register → free/active; `/me` отдаёт effective `plan` + `plan_status`; клиент `isPro` + бейдж; admin ≠ Pro; CAT для free не режется. Выдача Pro — SQL.
 
-#### 3) Полировка ТМ-тулбара (убрать лишнее) ← **в работе**
+#### 3) Полировка ТМ-тулбара (убрать лишнее) ← ✓
 
-**Зачем:** убрать редкий soft/strict punct из шапки; **autosave ТМ оставить видимым**; **export DOCX — финальное действие справа** в зоне actions.
+**Сделано:**
+- [x] Export DOCX — край справа в actions
+- [x] Убраны punct soft/strict и refresh превью из шапки
+- [x] Autosave ТМ остаётся видимым; TMX in/out на месте
+- [x] Дефолт match — всегда soft (без UI); `togglePunctuationMode` удалён; мёртвые i18n punct убраны
+- Strict punctuation остаётся в `tm/match` для тестов через options
 
-**Порядок actions (LTR → справа финал):**  
-preview → archive → cloud → TMX import → TMX export → TM autosave → **export DOCX**
-
-| Кнопка | Вердикт |
-|--------|---------|
-| Soft/strict punct | **Убрано** из шапки; дефолт soft |
-| Preview refresh | **Убрано** (автообновление после сейва) |
-| TM autosave | **Оставить** в шапке (видимый режим) |
-| Export DOCX | **Край справа** — готовый документ |
-| TMX in/out | Оставить (левее DOCX) |
-
-**Минимум:**
-1. [x] Порядок: DOCX справа; punct-кнопка убрана из шапки  
-2. [x] Кнопка refresh превью убрана  
-3. [ ] Дефолт soft без UI; мёртвые i18n punct-hint’ов убрать или оставить для будущего advanced  
-4. Autosave / TMX / match — без регрессий  
-
-**Критерий:** DOCX — правая кнопка actions; нет punct-toggle и refresh; autosave виден.
+**Порядок actions:** preview → archive → cloud → TMX import → TMX export → TM autosave → **export DOCX**
 
 ---
 
@@ -314,7 +302,7 @@ preview → archive → cloud → TMX import → TMX export → TM autosave → 
 - [x] Первый open — попап языковой пары + порог
 - [x] Миграция: «Пересегментировать?»
 - [x] Порог в тулбаре (`%`); автосейв ТМ только для новых/изменённых; ручная запись в ТМ кнопкой у бейджа
-- [ ] Убрать лишние ТМ-кнопки в тулбаре (punct soft и т.п. — по необходимости)
+- [x] Убрать лишние ТМ-кнопки в тулбаре (punct soft; refresh превью; DOCX справа)
 - [ ] Админка ТМ — после MVP
 
 ---
@@ -434,7 +422,7 @@ preview → archive → cloud → TMX import → TMX export → TM autosave → 
 7. B2 p2: audit + concordance ✓ (concordance — флаг `FEATURE_TM_CONCORDANCE`)
 8. Landing стилей (rich source / targetStyles / B/I/U / chrome / swap) ✓
 9. Тулбар стилей — необходимый минимум ✓ (+ preview on by default)
-10. **Дозакрытие cloud MVP** ← **сейчас** (offline ✓ → plan entitlement ✓ → TM toolbar → Word checklist → Яндекс.Метрика/события → tag MVP)
+10. **Дозакрытие cloud MVP** ← **сейчас** (offline ✓ → plan entitlement ✓ → TM toolbar ✓ → Word checklist → Яндекс.Метрика/события → tag MVP)
 11. **После MVP:** Prometheus/Grafana (ops) → остаток E → **фаза C** → фаза F → MT / multi-TM / SRX / форматы
 
 ---

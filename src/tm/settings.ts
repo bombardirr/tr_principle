@@ -30,8 +30,8 @@ export function readTmSettings(): TmSettings {
     if (!raw) return { ...TM_SETTINGS_DEFAULT }
     const parsed = JSON.parse(raw) as Partial<TmSettings>
     return {
-      punctuationMode:
-        parsed.punctuationMode === 'strict' ? 'strict' : 'soft',
+      // Soft match is the product default; no toolbar toggle (strict remains for tests via match options).
+      punctuationMode: 'soft',
       fuzzyMinScore:
         typeof parsed.fuzzyMinScore === 'number' &&
         parsed.fuzzyMinScore >= 0.5 &&

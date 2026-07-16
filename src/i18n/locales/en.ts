@@ -262,8 +262,6 @@ export default {
     tmOverwriteConfirm: 'Replace translation with TM',
     tmOverwriteCancel: 'Cancel',
     tmReapplyHint: 'Re-apply from TM (confirmation required)',
-    tmPunctSoftHint: 'TM: ignore trailing punctuation (soft match)',
-    tmPunctStrictHint: 'TM: strict punctuation (click to soften)',
     tmAutoSaveOnHint: 'TM autosave on — only new/edited segments write to memory',
     tmAutoSaveOffHint: 'TM autosave off — save segments to memory with the button next to the variants badge',
     tmCommitHint: 'Save this segment to translation memory (differs from current TM)',
