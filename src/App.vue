@@ -11,6 +11,7 @@ import { getTheme, toggleTheme, type Theme } from '@/theme'
 import { displayLabel, needsDisplayName, useAuth } from '@/auth/session'
 import { ApiError } from '@/auth/api'
 import { useShortcutBindings } from '@/composables/useShortcutBindings'
+import { useOnlineStatus } from '@/composables/useOnlineStatus'
 import {
   bindingFromEvent,
   formatBinding,
@@ -28,6 +29,10 @@ const isLanding = computed(() => route.name === 'landing')
 const brandTo = computed(() => (isAuthenticated.value ? '/projects' : '/'))
 const headerName = computed(() => displayLabel(user.value))
 const showNameNudge = computed(() => needsDisplayName(user.value))
+const { online } = useOnlineStatus()
+const showOfflineBanner = computed(
+  () => ready.value && isAuthenticated.value && !isLanding.value && !online.value,
+)
 
 const settingsOpen = ref(false)
 const settingsRoot = ref<HTMLElement | null>(null)
@@ -261,6 +266,9 @@ async function onLogout() {
         </IconButton>
       </div>
     </header>
+    <p v-if="showOfflineBanner" class="offline-banner" role="status">
+      {{ t('app.offlineBanner') }}
+    </p>
     <main class="main" :class="{ 'main--wide': isEditorRoute, 'main--landing': isLanding }">
       <router-view />
     </main>
@@ -287,6 +295,19 @@ async function onLogout() {
   padding: 0.65rem 1.5rem;
   background: var(--topbar);
   backdrop-filter: blur(8px);
+}
+
+.offline-banner {
+  position: sticky;
+  top: 0;
+  z-index: 19;
+  margin: 0;
+  padding: 0.35rem 1.5rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--warn) 45%, var(--border));
+  background: color-mix(in srgb, var(--warn) 16%, var(--surface));
+  color: var(--text);
+  font-size: 0.78rem;
+  line-height: 1.35;
 }
 
 .brand {

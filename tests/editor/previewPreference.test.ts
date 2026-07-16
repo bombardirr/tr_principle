@@ -33,4 +33,14 @@ describe('previewPreference', () => {
     expect(readPreviewEnabled(memoryStorage({ [PREVIEW_STORAGE_KEY]: 'yes' }))).toBe(true)
     expect(readPreviewEnabled(memoryStorage({ [PREVIEW_STORAGE_KEY]: '' }))).toBe(true)
   })
+
+  it('persists toggle as 1 or 0', () => {
+    const storage = memoryStorage()
+    writePreviewEnabled(false, storage)
+    expect(storage.getItem(PREVIEW_STORAGE_KEY)).toBe('0')
+    expect(readPreviewEnabled(storage)).toBe(false)
+    writePreviewEnabled(true, storage)
+    expect(storage.getItem(PREVIEW_STORAGE_KEY)).toBe('1')
+    expect(readPreviewEnabled(storage)).toBe(true)
+  })
 })

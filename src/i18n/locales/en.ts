@@ -5,6 +5,8 @@ export default {
     langHint: 'Interface language',
     themeDark: 'dark',
     themeLight: 'light',
+    offlineBanner:
+      'You are offline. Local work continues; TM sync and cloud resume when you are back online.',
   },
   auth: {
     logout: 'Log out',

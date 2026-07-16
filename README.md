@@ -34,6 +34,4 @@ Vue 3 + TypeScript + Vite + vue-i18n + JSZip + IndexedDB (`idb`). Всё на к
 
 ## Дальше
 
-- **B:** TM / TMX  
-- **C:** Глоссарий  
-- **D:** Платное облако на мини-ПК  
+См. актуальный [`PLAN.md`](PLAN.md): дозакрытие cloud MVP → tag; затем глоссарий / общий проект.
