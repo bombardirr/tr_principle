@@ -27,7 +27,6 @@ import {
   ListRestart,
   Percent,
   Redo2,
-  RefreshCw,
   Save,
   Search,
   Settings,
@@ -46,7 +45,6 @@ export type GlyphName =
   | 'reset'
   | 'preview'
   | 'preview-off'
-  | 'refresh'
   | 'save'
   | 'export'
   | 'archive'
@@ -87,7 +85,6 @@ const icons: Record<GlyphName, Component> = {
   reset: CircleX,
   preview: Eye,
   'preview-off': EyeOff,
-  refresh: RefreshCw,
   save: Save,
   export: Download,
   archive: Archive,

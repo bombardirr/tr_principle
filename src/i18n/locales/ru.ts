@@ -246,8 +246,6 @@ export default {
     styleColorAuto: 'Автоматический цвет',
     styleHighlightNone: 'Без выделения',
     pairActionsLabel: 'Действия с парой оригинал–перевод',
-    previewRefresh: 'Обновить превью',
-    previewRefreshHint: 'Обновить предпросмотр по текущим переводам',
     leaseBlocked: 'Проект открыт в другой вкладке. Здесь доступен только просмотр.',
     cloudLockBlocked: 'Проект открыт на другом устройстве. Здесь доступен только просмотр.',
     cloudBackupHint: 'Сохранить проект в облако',

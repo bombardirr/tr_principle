@@ -1200,11 +1200,6 @@ function togglePreview() {
   if (previewEnabled.value) previewToken.value++
 }
 
-function refreshPreviewNow() {
-  if (!previewEnabled.value) return
-  previewToken.value++
-}
-
 watch(allSaved, (saved) => {
   if (saved) schedulePreviewRefresh()
 })
@@ -1369,13 +1364,6 @@ async function goBack() {
             @click="togglePreview"
           >
             <EditorGlyph :name="previewEnabled ? 'preview-off' : 'preview'" />
-          </IconButton>
-          <IconButton
-            :title="t('editor.previewRefreshHint')"
-            :disabled="!record || !previewEnabled"
-            @click="refreshPreviewNow"
-          >
-            <EditorGlyph name="refresh" />
           </IconButton>
           <IconButton :title="t('editor.saveProjectHint')" @click="downloadProject">
             <EditorGlyph name="archive" />

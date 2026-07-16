@@ -246,8 +246,6 @@ export default {
     styleColorAuto: 'Automatic color',
     styleHighlightNone: 'No highlight',
     pairActionsLabel: 'Source–target pair actions',
-    previewRefresh: 'Refresh preview',
-    previewRefreshHint: 'Update the preview with your current translations',
     leaseBlocked: 'This project is open in another tab. View only here.',
     cloudLockBlocked: 'This project is open on another device. View only here.',
     cloudBackupHint: 'Save project to the cloud',

@@ -117,21 +117,23 @@ Outbox / очередь push — **не** в этом пункте («позже
 **Зачем:** убрать редкий soft/strict punct из шапки; **autosave ТМ оставить видимым**; **export DOCX — финальное действие справа** в зоне actions.
 
 **Порядок actions (LTR → справа финал):**  
-preview → refresh → archive → cloud → TMX import → TMX export → TM autosave → **export DOCX**
+preview → archive → cloud → TMX import → TMX export → TM autosave → **export DOCX**
 
 | Кнопка | Вердикт |
 |--------|---------|
-| Soft/strict punct | **Убрать** из шапки; дефолт soft |
+| Soft/strict punct | **Убрано** из шапки; дефолт soft |
+| Preview refresh | **Убрано** (автообновление после сейва) |
 | TM autosave | **Оставить** в шапке (видимый режим) |
 | Export DOCX | **Край справа** — готовый документ |
 | TMX in/out | Оставить (левее DOCX) |
 
 **Минимум:**
 1. [x] Порядок: DOCX справа; punct-кнопка убрана из шапки  
-2. [ ] Дефолт soft без UI; мёртвые i18n punct-hint’ов убрать или оставить для будущего advanced  
-3. Autosave / TMX / match — без регрессий  
+2. [x] Кнопка refresh превью убрана  
+3. [ ] Дефолт soft без UI; мёртвые i18n punct-hint’ов убрать или оставить для будущего advanced  
+4. Autosave / TMX / match — без регрессий  
 
-**Критерий:** DOCX — правая кнопка actions; нет punct-toggle; autosave виден.
+**Критерий:** DOCX — правая кнопка actions; нет punct-toggle и refresh; autosave виден.
 
 ---
 
