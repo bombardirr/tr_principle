@@ -12,8 +12,11 @@ export default {
     settingsTitle: 'Account',
     settingsTabAccount: 'Account',
     settingsTabKeys: 'Keys',
-    settingsKeysStub:
-      'You’ll be able to assign and change editor shortcuts here. This section is still a stub.',
+    settingsKeysHint: 'Editor shortcuts. Click a binding, then press the new key.',
+    shortcutClearFocus: 'Clear focus',
+    shortcutClearFocusHint: 'Clear the active segment and blur the translation field.',
+    shortcutPressKey: 'Press a key…',
+    shortcutReset: 'Reset',
     displayName: 'Nickname',
     displayNameHint:
       'Public label in edit history and TM. Your email is never written there — use a nick or alias.',

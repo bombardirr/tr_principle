@@ -330,6 +330,13 @@ function onKeyUp() {
 }
 
 function onMouseUp() {
+  // Caret often settles after mouseup — sync now and on next frame.
+  emitSelection()
+  requestAnimationFrame(() => emitSelection())
+}
+
+function onSelectionChange() {
+  if (!focused) return
   emitSelection()
 }
 
@@ -360,6 +367,7 @@ onMounted(() => {
   lastPlain = ''
   lastStylesKey = ''
   paint(true)
+  document.addEventListener('selectionchange', onSelectionChange)
 })
 
 watch(
@@ -387,6 +395,7 @@ watch(
 
 onBeforeUnmount(() => {
   focused = false
+  document.removeEventListener('selectionchange', onSelectionChange)
 })
 
 function focus() {

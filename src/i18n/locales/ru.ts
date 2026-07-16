@@ -12,8 +12,11 @@ export default {
     settingsTitle: 'Аккаунт',
     settingsTabAccount: 'Аккаунт',
     settingsTabKeys: 'Клавиши',
-    settingsKeysStub:
-      'Здесь можно будет назначить и менять горячие клавиши редактора. Пока раздел в разработке.',
+    settingsKeysHint: 'Горячие клавиши редактора. Кликните по сочетанию и нажмите новую клавишу.',
+    shortcutClearFocus: 'Снять фокус',
+    shortcutClearFocusHint: 'Убрать активный сегмент и курсор из поля перевода.',
+    shortcutPressKey: 'Нажмите клавишу…',
+    shortcutReset: 'Сбросить',
     displayName: 'Ник',
     displayNameHint:
       'Публичная подпись в истории правок и в ТМ. Email туда не попадает — можно ник или псевдоним.',

@@ -18,6 +18,8 @@ import { useProjectAccess } from '@/composables/useProjectAccess'
 import { withSegmentAudit } from '@/utils/segmentAudit'
 import { scheduleProjectBackup, pushProjectBackup } from '@/projects/backup'
 import { useTmSettings } from '@/composables/useTmSettings'
+import { useShortcutBindings } from '@/composables/useShortcutBindings'
+import { matchesBinding } from '@/shortcuts/bindings'
 import { useSegmentHistory } from '@/composables/useSegmentHistory'
 import { findTmMatches } from '@/tm/match'
 import { findLangPairPreset, langPairLabel } from '@/tm/langPairs'
@@ -85,6 +87,7 @@ const activeSegmentId = ref<string | null>(null)
 const projectLease = useProjectAccess(() => props.id)
 const { settings: tmSettings, togglePunctuationMode: toggleTmPunctuation, toggleAutoSaveToTm } =
   useTmSettings()
+const { bindings: shortcutBindings, reload: reloadShortcuts } = useShortcutBindings()
 const tmUnits = shallowRef<TmUnit[]>([])
 const tmImportInput = ref<HTMLInputElement | null>(null)
 /** Segment ids changed while TM autosave is on — written on next persist only. */
@@ -386,15 +389,34 @@ function onPageScroll() {
   scheduleScrollPersist()
 }
 
+function isSegmentInViewport(el: Element): boolean {
+  const r = el.getBoundingClientRect()
+  const vh = window.innerHeight || document.documentElement.clientHeight
+  // Partially visible counts; fully off-screen → scroll to it.
+  return r.bottom > 0 && r.top < vh
+}
+
 async function restorePageScroll() {
   const snap = readEditorScroll(props.id)
   if (!snap) return
-  if (snap.activeSegmentId) activeSegmentId.value = snap.activeSegmentId
+  const focusId =
+    snap.activeSegmentId &&
+    record.value?.segments.some((s) => s.id === snap.activeSegmentId)
+      ? snap.activeSegmentId
+      : null
+  if (focusId) activeSegmentId.value = focusId
   await nextTick()
   restoreWindowScroll(snap.pageY)
   window.setTimeout(() => {
     restoreWindowScroll(snap.pageY)
   }, 150)
+  if (!focusId) return
+  // After layout + scroll restore settle: if focus row is off-screen, bring it in.
+  window.setTimeout(() => {
+    const el = document.getElementById(`segment-${focusId}`)
+    if (!el || isSegmentInViewport(el)) return
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  }, 400)
 }
 
 async function load() {
@@ -428,9 +450,11 @@ onMounted(() => {
   })
   window.addEventListener('scroll', onPageScroll, PAGE_SCROLL_OPTS)
   window.addEventListener('beforeunload', onBeforeUnload)
+  window.addEventListener('keydown', onClearFocusKey)
   chromeMq = window.matchMedia('(max-width: 800px)')
   onChromeMq()
   chromeMq.addEventListener('change', onChromeMq)
+  reloadShortcuts()
 })
 
 watch(() => props.id, () => {
@@ -440,6 +464,7 @@ watch(() => props.id, () => {
 onUnmounted(() => {
   window.removeEventListener('scroll', onPageScroll, PAGE_SCROLL_OPTS)
   window.removeEventListener('beforeunload', onBeforeUnload)
+  window.removeEventListener('keydown', onClearFocusKey)
   chromeMq?.removeEventListener('change', onChromeMq)
   chromeMq = null
   if (pageScrollSaveTimer) clearTimeout(pageScrollSaveTimer)
@@ -783,6 +808,31 @@ function styleRangeForApply(
   return { start: 0, end: plainLen }
 }
 
+/**
+ * Toolbar readout range (Word-like):
+ * - non-empty selection → that range (mixed → —)
+ * - collapsed caret → one character at the caret (style of the clicked word)
+ * - no selection → whole segment (hover chrome)
+ */
+function styleRangeForUi(
+  sel: { start: number; end: number; collapsed?: boolean } | null | undefined,
+  plainLen: number,
+): { start: number; end: number } {
+  if (plainLen <= 0) return { start: 0, end: 0 }
+  if (sel && !sel.collapsed && sel.start !== sel.end) {
+    return {
+      start: Math.max(0, Math.min(plainLen, Math.min(sel.start, sel.end))),
+      end: Math.max(0, Math.min(plainLen, Math.max(sel.start, sel.end))),
+    }
+  }
+  if (sel) {
+    const caret = Math.max(0, Math.min(plainLen, sel.start))
+    if (caret >= plainLen) return { start: plainLen - 1, end: plainLen }
+    return { start: caret, end: caret + 1 }
+  }
+  return { start: 0, end: plainLen }
+}
+
 type StyleUiState = {
   segId: string
   bold: boolean
@@ -854,7 +904,7 @@ function styleUiFromUniform(
   }
 }
 
-/** Toolbar: selection if any, else whole segment — like Word Select-All (mixed → —). */
+/** Toolbar: caret → style at click; selection → that range; else whole segment. */
 function styleUiForSegment(seg: Segment): StyleUiState {
   const styles = stylesForSegmentUi(seg)
   // Empty target: show predominant source style (Word default typing style).
@@ -865,7 +915,7 @@ function styleUiForSegment(seg: Segment): StyleUiState {
     return styleUiFromUniform(seg.id, one, 1, 0, 1)
   }
   const sel = targetSelection.value?.segId === seg.id ? targetSelection.value : null
-  const { start, end } = styleRangeForApply(sel, seg.target.length)
+  const { start, end } = styleRangeForUi(sel, seg.target.length)
   if (start >= end) return emptyStyleUi(seg.id)
   return styleUiFromUniform(seg.id, styles, seg.target.length, start, end)
 }
@@ -1016,13 +1066,45 @@ function onPreviewSelectSegment(segId: string) {
 
 function deactivateEditor() {
   const el = document.activeElement
-  if (el instanceof HTMLElement && el.closest('.target-pane')) {
-    el.blur()
+  if (el instanceof HTMLElement) {
+    if (
+      el.closest('.editor-layout') ||
+      el.closest('.rich-target-inner') ||
+      el.isContentEditable
+    ) {
+      el.blur()
+    }
   }
   targetSelection.value = null
+  hoverSegmentId.value = null
+  railHovered.value = false
   if (activeSegmentId.value === null) return
   activeSegmentId.value = null
   scheduleScrollPersist()
+}
+
+function onClearFocusKey(e: KeyboardEvent) {
+  // Project dialogs still dismiss on Escape regardless of the clear-focus binding.
+  if (e.key === 'Escape') {
+    if (settingsOpen.value) {
+      e.preventDefault()
+      settingsOpen.value = false
+      return
+    }
+    if (resegmentOpen.value) {
+      e.preventDefault()
+      resegmentOpen.value = false
+      return
+    }
+    if (thresholdOpen.value) {
+      e.preventDefault()
+      thresholdOpen.value = false
+      return
+    }
+  }
+  if (!matchesBinding(e, shortcutBindings.value.clearFocus)) return
+  e.preventDefault()
+  deactivateEditor()
 }
 
 const hoverSegmentId = ref<string | null>(null)

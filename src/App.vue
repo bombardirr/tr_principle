@@ -10,6 +10,13 @@ import ThemeToggleGlyph from '@/components/ThemeToggleGlyph.vue'
 import { getTheme, toggleTheme, type Theme } from '@/theme'
 import { displayLabel, needsDisplayName, useAuth } from '@/auth/session'
 import { ApiError } from '@/auth/api'
+import { useShortcutBindings } from '@/composables/useShortcutBindings'
+import {
+  bindingFromEvent,
+  formatBinding,
+  isModifierOnly,
+  SHORTCUT_DEFAULTS,
+} from '@/shortcuts/bindings'
 
 const { t, locale } = useI18n()
 const route = useRoute()
@@ -30,15 +37,18 @@ const settingsBusy = ref(false)
 const settingsError = ref('')
 const settingsSaved = ref(false)
 
+const { bindings, setBinding, resetBinding, reload: reloadShortcuts } = useShortcutBindings()
+const capturingShortcut = ref<'clearFocus' | null>(null)
+
 onMounted(() => {
   theme.value = getTheme()
   document.addEventListener('pointerdown', onDocPointer, true)
-  document.addEventListener('keydown', onDocKey)
+  document.addEventListener('keydown', onDocKey, true)
 })
 
 onUnmounted(() => {
   document.removeEventListener('pointerdown', onDocPointer, true)
-  document.removeEventListener('keydown', onDocKey)
+  document.removeEventListener('keydown', onDocKey, true)
 })
 
 watch(
@@ -47,6 +57,10 @@ watch(
     if (!settingsOpen.value) nameDraft.value = v ?? ''
   },
 )
+
+watch(settingsTab, (tab) => {
+  if (tab !== 'keys') capturingShortcut.value = null
+})
 
 function onToggleTheme() {
   theme.value = toggleTheme()
@@ -61,6 +75,8 @@ function openSettings() {
   settingsTab.value = 'account'
   settingsError.value = ''
   settingsSaved.value = false
+  capturingShortcut.value = null
+  reloadShortcuts()
   settingsOpen.value = true
 }
 
@@ -68,6 +84,7 @@ function closeSettings() {
   settingsOpen.value = false
   settingsError.value = ''
   settingsSaved.value = false
+  capturingShortcut.value = null
 }
 
 function onDocPointer(e: PointerEvent) {
@@ -77,7 +94,25 @@ function onDocPointer(e: PointerEvent) {
 }
 
 function onDocKey(e: KeyboardEvent) {
+  if (capturingShortcut.value) {
+    if (isModifierOnly(e)) return
+    e.preventDefault()
+    e.stopPropagation()
+    const id = capturingShortcut.value
+    setBinding(id, bindingFromEvent(e))
+    capturingShortcut.value = null
+    return
+  }
   if (e.key === 'Escape' && settingsOpen.value) closeSettings()
+}
+
+function startCapture(id: 'clearFocus') {
+  capturingShortcut.value = capturingShortcut.value === id ? null : id
+}
+
+function resetClearFocus() {
+  capturingShortcut.value = null
+  resetBinding('clearFocus')
 }
 
 async function saveDisplayName() {
@@ -101,6 +136,7 @@ async function onLogout() {
   await logout()
   await router.push({ name: 'landing' })
 }
+
 </script>
 
 <template>
@@ -149,7 +185,7 @@ async function onLogout() {
 
               <div v-if="settingsTab === 'account'" role="tabpanel" class="settings-panel">
                 <label class="settings-field">
-                  <span>{{ t('auth.displayName') }}</span>
+                  <span class="settings-label">{{ t('auth.displayName') }}</span>
                   <input
                     v-model="nameDraft"
                     type="text"
@@ -162,10 +198,10 @@ async function onLogout() {
                   }}</span>
                   <span v-else class="settings-hint">{{ t('auth.displayNameHint') }}</span>
                 </label>
-                <p class="settings-email">
-                  <span>{{ t('auth.email') }}</span>
-                  {{ user?.email }}
-                </p>
+                <div class="settings-block">
+                  <span class="settings-label">{{ t('auth.email') }}</span>
+                  <span class="settings-block-value">{{ user?.email }}</span>
+                </div>
                 <p v-if="settingsError" class="settings-error">{{ settingsError }}</p>
                 <p v-else-if="settingsSaved" class="settings-ok">{{ t('auth.save') }} ✓</p>
                 <div class="settings-actions">
@@ -179,7 +215,40 @@ async function onLogout() {
               </div>
 
               <div v-else role="tabpanel" class="settings-panel">
-                <p class="settings-stub">{{ t('auth.settingsKeysStub') }}</p>
+                <p class="settings-hint settings-keys-intro">{{ t('auth.settingsKeysHint') }}</p>
+                <div class="shortcut-row">
+                  <div class="shortcut-meta">
+                    <span class="shortcut-label">{{ t('auth.shortcutClearFocus') }}</span>
+                    <span class="settings-hint">{{ t('auth.shortcutClearFocusHint') }}</span>
+                  </div>
+                  <div class="shortcut-controls">
+                    <button
+                      type="button"
+                      class="shortcut-bind"
+                      :class="{ capturing: capturingShortcut === 'clearFocus' }"
+                      :aria-label="t('auth.shortcutClearFocus')"
+                      @click="startCapture('clearFocus')"
+                    >
+                      {{
+                        capturingShortcut === 'clearFocus'
+                          ? t('auth.shortcutPressKey')
+                          : formatBinding(bindings.clearFocus)
+                      }}
+                    </button>
+                    <button
+                      type="button"
+                      class="ghost shortcut-reset"
+                      :title="t('auth.shortcutReset')"
+                      :disabled="
+                        formatBinding(bindings.clearFocus) ===
+                        formatBinding(SHORTCUT_DEFAULTS.clearFocus)
+                      "
+                      @click="resetClearFocus"
+                    >
+                      {{ t('auth.shortcutReset') }}
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -293,29 +362,30 @@ async function onLogout() {
 
 .settings-pop {
   position: absolute;
-  top: calc(100% + 0.4rem);
+  top: calc(100% + 0.35rem);
   right: 0;
   z-index: 40;
-  width: min(20rem, calc(100vw - 2rem));
-  padding: 0.9rem 1rem 1rem;
-  border-radius: 10px;
+  width: min(18.5rem, calc(100vw - 1.5rem));
+  padding: 0.55rem 0.65rem 0.65rem;
+  border-radius: 8px;
   border: 1px solid var(--border-strong);
   background: var(--surface);
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.32);
 }
 
 .settings-title {
-  margin: 0 0 0.55rem;
-  font-size: 0.95rem;
-  font-weight: 600;
+  margin: 0 0 0.35rem;
+  font-size: 0.82rem;
+  font-weight: 650;
+  letter-spacing: 0.01em;
 }
 
 .settings-tabs {
   display: flex;
-  gap: 0.15rem;
-  margin-bottom: 0.75rem;
-  padding: 0.15rem;
-  border-radius: 8px;
+  gap: 0.1rem;
+  margin-bottom: 0.45rem;
+  padding: 0.1rem;
+  border-radius: 6px;
   background: var(--bg);
   border: 1px solid var(--border);
 }
@@ -323,10 +393,10 @@ async function onLogout() {
 .settings-tab {
   flex: 1;
   border: 0;
-  border-radius: 6px;
-  padding: 0.35rem 0.5rem;
-  font-size: 0.8rem;
-  font-weight: 500;
+  border-radius: 4px;
+  padding: 0.22rem 0.35rem;
+  font-size: 0.72rem;
+  font-weight: 600;
   color: var(--text-muted);
   background: transparent;
   cursor: pointer;
@@ -339,77 +409,154 @@ async function onLogout() {
 }
 
 .settings-panel {
-  min-height: 4rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
 }
 
-.settings-stub {
-  margin: 0.25rem 0 0;
-  font-size: 0.82rem;
-  line-height: 1.4;
+.settings-label {
+  font-size: 0.7rem;
+  font-weight: 650;
   color: var(--text-muted);
+  letter-spacing: 0.01em;
+}
+
+.settings-block {
+  display: flex;
+  flex-direction: column;
+  gap: 0.12rem;
+  padding: 0.35rem 0.45rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface-2);
+}
+
+.settings-block-value {
+  font-size: 0.78rem;
+  color: var(--text);
+  word-break: break-all;
+  line-height: 1.3;
+}
+
+.shortcut-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding: 0.4rem 0.45rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface-2);
+}
+
+.shortcut-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 0.08rem;
+}
+
+.shortcut-label {
+  font-size: 0.78rem;
+  font-weight: 650;
+  color: var(--text);
+}
+
+.shortcut-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.shortcut-bind {
+  min-width: 4.75rem;
+  padding: 0.22rem 0.45rem;
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.72rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+
+.shortcut-bind.capturing {
+  border-color: var(--accent);
+  color: var(--accent);
+  outline: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
+}
+
+.shortcut-reset {
+  padding: 0.22rem 0.4rem;
+  font-size: 0.68rem;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.shortcut-reset:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 .settings-field {
   display: flex;
   flex-direction: column;
-  gap: 0.3rem;
-  font-size: 0.82rem;
-  color: var(--text-muted);
+  gap: 0.18rem;
 }
 
 .settings-field input {
-  padding: 0.5rem 0.65rem;
-  border-radius: 8px;
+  padding: 0.35rem 0.45rem;
+  border-radius: 6px;
   border: 1px solid var(--border-strong);
   background: var(--bg);
   color: var(--text);
+  font-size: 0.82rem;
 }
 
 .settings-hint {
-  font-size: 0.75rem;
+  margin: 0;
+  font-size: 0.68rem;
+  line-height: 1.35;
   color: var(--text-faint);
 }
 
-.settings-email {
-  margin: 0.75rem 0 0;
-  font-size: 0.78rem;
-  color: var(--text-faint);
-  display: flex;
-  flex-direction: column;
-  gap: 0.15rem;
-  word-break: break-all;
+.settings-keys-intro {
+  margin: 0;
 }
 
-.settings-email span {
-  color: var(--text-muted);
+.settings-error,
+.settings-ok {
+  margin: 0;
+  font-size: 0.72rem;
 }
 
 .settings-error {
-  margin: 0.55rem 0 0;
-  font-size: 0.82rem;
   color: var(--danger);
 }
 
 .settings-ok {
-  margin: 0.55rem 0 0;
-  font-size: 0.82rem;
   color: var(--ok);
 }
 
 .settings-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.5rem;
-  margin-top: 0.85rem;
+  gap: 0.35rem;
+  margin-top: 0.1rem;
 }
 
 .settings-actions .primary,
 .settings-actions .ghost {
-  border-radius: 8px;
-  padding: 0.45rem 0.85rem;
+  border-radius: 6px;
+  padding: 0.3rem 0.55rem;
   cursor: pointer;
   border: 1px solid transparent;
-  font-size: 0.88rem;
+  font-size: 0.75rem;
+  font-weight: 600;
 }
 
 .settings-actions .primary {
