@@ -1002,7 +1002,6 @@ async function exportTmxFile() {
     targetLang: record.value.meta.targetLang,
   })
   downloadBlob(new Blob([xml], { type: 'application/xml' }), 'translation-memory.tmx')
-  notice.value = t('editor.exportTmx')
 }
 
 function openTmxImport() {
