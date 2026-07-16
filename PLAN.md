@@ -105,9 +105,37 @@ Telegram password reset — **отложен** до бота (не блокер 
 
 Outbox / очередь push — **не** в этом пункте («позже»).
 
-#### 2) Feature flags / admin = Pro — следующий (когда начнём)
+#### 2) Feature flags / admin = Pro ← **следующий**
 
-Минимум: серверный `is_admin` уже есть; на клиенте нужен явный флаг/бейдж Pro без полной биллинг-модели. Детали — перед реализацией.
+**Зачем:** перед tag MVP нужен явный контракт «кто Pro», без Stripe/пакетов. Сейчас `is_admin` уже отдаётся с `/auth/me`, но на клиенте нигде не читается как entitlement — нет бейджа, нет helper’а, `features.ts` только kill-switch для concordance. Иначе «Pro-фичи позже» некуда вешать, а админ неотличим от обычного user в UI.
+
+**Уже есть (не переделывать):**
+- Postgres `users.is_admin`, JWT/`/auth/me` → `AuthUser.is_admin` (`src/auth/api.ts`)
+- Promote через SQL (чеклист «Admin promote через SQL/CLI» — достаточно)
+- `src/features.ts` — runtime kill-switches (`FEATURE_TM_CONCORDANCE`)
+
+**Минимум (этот пункт) — сделать:**
+
+1. **Entitlement helper** (отдельно от kill-switch’ей):
+   - `isPro(user)` / `useAuth().isPro` → сейчас `!!user?.is_admin`
+   - Комментарий/имя: это *временный* маппинг admin→Pro до биллинга; не путать с `FEATURE_*`
+2. **UI-сигнал:** бейдж «Pro» (или «Admin») в шапке рядом с ником / в настройках аккаунта — только если `isPro`. Без биллинг-копирайта и без paywall-модалок.
+3. **Один реальный gate (smoke):** повесить `isPro` хотя бы на одну поверхность, чтобы контракт не был мёртвым. Кандидаты (выбрать один, проще лучше):
+   - бейдж + disabled/tooltip на будущем месте (достаточно), **или**
+   - скрыть/показать один experimental кусок (напр. concordance остаётся на `FEATURE_*`, Pro не обязателен)
+   - **Не** резать core CAT (редактор, TM sync, backup) — free/auth user должен работать как сейчас
+4. **Документ в PLAN/коде:** одна строка «после MVP: `isPro` ← subscription / plan, не `is_admin`»
+5. **Тесты:** unit на `isPro` (admin true / обычный false / null false); при бейдже — smoke в существующем auth-related тесте, если есть
+
+**Явно не в этом пункте:**
+- Stripe / цены / лимиты free
+- Серверный middleware «только Pro» на TM/lock/backup
+- Админ-панель CRUD, promote UI
+- Перенос всех `FEATURE_*` под Pro
+
+**Критерий готовности:** залогиненный admin видит Pro-сигнал; обычный user — нет; `isPro` доступен из одного места; core продукт не сломан.
+
+**Оценка:** маленький срез (полдня), без новых API.
 
 ---
 
