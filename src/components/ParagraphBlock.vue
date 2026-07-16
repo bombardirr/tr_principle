@@ -3,6 +3,7 @@ import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { TmMatch, TmUnit } from '@/types/tm'
 import type { Segment } from '@/types/project'
+import type { GlossaryHit, GlossaryTerm } from '@/types/glossary'
 import IconButton from './IconButton.vue'
 import EditorGlyph from './EditorGlyph.vue'
 import RichSourceView from './RichSourceView.vue'
@@ -11,12 +12,14 @@ import StyleToolbar from './StyleToolbar.vue'
 import TmVariantPicker from './TmVariantPicker.vue'
 import SegmentAuditPopover from './SegmentAuditPopover.vue'
 import TmConcordancePanel from './TmConcordancePanel.vue'
+import GlossaryHitsPopover from './GlossaryHitsPopover.vue'
 import { FEATURE_TM_CONCORDANCE } from '@/features'
 import { plainSource } from '@/tm/fragments'
 import { isIntentionallyEmpty, isSegmentTranslated } from '@/utils/segmentStatus'
 import { resolveSegmentKinds, type SegmentKind } from '@/utils/segmentKind'
 import type { TargetStyleRange } from '@/types/project'
 import { effectiveTargetStyles, type StyleApplyPatch } from '@/docx/runStyle'
+import { findGlossaryHitsInTagged } from '@/glossary/match'
 
 const props = defineProps<{
   segments: Segment[]
@@ -47,6 +50,10 @@ const props = defineProps<{
   highlight?: string | null
   highlightMixed?: boolean
   fonts: string[]
+  /** Glossary terms for project language pair (active only). */
+  glossaryTerms?: GlossaryTerm[]
+  sourceLang?: string
+  targetLang?: string
   /** Force stacked chrome (overrides matchMedia when provided). */
   stacked?: boolean
   /** Idle hint: first segment in viewport (dimmed header icons, no focus). */
@@ -66,6 +73,7 @@ const emit = defineEmits<{
   applyTm: [segId: string, match: TmMatch]
   saveToTm: [segId: string]
   insertConcordance: [segId: string, target: string]
+  insertGlossary: [segId: string, targetTerm: string]
   undo: [segId: string]
   redo: [segId: string]
   targetSelection: [segId: string, range: { start: number; end: number; collapsed?: boolean } | null]
@@ -128,6 +136,7 @@ onMounted(() => {
 })
 onUnmounted(() => {
   mql?.removeEventListener('change', onMqChange)
+  clearGlossaryHideTimer()
 })
 
 watch(
@@ -208,6 +217,40 @@ function sourceSpansFor(seg: Segment) {
   return seg.paragraphSpans?.length ? seg.paragraphSpans : seg.spans
 }
 
+function glossaryHitsFor(seg: Segment): GlossaryHit[] {
+  const terms = props.glossaryTerms
+  const sl = props.sourceLang
+  const tl = props.targetLang
+  if (!terms?.length || !sl || !tl) return []
+  return findGlossaryHitsInTagged(seg.source, terms, sl, tl)
+}
+
+/** Unique terms hitting any sentence in this block (for header chip). */
+const glossaryHitSummary = computed(() => {
+  const byId = new Map<string, GlossaryHit>()
+  for (const seg of sorted.value) {
+    for (const hit of glossaryHitsFor(seg)) {
+      if (!byId.has(hit.termId)) byId.set(hit.termId, hit)
+    }
+  }
+  return [...byId.values()]
+})
+
+const glossaryChipCount = computed(() => glossaryHitSummary.value.length)
+
+function onInsertGlossary(
+  segId: string,
+  payload: { termId: string; targetTerm: string; status: GlossaryHit['status'] },
+) {
+  if (payload.status === 'forbidden') return
+  emit('insertGlossary', segId, payload.targetTerm)
+}
+
+function onGlossaryChipClick(hit: GlossaryHit) {
+  if (!activeSeg.value || hit.status === 'forbidden') return
+  emit('insertGlossary', activeSeg.value.id, hit.targetTerm)
+}
+
 function onTargetUpdate(segId: string, value: string, styles?: TargetStyleRange[]) {
   emit('updateTarget', segId, value, styles)
 }
@@ -221,6 +264,28 @@ function onTargetSelection(
 
 const concordanceOpen = ref(false)
 const auditOpen = ref(false)
+const glossaryHitsOpen = ref(false)
+let glossaryHideTimer: ReturnType<typeof setTimeout> | null = null
+
+function clearGlossaryHideTimer() {
+  if (glossaryHideTimer) {
+    clearTimeout(glossaryHideTimer)
+    glossaryHideTimer = null
+  }
+}
+
+function onGlossaryEnter() {
+  if (!glossaryChipCount.value) return
+  clearGlossaryHideTimer()
+  glossaryHitsOpen.value = true
+}
+
+function onGlossaryLeave() {
+  clearGlossaryHideTimer()
+  glossaryHideTimer = setTimeout(() => {
+    glossaryHitsOpen.value = false
+  }, 160)
+}
 
 /** Column “armed” by click — not only DOM focus inside an input. */
 const columnFocus = ref<'source' | 'target' | null>(null)
@@ -325,6 +390,7 @@ const showIdleViewportChrome = computed(
       active: sorted.some((s) => s.id === activeSegmentId),
       'concordance-open': concordanceOpen,
       'audit-open': auditOpen,
+      'glossary-open': glossaryHitsOpen,
       'owns-chrome': ownsChromeReveal,
       'viewport-anchor': showIdleViewportChrome,
       'force-chrome': !!forceChromeReveal,
@@ -350,6 +416,31 @@ const showIdleViewportChrome = computed(
             </span>
           </div>
           <div class="header-center header-center--reveal" role="toolbar" :aria-label="displayId">
+            <div
+              class="glossary-hits-wrap"
+              @mouseenter="onGlossaryEnter"
+              @mouseleave="onGlossaryLeave"
+            >
+              <button
+                type="button"
+                class="glossary-hits-btn"
+                :class="{ active: glossaryHitsOpen && glossaryChipCount > 0 }"
+                :disabled="glossaryChipCount === 0"
+                :title="t('glossary.hitsChipHint', { n: glossaryChipCount })"
+                :aria-label="t('glossary.hitsChipHint', { n: glossaryChipCount })"
+                :aria-expanded="glossaryHitsOpen && glossaryChipCount > 0"
+              >
+                <EditorGlyph name="glossary" />
+                <span class="glossary-count">{{ glossaryChipCount }}</span>
+              </button>
+              <GlossaryHitsPopover
+                v-if="glossaryHitsOpen && glossaryHitSummary.length"
+                :hits="glossaryHitSummary"
+                @pick="onGlossaryChipClick"
+                @panel-enter="onGlossaryEnter"
+                @panel-leave="onGlossaryLeave"
+              />
+            </div>
             <TmConcordancePanel
               v-if="showConcordance"
               :units="tmUnits ?? []"
@@ -379,6 +470,8 @@ const showIdleViewportChrome = computed(
             <RichSourceView
               :tagged-source="seg.source"
               :spans="sourceSpansFor(seg)"
+              :glossary-hits="glossaryHitsFor(seg)"
+              @insert-glossary="onInsertGlossary(seg.id, $event)"
             />
           </div>
         </div>
@@ -547,7 +640,8 @@ $toolbar-icon-size: 1.75rem;
 }
 
 .row.concordance-open,
-.row.audit-open {
+.row.audit-open,
+.row.glossary-open {
   position: relative;
   z-index: 14;
 }
@@ -622,6 +716,12 @@ $toolbar-icon-size: 1.75rem;
   overflow: hidden;
 }
 
+.row.glossary-open .header-center,
+.row.concordance-open .header-center,
+.row.audit-open .header-center {
+  overflow: visible;
+}
+
 /* Search / audit / styles — hide by default. */
 .source-col > .source-header > .header-center--reveal,
 .target-col > .target-header > .header-center--reveal {
@@ -646,6 +746,7 @@ $toolbar-icon-size: 1.75rem;
 .row.owns-chrome:has(.col--armed) .header-center--reveal,
 .row.owns-chrome.concordance-open .header-center--reveal,
 .row.owns-chrome.audit-open .header-center--reveal,
+.row.owns-chrome.glossary-open .header-center--reveal,
 .row.force-chrome .header-center--reveal {
   opacity: 1;
   pointer-events: auto;
@@ -743,6 +844,48 @@ $toolbar-icon-size: 1.75rem;
   letter-spacing: 0.02em;
   color: var(--text-muted);
   font-variant-numeric: tabular-nums;
+}
+
+.glossary-hits-wrap {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.glossary-hits-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.15rem;
+  width: auto;
+  min-width: $toolbar-icon-size;
+  height: $toolbar-icon-size;
+  padding: 0 0.28rem;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  color: var(--accent, #2a6fdb);
+  cursor: pointer;
+  font: inherit;
+}
+
+.glossary-hits-btn:hover:not(:disabled),
+.glossary-hits-btn.active {
+  background: color-mix(in srgb, var(--accent, #2a6fdb) 14%, transparent);
+}
+
+.glossary-hits-btn:disabled {
+  opacity: 0.38;
+  cursor: default;
+  color: var(--text-muted);
+}
+
+.glossary-count {
+  font-size: 0.65rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  min-width: 0.7rem;
+  text-align: center;
 }
 
 .meta-sep {

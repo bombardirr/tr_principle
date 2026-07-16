@@ -15,6 +15,7 @@ import (
 
 	"github.com/bombardirr/tr_principle/api/internal/auth"
 	"github.com/bombardirr/tr_principle/api/internal/db"
+	"github.com/bombardirr/tr_principle/api/internal/glossary"
 	"github.com/bombardirr/tr_principle/api/internal/httpapi"
 	"github.com/bombardirr/tr_principle/api/internal/projects"
 	"github.com/bombardirr/tr_principle/api/internal/tm"
@@ -48,6 +49,7 @@ func TestProjectLockAndBackup(t *testing.T) {
 	srv := httptest.NewServer(httpapi.NewRouter(
 		authHandler,
 		&tm.Handler{Store: tm.NewStore(pool)},
+		&glossary.Handler{Store: glossary.NewStore(pool)},
 		&projects.Handler{Store: projects.NewStore(pool), BackupDir: backupDir},
 		"http://localhost",
 	))

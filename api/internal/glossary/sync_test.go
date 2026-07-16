@@ -1,4 +1,4 @@
-package tm_test
+package glossary_test
 
 import (
 	"bytes"
@@ -22,7 +22,7 @@ import (
 	"github.com/google/uuid"
 )
 
-func TestTmSyncFlow(t *testing.T) {
+func TestGlossarySyncFlow(t *testing.T) {
 	dbURL := os.Getenv("DATABASE_URL")
 	if dbURL == "" {
 		t.Skip("DATABASE_URL not set")
@@ -39,7 +39,7 @@ func TestTmSyncFlow(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, _ = pool.Exec(ctx, `DELETE FROM users WHERE email LIKE 'tmtest_%@example.com'`)
+	_, _ = pool.Exec(ctx, `DELETE FROM users WHERE email LIKE 'glostest_%@example.com'`)
 
 	tokens := auth.NewTokenIssuer([]byte("test-secret-key-32bytes-minimum!!"), time.Hour)
 	authHandler := &auth.Handler{
@@ -47,16 +47,17 @@ func TestTmSyncFlow(t *testing.T) {
 		Tokens:  tokens,
 		Limiter: auth.NewRateLimiter(100, time.Minute),
 	}
-	tmHandler := &tm.Handler{Store: tm.NewStore(pool)}
-	glossaryHandler := &glossary.Handler{Store: glossary.NewStore(pool)}
-	srv := httptest.NewServer(httpapi.NewRouter(authHandler, tmHandler, glossaryHandler, &projects.Handler{
-		Store:     projects.NewStore(pool),
-		BackupDir: t.TempDir(),
-	}, "http://localhost"))
+	srv := httptest.NewServer(httpapi.NewRouter(
+		authHandler,
+		&tm.Handler{Store: tm.NewStore(pool)},
+		&glossary.Handler{Store: glossary.NewStore(pool)},
+		&projects.Handler{Store: projects.NewStore(pool), BackupDir: t.TempDir()},
+		"http://localhost",
+	))
 	t.Cleanup(srv.Close)
 
-	emailA := fmt.Sprintf("tmtest_a_%s@example.com", time.Now().Format("150405.000000000"))
-	emailB := fmt.Sprintf("tmtest_b_%s@example.com", time.Now().Format("150405.000000000"))
+	emailA := fmt.Sprintf("glostest_a_%s@example.com", time.Now().Format("150405.000000000"))
+	emailB := fmt.Sprintf("glostest_b_%s@example.com", time.Now().Format("150405.000000000"))
 	tokenA := mustAuth(t, srv.URL+"/api/auth/register", map[string]string{
 		"email": emailA, "password": "password1",
 	})
@@ -64,60 +65,57 @@ func TestTmSyncFlow(t *testing.T) {
 		"email": emailB, "password": "password1",
 	})
 
-	unitID := uuid.NewString()
+	termID := uuid.NewString()
 	now := time.Now().UTC()
 	older := now.Add(-time.Minute).Format(time.RFC3339Nano)
 	newer := now.Format(time.RFC3339Nano)
-	unit := map[string]any{
-		"id":        unitID,
-		"source":    "Hello",
-		"target":    "Привет",
-		"sourceKey": "hello::en|ru",
-		"sourceLang": "en",
-		"targetLang": "ru",
-		"createdAt": older,
-		"updatedAt": older,
-		"createdBy": "local",
-		"updatedBy": "local",
+	term := map[string]any{
+		"id":            termID,
+		"sourceLang":    "en",
+		"targetLang":    "ru",
+		"sourceTerm":    "invoice",
+		"targetTerm":    "счёт",
+		"status":        "approved",
+		"caseSensitive": false,
+		"createdAt":     older,
+		"updatedAt":     older,
+		"createdBy":     "local",
 	}
 
-	mustPush(t, srv.URL+"/api/tm/sync", tokenA, []map[string]any{unit})
+	mustPush(t, srv.URL+"/api/glossary/sync", tokenA, []map[string]any{term})
 
-	pull := mustPull(t, srv.URL+"/api/tm/sync?since=1970-01-01T00:00:00Z", tokenA)
-	units, _ := pull["units"].([]any)
-	if len(units) != 1 {
-		t.Fatalf("pull units=%v", pull)
+	pull := mustPull(t, srv.URL+"/api/glossary/sync?since=1970-01-01T00:00:00Z", tokenA)
+	terms, _ := pull["terms"].([]any)
+	if len(terms) != 1 {
+		t.Fatalf("pull terms=%v", pull)
 	}
 
-	// Older update must not overwrite
 	stale := map[string]any{}
-	for k, v := range unit {
+	for k, v := range term {
 		stale[k] = v
 	}
-	stale["target"] = "WRONG"
+	stale["targetTerm"] = "WRONG"
 	stale["updatedAt"] = older
-	mustPush(t, srv.URL+"/api/tm/sync", tokenA, []map[string]any{stale})
-	pull = mustPull(t, srv.URL+"/api/tm/sync?since=1970-01-01T00:00:00Z", tokenA)
-	got := pull["units"].([]any)[0].(map[string]any)
-	if got["target"] != "Привет" {
+	mustPush(t, srv.URL+"/api/glossary/sync", tokenA, []map[string]any{stale})
+	pull = mustPull(t, srv.URL+"/api/glossary/sync?since=1970-01-01T00:00:00Z", tokenA)
+	got := pull["terms"].([]any)[0].(map[string]any)
+	if got["targetTerm"] != "счёт" {
 		t.Fatalf("LWW failed: %v", got)
 	}
 
-	// Newer update wins
 	fresh := map[string]any{}
-	for k, v := range unit {
+	for k, v := range term {
 		fresh[k] = v
 	}
-	fresh["target"] = "Здравствуйте"
+	fresh["targetTerm"] = "инвойс"
 	fresh["updatedAt"] = newer
-	mustPush(t, srv.URL+"/api/tm/sync", tokenA, []map[string]any{fresh})
-	pull = mustPull(t, srv.URL+"/api/tm/sync?since=1970-01-01T00:00:00Z", tokenA)
-	got = pull["units"].([]any)[0].(map[string]any)
-	if got["target"] != "Здравствуйте" {
+	mustPush(t, srv.URL+"/api/glossary/sync", tokenA, []map[string]any{fresh})
+	pull = mustPull(t, srv.URL+"/api/glossary/sync?since=1970-01-01T00:00:00Z", tokenA)
+	got = pull["terms"].([]any)[0].(map[string]any)
+	if got["targetTerm"] != "инвойс" {
 		t.Fatalf("newer LWW failed: %v", got)
 	}
 
-	// Tombstone
 	tomb := map[string]any{}
 	for k, v := range fresh {
 		tomb[k] = v
@@ -125,18 +123,17 @@ func TestTmSyncFlow(t *testing.T) {
 	delAt := now.Add(time.Second).Format(time.RFC3339Nano)
 	tomb["deletedAt"] = delAt
 	tomb["updatedAt"] = delAt
-	mustPush(t, srv.URL+"/api/tm/sync", tokenA, []map[string]any{tomb})
-	pull = mustPull(t, srv.URL+"/api/tm/sync?since=1970-01-01T00:00:00Z", tokenA)
-	got = pull["units"].([]any)[0].(map[string]any)
+	mustPush(t, srv.URL+"/api/glossary/sync", tokenA, []map[string]any{tomb})
+	pull = mustPull(t, srv.URL+"/api/glossary/sync?since=1970-01-01T00:00:00Z", tokenA)
+	got = pull["terms"].([]any)[0].(map[string]any)
 	if got["deletedAt"] == nil {
 		t.Fatalf("expected tombstone: %v", got)
 	}
 
-	// Other user sees nothing
-	pullB := mustPull(t, srv.URL+"/api/tm/sync?since=1970-01-01T00:00:00Z", tokenB)
-	unitsB, _ := pullB["units"].([]any)
-	if len(unitsB) != 0 {
-		t.Fatalf("user B should see 0 units, got %v", pullB)
+	pullB := mustPull(t, srv.URL+"/api/glossary/sync?since=1970-01-01T00:00:00Z", tokenB)
+	termsB, _ := pullB["terms"].([]any)
+	if len(termsB) != 0 {
+		t.Fatalf("user B should see 0 terms, got %v", pullB)
 	}
 }
 
@@ -160,9 +157,9 @@ func mustAuth(t *testing.T, url string, body map[string]string) string {
 	return out.Token
 }
 
-func mustPush(t *testing.T, url, token string, units []map[string]any) {
+func mustPush(t *testing.T, url, token string, terms []map[string]any) {
 	t.Helper()
-	res, err := doReq(http.MethodPost, url, token, map[string]any{"units": units})
+	res, err := doReq(http.MethodPost, url, token, map[string]any{"terms": terms})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -185,25 +182,30 @@ func mustPull(t *testing.T, url, token string) map[string]any {
 		t.Fatalf("pull => %d %s", res.StatusCode, raw)
 	}
 	var out map[string]any
-	_ = json.Unmarshal(raw, &out)
+	if err := json.Unmarshal(raw, &out); err != nil {
+		t.Fatalf("parse: %s", raw)
+	}
 	return out
 }
 
 func doReq(method, url, token string, body any) (*http.Response, error) {
 	var rdr io.Reader
 	if body != nil {
-		b, _ := json.Marshal(body)
+		b, err := json.Marshal(body)
+		if err != nil {
+			return nil, err
+		}
 		rdr = bytes.NewReader(b)
 	}
 	req, err := http.NewRequest(method, url, rdr)
 	if err != nil {
 		return nil, err
 	}
-	if body != nil {
-		req.Header.Set("Content-Type", "application/json")
-	}
 	if token != "" {
 		req.Header.Set("Authorization", "Bearer "+token)
+	}
+	if body != nil {
+		req.Header.Set("Content-Type", "application/json")
 	}
 	return http.DefaultClient.Do(req)
 }

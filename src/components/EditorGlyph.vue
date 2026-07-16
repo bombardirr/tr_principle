@@ -6,6 +6,7 @@ import {
   ArrowLeftRight,
   ArrowRightFromLine,
   ArrowUpToLine,
+  BookMarked,
   Braces,
   Check,
   ChevronLeft,
@@ -25,10 +26,13 @@ import {
   FileDown,
   History,
   ListRestart,
+  Pencil,
   Percent,
+  Plus,
   Redo2,
   Save,
   Search,
+  SendHorizontal,
   Settings,
   SquareCheck,
   Trash2,
@@ -59,6 +63,9 @@ export type GlyphName =
   | 'theme'
   | 'settings'
   | 'trash'
+  | 'edit'
+  | 'plus'
+  | 'send'
   | 'resegment'
   | 'check'
   | 'close'
@@ -66,6 +73,7 @@ export type GlyphName =
   | 'cloud-download'
   | 'audit'
   | 'concordance'
+  | 'glossary'
   | 'undo'
   | 'redo'
   | 'markers'
@@ -99,6 +107,9 @@ const icons: Record<GlyphName, Component> = {
   theme: Contrast,
   settings: Settings,
   trash: Trash2,
+  edit: Pencil,
+  plus: Plus,
+  send: SendHorizontal,
   resegment: ListRestart,
   check: Check,
   close: X,
@@ -106,6 +117,7 @@ const icons: Record<GlyphName, Component> = {
   'cloud-download': CloudDownload,
   audit: History,
   concordance: Search,
+  glossary: BookMarked,
   undo: Undo2,
   redo: Redo2,
   markers: Braces,

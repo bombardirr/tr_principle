@@ -12,6 +12,7 @@ import {
 } from '@/auth/api'
 import { setStorageAccountId } from '@/storage/scope'
 import { syncTm } from '@/tm/sync'
+import { syncGlossary } from '@/glossary/sync'
 import { publicActorRef } from '@/utils/actorLabel'
 import { isPro } from '@/auth/plan'
 
@@ -25,6 +26,7 @@ async function applySession(token: string | null, next: AuthUser | null) {
   setStorageAccountId(next?.id ?? null)
   if (next) {
     void syncTm()
+    void syncGlossary()
   }
 }
 

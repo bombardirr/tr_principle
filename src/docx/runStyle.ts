@@ -153,6 +153,14 @@ function wrapStyled(text: string, style: RunStyle): string {
 
 export type StyledPiece = { text: string; style: RunStyle }
 
+/** Optional mark ranges over concatenated piece text (plain offsets). */
+export type HtmlMarkRange = {
+  start: number
+  end: number
+  className: string
+  attrs?: Record<string, string>
+}
+
 export function styledPiecesFromTagged(
   tagged: string,
   spans: RunSpan[],
@@ -219,9 +227,46 @@ export function styledPiecesFromTagged(
   return pieces.filter((p) => p.text.length > 0)
 }
 
-export function piecesToHtml(pieces: StyledPiece[]): string {
+export function piecesToHtml(pieces: StyledPiece[], marks?: HtmlMarkRange[]): string {
   if (!pieces.length) return ''
-  return pieces.map((p) => wrapStyled(p.text, p.style)).join('')
+  if (!marks?.length) {
+    return pieces.map((p) => wrapStyled(p.text, p.style)).join('')
+  }
+
+  const sorted = marks
+    .filter((m) => m.end > m.start)
+    .slice()
+    .sort((a, b) => a.start - b.start)
+
+  let html = ''
+  let offset = 0
+  for (const piece of pieces) {
+    const pieceStart = offset
+    const pieceEnd = offset + piece.text.length
+    let cursor = 0
+    for (const mark of sorted) {
+      if (mark.end <= pieceStart || mark.start >= pieceEnd) continue
+      const localStart = Math.max(0, mark.start - pieceStart)
+      const localEnd = Math.min(piece.text.length, mark.end - pieceStart)
+      if (localEnd <= localStart) continue
+      if (localStart > cursor) {
+        html += wrapStyled(piece.text.slice(cursor, localStart), piece.style)
+      }
+      const inner = wrapStyled(piece.text.slice(localStart, localEnd), piece.style)
+      const attrStr = mark.attrs
+        ? Object.entries(mark.attrs)
+            .map(([k, v]) => ` ${k}="${escapeHtml(v)}"`)
+            .join('')
+        : ''
+      html += `<mark class="${escapeHtml(mark.className)}"${attrStr}>${inner}</mark>`
+      cursor = localEnd
+    }
+    if (cursor < piece.text.length) {
+      html += wrapStyled(piece.text.slice(cursor), piece.style)
+    }
+    offset = pieceEnd
+  }
+  return html
 }
 
 export function hasVisualStyle(style: RunStyle): boolean {

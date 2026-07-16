@@ -15,6 +15,7 @@ import (
 
 	"github.com/bombardirr/tr_principle/api/internal/auth"
 	"github.com/bombardirr/tr_principle/api/internal/db"
+	"github.com/bombardirr/tr_principle/api/internal/glossary"
 	"github.com/bombardirr/tr_principle/api/internal/httpapi"
 	"github.com/bombardirr/tr_principle/api/internal/projects"
 	"github.com/bombardirr/tr_principle/api/internal/tm"
@@ -46,7 +47,8 @@ func TestAuthFlow(t *testing.T) {
 		Limiter: auth.NewRateLimiter(100, time.Minute),
 	}
 	tmHandler := &tm.Handler{Store: tm.NewStore(pool)}
-	srv := httptest.NewServer(httpapi.NewRouter(handler, tmHandler, &projects.Handler{
+	glossaryHandler := &glossary.Handler{Store: glossary.NewStore(pool)}
+	srv := httptest.NewServer(httpapi.NewRouter(handler, tmHandler, glossaryHandler, &projects.Handler{
 		Store:     projects.NewStore(pool),
 		BackupDir: t.TempDir(),
 	}, "http://localhost"))

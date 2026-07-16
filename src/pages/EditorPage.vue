@@ -6,6 +6,7 @@ import MarqueeText from '@/components/MarqueeText.vue'
 import ProjectSettingsDialog from '@/components/ProjectSettingsDialog.vue'
 import ResegmentDialog from '@/components/ResegmentDialog.vue'
 import DocxPreviewPanel from '@/components/DocxPreviewPanel.vue'
+import GlossaryPanel from '@/components/GlossaryPanel.vue'
 import { buildTranslatedDocx, downloadBlob } from '@/docx/exportDocx'
 import { getProject, saveProject } from '@/storage/idb'
 import { readEditorScroll, restoreWindowScroll, writeEditorScroll } from '@/storage/editorScroll'
@@ -34,6 +35,10 @@ import {
   deleteTmForSegmentSource,
 } from '@/storage/tmIdb'
 import { markTmDirty } from '@/tm/sync'
+import {
+  listGlossaryTerms,
+} from '@/storage/glossaryIdb'
+import type { GlossaryTerm } from '@/types/glossary'
 import {
   countTranslatedSegments,
   finalizeSegmentStatus,
@@ -85,6 +90,8 @@ const projectLease = useProjectAccess(() => props.id)
 const { settings: tmSettings, toggleAutoSaveToTm } = useTmSettings()
 const { bindings: shortcutBindings, reload: reloadShortcuts } = useShortcutBindings()
 const tmUnits = shallowRef<TmUnit[]>([])
+const glossaryTerms = shallowRef<GlossaryTerm[]>([])
+const glossaryOpen = ref(false)
 const tmImportInput = ref<HTMLInputElement | null>(null)
 /** Segment ids changed while TM autosave is on — written on next persist only. */
 const tmAutosaveIds = ref(new Set<string>())
@@ -444,6 +451,7 @@ onMounted(() => {
   void listTmUnits().then((units) => {
     tmUnits.value = units
   })
+  void reloadGlossary()
   window.addEventListener('scroll', onPageScroll, PAGE_SCROLL_OPTS)
   window.addEventListener('beforeunload', onBeforeUnload)
   window.addEventListener('keydown', onClearFocusKey)
@@ -716,6 +724,50 @@ function insertConcordanceTarget(segId: string, target: string) {
       detail: 'concordance',
       before: seg.target,
       after: target,
+    }),
+  })
+  const after = record.value?.segments.find((s) => s.id === segId)
+  if (after) segHistory.commit(after)
+  activateSegment(segId)
+  scheduleSave()
+}
+
+const glossaryForPair = computed(() => {
+  const meta = record.value?.meta
+  if (!meta?.sourceLang || !meta?.targetLang) return []
+  return glossaryTerms.value.filter(
+    (t) => t.sourceLang === meta.sourceLang && t.targetLang === meta.targetLang,
+  )
+})
+
+async function reloadGlossary() {
+  glossaryTerms.value = await listGlossaryTerms()
+}
+
+function insertGlossaryTarget(segId: string, targetTerm: string) {
+  if (!record.value || projectLease.blocked.value) return
+  const seg = record.value.segments.find((s) => s.id === segId)
+  if (!seg) return
+  notice.value = ''
+  segHistory.seed(seg)
+  const by = editActor()
+  const next =
+    seg.target && !seg.target.endsWith(' ') && seg.target.length
+      ? `${seg.target} ${targetTerm}`
+      : `${seg.target || ''}${targetTerm}`
+  patchSegment(segId, {
+    target: next,
+    status: 'draft',
+    tmSavePending: false,
+    origin: 'manual',
+    updatedBy: by,
+    updatedAt: new Date().toISOString(),
+    ...withSegmentAudit(seg, {
+      action: 'manual',
+      by,
+      detail: 'glossary',
+      before: seg.target,
+      after: next,
     }),
   })
   const after = record.value?.segments.find((s) => s.id === segId)
@@ -1376,10 +1428,13 @@ async function goBack() {
             <EditorGlyph name="cloud-upload" />
           </IconButton>
           <IconButton :title="t('editor.importTmxHint')" @click="openTmxImport">
-            <EditorGlyph name="upload-tmx" />
+            <EditorGlyph name="import" />
           </IconButton>
           <IconButton :title="t('editor.exportTmxHint')" @click="exportTmxFile">
-            <EditorGlyph name="download-tmx" />
+            <EditorGlyph name="export" />
+          </IconButton>
+          <IconButton :title="t('glossary.openHint')" :active="glossaryOpen" @click="glossaryOpen = true">
+            <EditorGlyph name="glossary" />
           </IconButton>
           <IconButton
             :title="
@@ -1450,6 +1505,9 @@ async function goBack() {
             :matches-for="matchesFor"
             :needs-tm-save="needsTmSave"
             :tm-units="tmUnits"
+            :glossary-terms="glossaryForPair"
+            :source-lang="record.meta.sourceLang"
+            :target-lang="record.meta.targetLang"
             :can-undo="segHistory.canUndo"
             :can-redo="segHistory.canRedo"
             :redo-count="segHistory.redoCount"
@@ -1478,6 +1536,7 @@ async function goBack() {
             @apply-tm="(id, match) => applyTmMatch(id, match)"
             @save-to-tm="saveSegmentToTmById"
             @insert-concordance="insertConcordanceTarget"
+            @insert-glossary="insertGlossaryTarget"
             @undo="undoSegment"
             @redo="redoSegment"
             @activate="activateSegment"
@@ -1497,6 +1556,13 @@ async function goBack() {
       />
     </div>
 
+    <GlossaryPanel
+      :open="glossaryOpen"
+      :source-lang="record.meta.sourceLang"
+      :target-lang="record.meta.targetLang"
+      @close="glossaryOpen = false"
+      @changed="reloadGlossary"
+    />
     <ProjectSettingsDialog
       :open="settingsOpen"
       :mode="settingsMode"

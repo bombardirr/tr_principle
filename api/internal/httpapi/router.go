@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/bombardirr/tr_principle/api/internal/auth"
+	"github.com/bombardirr/tr_principle/api/internal/glossary"
 	"github.com/bombardirr/tr_principle/api/internal/projects"
 	"github.com/bombardirr/tr_principle/api/internal/tm"
 	"github.com/go-chi/chi/v5"
@@ -14,6 +15,7 @@ import (
 func NewRouter(
 	authHandler *auth.Handler,
 	tmHandler *tm.Handler,
+	glossaryHandler *glossary.Handler,
 	projectsHandler *projects.Handler,
 	allowedOrigin string,
 ) http.Handler {
@@ -44,6 +46,12 @@ func NewRouter(
 		r.Use(authHandler.Middleware)
 		r.Get("/sync", tmHandler.Pull)
 		r.Post("/sync", tmHandler.Push)
+	})
+
+	r.Route("/api/glossary", func(r chi.Router) {
+		r.Use(authHandler.Middleware)
+		r.Get("/sync", glossaryHandler.Pull)
+		r.Post("/sync", glossaryHandler.Push)
 	})
 
 	r.Route("/api/projects/{projectID}", func(r chi.Router) {
