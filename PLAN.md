@@ -274,7 +274,7 @@ Outbox / очередь push — **не** в этом пункте («позже
 
 ---
 
-#### Словарь: отложено после MVP (расшифровка)
+#### Словарь: отложено / в MVP (расшифровка)
 
 | Термин | Что это | Зачем / когда |
 |--------|---------|----------------|
@@ -290,9 +290,16 @@ Outbox / очередь push — **не** в этом пункте («позже
 
 ### Фаза C: Глоссарий ← **в MVP, следующий срез**
 
-- [ ] Спека минимума (локальный termbase → sync при необходимости)
-- [ ] CRUD терминов + подсветка в source
-- [ ] Backlog после минимума: TBX import/export
+Спека: [`docs/superpowers/specs/2026-07-16-glossary-termbase-design.md`](docs/superpowers/specs/2026-07-16-glossary-termbase-design.md)
+
+**C1 (сейчас):** личный termbase на user + IndexedDB + cloud sync (как TM) + подсветка в source + TBX + status approved/forbidden  
+
+**C2 (следом, до F2):** проектный termbase / attach — без ломки модели entry  
+
+- [ ] Спека C1 ✓ (файл выше)
+- [ ] Реализация C1
+- [ ] C2 — project attach
+- [ ] Backlog: полный TBX Core / морфология
 
 ---
 
