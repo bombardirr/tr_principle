@@ -130,6 +130,11 @@ export default {
     docFormatHint: 'Исходный формат: Microsoft Word (DOCX)',
     saveProject: 'Сохранить копию проекта',
     saveProjectHint: 'Скачать резервную копию проекта на диск (.tcat.zip)',
+    shareProject: 'Поделиться проектом',
+    shareProjectHint: 'Скачать .tcat.zip для импорта коллегой',
+    shareImportHint:
+      'Коллеге: Проекты → Импорт файла проекта (.tcat.zip). Авторы правок остаются как ник / Инкогнито.',
+    shareDownload: 'Скачать .tcat.zip',
     exportDocx: 'Экспорт перевода (DOCX)',
     exportDocxHint: 'Экспорт готового документа с переводом в формате DOCX',
     source: 'Оригинал',

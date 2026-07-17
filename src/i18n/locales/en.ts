@@ -130,6 +130,11 @@ export default {
     docFormatHint: 'Source format: Microsoft Word (DOCX)',
     saveProject: 'Save project backup',
     saveProjectHint: 'Download a project backup to disk (.tcat.zip)',
+    shareProject: 'Share project',
+    shareProjectHint: 'Download a .tcat.zip for a colleague to import',
+    shareImportHint:
+      'Colleague: Projects → Import project file (.tcat.zip). Audit authors stay as nick / Incognito.',
+    shareDownload: 'Download .tcat.zip',
     exportDocx: 'Export translation (DOCX)',
     exportDocxHint: 'Export the translated document as DOCX',
     source: 'Source',

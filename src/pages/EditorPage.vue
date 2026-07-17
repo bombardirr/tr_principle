@@ -5,6 +5,7 @@ import { useI18n } from 'vue-i18n'
 import MarqueeText from '@/components/MarqueeText.vue'
 import ProjectSettingsDialog from '@/components/ProjectSettingsDialog.vue'
 import ResegmentDialog from '@/components/ResegmentDialog.vue'
+import ShareProjectDialog from '@/components/ShareProjectDialog.vue'
 import DocxPreviewPanel from '@/components/DocxPreviewPanel.vue'
 import GlossaryPanel from '@/components/GlossaryPanel.vue'
 import { buildTranslatedDocx, downloadBlob } from '@/docx/exportDocx'
@@ -158,6 +159,7 @@ const needsProjectSettings = computed(() => {
 const settingsOpen = ref(false)
 const settingsMode = ref<'first' | 'edit'>('first')
 const resegmentOpen = ref(false)
+const shareOpen = ref(false)
 const resegmentDeferred = ref(false)
 const thresholdOpen = ref(false)
 
@@ -1143,6 +1145,11 @@ function onClearFocusKey(e: KeyboardEvent) {
       resegmentOpen.value = false
       return
     }
+    if (shareOpen.value) {
+      e.preventDefault()
+      shareOpen.value = false
+      return
+    }
     if (thresholdOpen.value) {
       e.preventDefault()
       thresholdOpen.value = false
@@ -1286,6 +1293,19 @@ async function downloadProject() {
   })
 }
 
+function openShareDialog() {
+  shareOpen.value = true
+}
+
+function closeShareDialog() {
+  shareOpen.value = false
+}
+
+async function downloadFromShareDialog() {
+  closeShareDialog()
+  await downloadProject()
+}
+
 async function exportDocx() {
   if (!record.value) return
   if (!allSaved.value) {
@@ -1417,7 +1437,7 @@ async function goBack() {
           >
             <EditorGlyph :name="previewEnabled ? 'preview-off' : 'preview'" />
           </IconButton>
-          <IconButton :title="t('editor.saveProjectHint')" @click="downloadProject">
+          <IconButton :title="t('editor.shareProjectHint')" @click="openShareDialog">
             <EditorGlyph name="archive" />
           </IconButton>
           <IconButton
@@ -1576,6 +1596,11 @@ async function goBack() {
       :open="resegmentOpen"
       @later="deferResegment"
       @confirm="confirmResegment"
+    />
+    <ShareProjectDialog
+      :open="shareOpen"
+      @close="closeShareDialog"
+      @download="downloadFromShareDialog"
     />
   </section>
   <p v-else-if="error" class="error">{{ error }}</p>
