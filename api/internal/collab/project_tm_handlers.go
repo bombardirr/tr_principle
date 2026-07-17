@@ -3,6 +3,7 @@ package collab
 import (
 	"encoding/xml"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/bombardirr/tr_principle/api/internal/auth"
@@ -64,6 +65,8 @@ func (h *Handler) PushProjectTm(w http.ResponseWriter, r *http.Request) {
 	if !ok || !h.requireMember(w, r, projectID) {
 		return
 	}
+	user, _ := auth.UserFromContext(r.Context())
+	actor := projectTmActor(user)
 	var request projectTmSyncRequest
 	if !decodeJSON(w, r, &request) {
 		return
@@ -93,12 +96,20 @@ func (h *Handler) PushProjectTm(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusBadRequest, "invalid unit")
 			return
 		}
-		if err := h.Store.UpsertProjectTm(r.Context(), projectID, unit); err != nil {
+		if err := h.Store.UpsertProjectTm(r.Context(), projectID, actor, unit); err != nil {
 			writeError(w, http.StatusBadRequest, err.Error())
 			return
 		}
 	}
 	writeJSON(w, http.StatusOK, tm.PushResponse{OK: true, Until: time.Now().UTC().Format(time.RFC3339Nano)})
+}
+
+func projectTmActor(user auth.User) string {
+	name := strings.TrimSpace(user.DisplayName)
+	if name != "" && !strings.Contains(name, "@") {
+		return name
+	}
+	return "anon:" + user.ID.String()
 }
 
 func (h *Handler) ListTmAttachments(w http.ResponseWriter, r *http.Request) {

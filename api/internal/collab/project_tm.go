@@ -105,6 +105,10 @@ func (s *Store) PullReadableTm(ctx context.Context, projectID uuid.UUID, since t
 		       deleted_at, project_id::text, created_by, updated_by, context_before, context_after
 		FROM project_tm_units
 		WHERE project_id = $1 AND updated_at > $2
+		  AND EXISTS (
+			SELECT 1 FROM project_tm_attachments a
+			WHERE a.project_id = $1 AND a.kind = 'project' AND a.can_read
+		  )
 		UNION ALL
 		SELECT u.id, u.source, u.target, u.source_key, u.source_lang, u.target_lang, u.created_at, u.updated_at,
 		       u.deleted_at, u.project_id, u.created_by, u.updated_by, u.context_before, u.context_after
@@ -120,7 +124,7 @@ func (s *Store) PullReadableTm(ctx context.Context, projectID uuid.UUID, since t
 	return scanProjectTmUnits(rows)
 }
 
-func (s *Store) UpsertProjectTm(ctx context.Context, projectID uuid.UUID, unit tm.Unit) error {
+func (s *Store) UpsertProjectTm(ctx context.Context, projectID uuid.UUID, actor string, unit tm.Unit) error {
 	id, err := uuid.Parse(unit.ID)
 	if err != nil {
 		return err
@@ -152,7 +156,7 @@ func (s *Store) UpsertProjectTm(ctx context.Context, projectID uuid.UUID, unit t
 			updated_by=EXCLUDED.updated_by, context_before=EXCLUDED.context_before, context_after=EXCLUDED.context_after
 		WHERE project_tm_units.project_id = EXCLUDED.project_id AND project_tm_units.updated_at < EXCLUDED.updated_at
 	`, id, projectID, unit.Source, unit.Target, unit.SourceKey, unit.SourceLang, unit.TargetLang, createdAt, updatedAt,
-		deletedAt, unit.CreatedBy, unit.UpdatedBy, unit.ContextBefore, unit.ContextAfter)
+		deletedAt, actor, actor, unit.ContextBefore, unit.ContextAfter)
 	return err
 }
 

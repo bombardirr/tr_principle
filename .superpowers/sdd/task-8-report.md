@@ -24,3 +24,26 @@
 The normal Go suite runs database integration tests only when `DATABASE_URL` is set; the dedicated
 Task 8 command above used the running local Postgres service so the two new tests executed rather
 than being skipped.
+
+## Blocking review fixes
+
+- Gated the project-unit branch of `PullReadableTm` on the project's `kind='project'` attachment
+  having `can_read=true`; attached personal units retain their existing per-attachment gate.
+- Project TM pushes now overwrite both attribution fields with a safe authenticated actor:
+  non-email display name when present, otherwise `anon:{userId}`. Client-supplied attribution,
+  including email-shaped values, is never persisted.
+- Added integration coverage for both cases:
+  - disabling a project attachment's `can_read` returns no project units from pull;
+  - pushing `createdBy`/`updatedBy` as `a@b.com` stores the authenticated anonymous actor instead.
+
+## Review-fix test output
+
+```text
+cmd /c "set DATABASE_URL=postgres://appzac:appzac@localhost:55432/appzac?sslmode=disable&& go test ./internal/collab -run TestProjectTm(Pull^|Push) -count=1 -v"
+PASS
+ok  	github.com/bombardirr/tr_principle/api/internal/collab	1.088s
+
+cmd /c "set DATABASE_URL=postgres://appzac:appzac@localhost:55432/appzac?sslmode=disable&& go test ./..."
+PASS
+ok  	github.com/bombardirr/tr_principle/api/internal/collab	2.183s
+```
