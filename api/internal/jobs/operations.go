@@ -28,6 +28,7 @@ type MemberPatch struct {
 	PartDone       *bool
 	ProgressDone   *int
 	ProgressTotal  *int
+	ProgressTm     *int
 	LocalProjectID *uuid.UUID
 }
 
@@ -38,6 +39,7 @@ type RosterMember struct {
 	PartDone       bool       `json:"partDone"`
 	ProgressDone   int        `json:"progressDone"`
 	ProgressTotal  int        `json:"progressTotal"`
+	ProgressTm     int        `json:"progressTm"`
 	LastActiveAt   *time.Time `json:"lastActiveAt"`
 	LocalProjectID *uuid.UUID `json:"-"`
 	JoinedAt       time.Time  `json:"-"`
@@ -113,7 +115,7 @@ func (s *Store) UpdateJob(ctx context.Context, jobID, ownerID uuid.UUID, patch J
 func (s *Store) ListMembers(ctx context.Context, jobID, requesterID uuid.UUID) ([]RosterMember, error) {
 	rows, err := s.pool.Query(ctx, `
 		SELECT m.user_id, COALESCE(u.display_name, ''), m.role, m.part_done,
-		       m.progress_done, m.progress_total, m.last_active_at,
+		       m.progress_done, m.progress_total, m.progress_tm, m.last_active_at,
 		       m.local_project_id, m.joined_at
 		FROM job_members m
 		JOIN users u ON u.id = m.user_id
@@ -139,6 +141,7 @@ func (s *Store) ListMembers(ctx context.Context, jobID, requesterID uuid.UUID) (
 			&member.PartDone,
 			&member.ProgressDone,
 			&member.ProgressTotal,
+			&member.ProgressTm,
 			&member.LastActiveAt,
 			&member.LocalProjectID,
 			&member.JoinedAt,
@@ -158,7 +161,8 @@ func (s *Store) ListMembers(ctx context.Context, jobID, requesterID uuid.UUID) (
 
 func (s *Store) PatchMemberMe(ctx context.Context, jobID, userID uuid.UUID, patch MemberPatch) (RosterMember, error) {
 	if (patch.ProgressDone != nil && *patch.ProgressDone < 0) ||
-		(patch.ProgressTotal != nil && *patch.ProgressTotal < 0) {
+		(patch.ProgressTotal != nil && *patch.ProgressTotal < 0) ||
+		(patch.ProgressTm != nil && *patch.ProgressTm < 0) {
 		return RosterMember{}, ErrInvalidJob
 	}
 
@@ -168,20 +172,22 @@ func (s *Store) PatchMemberMe(ctx context.Context, jobID, userID uuid.UUID, patc
 		SET part_done = COALESCE($3, m.part_done),
 		    progress_done = COALESCE($4, m.progress_done),
 		    progress_total = COALESCE($5, m.progress_total),
-		    local_project_id = COALESCE($6, m.local_project_id),
+		    progress_tm = COALESCE($6, m.progress_tm),
+		    local_project_id = COALESCE($7, m.local_project_id),
 		    last_active_at = now()
 		FROM users u
 		WHERE m.job_id = $1 AND m.user_id = $2 AND u.id = m.user_id
 		RETURNING m.user_id, COALESCE(u.display_name, ''), m.role, m.part_done,
-		          m.progress_done, m.progress_total, m.last_active_at,
+		          m.progress_done, m.progress_total, m.progress_tm, m.last_active_at,
 		          m.local_project_id, m.joined_at
-	`, jobID, userID, patch.PartDone, patch.ProgressDone, patch.ProgressTotal, patch.LocalProjectID).Scan(
+	`, jobID, userID, patch.PartDone, patch.ProgressDone, patch.ProgressTotal, patch.ProgressTm, patch.LocalProjectID).Scan(
 		&member.UserID,
 		&member.DisplayName,
 		&member.Role,
 		&member.PartDone,
 		&member.ProgressDone,
 		&member.ProgressTotal,
+		&member.ProgressTm,
 		&member.LastActiveAt,
 		&member.LocalProjectID,
 		&member.JoinedAt,

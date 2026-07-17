@@ -79,8 +79,15 @@ function onLeave() {
       :class="{ 'marquee-text__track--scroll': overflow && scrolling }"
       :style="overflow ? { '--marquee-duration': `${durationSec}s` } : undefined"
     >
-      <span class="marquee-text__label">{{ text }}</span>
-      <span v-if="overflow" class="marquee-text__label" aria-hidden="true">{{ text }}</span>
+      <span
+        class="marquee-text__label"
+        :class="{ 'marquee-text__label--ellipsis': overflow && !scrolling }"
+      >{{ text }}</span>
+      <span
+        v-if="overflow && scrolling"
+        class="marquee-text__label"
+        aria-hidden="true"
+      >{{ text }}</span>
     </div>
   </div>
   <AppTooltip
@@ -106,13 +113,36 @@ function onLeave() {
   white-space: nowrap;
 }
 
+.marquee-text__track:not(.marquee-text__track--scroll) {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+}
+
 .marquee-text__track--scroll {
+  display: inline-flex;
   animation: marquee-scroll var(--marquee-duration, 12s) linear infinite;
 }
 
 .marquee-text__label {
   display: inline-block;
   padding-inline-end: 2rem;
+}
+
+.marquee-text__label--ellipsis {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding-inline-end: 0;
+}
+
+.marquee-text__track--scroll .marquee-text__label {
+  display: inline-block;
+  padding-inline-end: 2rem;
+  overflow: visible;
+  text-overflow: clip;
+  max-width: none;
 }
 
 @keyframes marquee-scroll {

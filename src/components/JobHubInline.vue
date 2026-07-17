@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { useAuth } from '@/auth/session'
+import { publicActorLabel, useAuth } from '@/auth/session'
 import IconButton from '@/components/IconButton.vue'
 import EditorGlyph from '@/components/EditorGlyph.vue'
+import MarqueeText from '@/components/MarqueeText.vue'
 import ProjectListItem from '@/components/ProjectListItem.vue'
 import SharedWorkPanel from '@/components/SharedWorkPanel.vue'
 import { openDocx } from '@/docx/openDocx'
@@ -15,6 +16,7 @@ import { createProjectId, getProject, listProjects, saveProject } from '@/storag
 import { unpackProjectFile } from '@/storage/projectFile'
 import { SEGMENT_SCHEMA_DATE_SAFE, type ProjectMeta, type ProjectRecord } from '@/types/project'
 import { acknowledgeJobJoins } from '@/jobs/joinActivity'
+import { progressPercent } from '@/jobs/progress'
 import type { Job, JobMember } from '@/types/job'
 
 const props = defineProps<{
@@ -60,6 +62,19 @@ watch(
   { immediate: true },
 )
 
+function onWindowFocus() {
+  void load()
+  emit('changed')
+}
+
+onMounted(() => {
+  window.addEventListener('focus', onWindowFocus)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('focus', onWindowFocus)
+})
+
 async function load() {
   if (!props.jobId) return
   busy.value = true
@@ -96,11 +111,22 @@ async function onProjectChanged() {
 }
 
 function memberName(member: JobMember) {
+  if (user.value?.id && member.userId === user.value.id) {
+    return publicActorLabel(user.value) || member.displayName?.trim() || `anon:${member.userId}`
+  }
   return member.displayName?.trim() || `anon:${member.userId}`
 }
 
 function roleLabel(role: JobMember['role']) {
   return t(`jobs.roles.${role}`)
+}
+
+function memberPct(member: JobMember) {
+  return progressPercent(member.progressDone, member.progressTotal)
+}
+
+function memberTmPct(member: JobMember) {
+  return progressPercent(member.progressTm ?? 0, member.progressTotal)
 }
 
 async function bind(record: ProjectRecord) {
@@ -217,44 +243,70 @@ async function onProjectFileSelected(event: Event) {
     <header class="hub-head">
       <h3 class="hub-title">
         <span>{{ job?.title || t('jobs.panelTitle') }}</span>
-        <span v-if="job" class="lang-chip">
-          {{ job.sourceLang || '—' }} → {{ job.targetLang || '—' }}
-        </span>
+        <IconButton
+          v-if="job"
+          :title="t('jobs.manageWork')"
+          :disabled="busy"
+          @click="panelOpen = true"
+        >
+          <EditorGlyph name="user-plus" />
+        </IconButton>
       </h3>
     </header>
 
     <p v-if="error" class="error" role="alert">{{ error }}</p>
     <p v-if="busy && !job" class="muted">{{ t('jobs.loading') }}</p>
 
-    <section v-if="job" class="hub-card">
-      <div class="hub-card-head">
-        <h4>{{ t('jobs.membersTitle') }}</h4>
-        <IconButton
-          :title="t('jobs.manageWork')"
-          :disabled="busy"
-          @click="panelOpen = true"
+    <ul v-if="job" class="members">
+      <li v-for="member in members" :key="member.userId" class="member-row">
+        <MarqueeText class="member-name" :text="memberName(member)" max-width="100%" />
+        <div class="role-cell">
+          <span class="role-chip" :data-role="member.role">{{ roleLabel(member.role) }}</span>
+          <span
+            v-if="member.partDone"
+            class="part-done"
+            :title="t('jobs.partDoneColumn')"
+          >
+            {{ t('jobs.partDoneYes') }}
+          </span>
+        </div>
+        <span class="progress-tm">
+          {{
+            t('jobs.progressTmDetail', {
+              hits: member.progressTm ?? 0,
+              total: member.progressTotal,
+              pct: memberTmPct(member),
+            })
+          }}
+        </span>
+        <span class="progress-count">
+          {{
+            t('jobs.progressConfirmed', {
+              done: member.progressDone,
+              total: member.progressTotal,
+              pct: memberPct(member),
+            })
+          }}
+        </span>
+        <div
+          class="progress-track"
+          role="progressbar"
+          :aria-valuenow="memberPct(member)"
+          aria-valuemin="0"
+          aria-valuemax="100"
+          :aria-label="t('jobs.progressPct', { pct: memberPct(member) })"
         >
-          <EditorGlyph name="send" />
-        </IconButton>
-      </div>
-      <ul class="members">
-        <li v-for="member in members" :key="member.userId">
-          <span>
-            <strong>{{ memberName(member) }}</strong>
-            <small>{{ roleLabel(member.role) }}</small>
-          </span>
-          <span>{{ member.progressDone }} / {{ member.progressTotal }}</span>
-          <span :class="{ done: member.partDone }">
-            {{ member.partDone ? t('jobs.partDoneYes') : t('jobs.partDoneNo') }}
-          </span>
-        </li>
-      </ul>
-    </section>
+          <div class="progress-fill" :style="{ width: `${memberPct(member)}%` }" />
+        </div>
+      </li>
+    </ul>
 
     <template v-if="job && canHaveProject">
       <ul v-if="linkedProject" class="list">
         <ProjectListItem
           :project="linkedProject"
+          :source-lang="job?.sourceLang"
+          :target-lang="job?.targetLang"
           glow
           @changed="onProjectChanged"
           @notice="emit('notice', $event)"
@@ -262,7 +314,12 @@ async function onProjectFileSelected(event: Event) {
         />
       </ul>
       <section v-else class="hub-card">
-        <p class="muted">{{ t('jobs.noLinkedProject') }}</p>
+        <p class="muted">
+          {{ t('jobs.noLinkedProject') }}
+          <template v-if="job">
+            · {{ job.sourceLang || '—' }} → {{ job.targetLang || '—' }}
+          </template>
+        </p>
         <div class="project-actions">
           <button type="button" class="primary" :disabled="busy" @click="docxInput?.click()">
             {{ t('jobs.createFromDocx') }}
@@ -356,8 +413,6 @@ async function onProjectFileSelected(event: Event) {
 }
 
 .hub-head,
-.hub-card-head,
-.members li,
 .project-actions,
 .bind-row {
   display: flex;
@@ -372,33 +427,11 @@ async function onProjectFileSelected(event: Event) {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 0.4rem 0.55rem;
+  gap: 0.35rem 0.45rem;
   margin: 0;
   font-size: 1.05rem;
   font-weight: 700;
   line-height: 1.25;
-}
-
-.lang-chip {
-  display: inline-flex;
-  align-items: center;
-  padding: 0.12rem 0.45rem;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--accent) 14%, var(--surface-soft));
-  color: var(--accent);
-  font-size: 0.72rem;
-  font-weight: 650;
-  line-height: 1.3;
-}
-
-.hub-card-head {
-  justify-content: space-between;
-  gap: 0.5rem;
-  margin-bottom: 0.25rem;
-}
-
-.hub-card-head h4 {
-  margin: 0;
 }
 
 h4,
@@ -412,10 +445,6 @@ h4 {
   font-weight: 650;
 }
 
-.hub-card-head h4 {
-  margin-bottom: 0;
-}
-
 .muted,
 small {
   color: var(--text-muted);
@@ -425,11 +454,11 @@ small {
 .list {
   list-style: none;
   padding: 0;
-  margin: 0.55rem 0 0;
+  margin: 1rem 0 0;
 }
 
 .hub-card {
-  margin-top: 0.45rem;
+  margin-top: 1rem;
   padding: 0.5rem 0.6rem;
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -437,48 +466,111 @@ small {
 }
 
 .members {
-  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  margin: 0.45rem 0 0;
   padding: 0;
   list-style: none;
 }
 
-.members li {
-  justify-content: space-between;
-  gap: 0.65rem;
-  padding: 0.28rem 0;
-  border-bottom: 1px solid var(--border);
-  font-size: 0.8rem;
-  line-height: 1.3;
-}
-
-.members li:last-child {
-  border-bottom: 0;
-  padding-bottom: 0;
-}
-
-.members li:first-child {
-  padding-top: 0;
-}
-
-.members li > span:first-child {
-  display: flex;
-  flex: 1 1 auto;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 0.35rem;
+.member-row {
+  display: grid;
+  grid-template-columns: minmax(0, 35%) minmax(0, 0.85fr) minmax(0, 1.3fr) minmax(0, 1.3fr);
+  align-items: center;
+  column-gap: 0.45rem;
+  row-gap: 0.28rem;
   min-width: 0;
 }
 
-.members li > span:first-child strong {
+.member-name {
+  grid-column: 1;
+  min-width: 0;
   font-weight: 600;
+  color: var(--text);
 }
 
-.members li > span:first-child small {
+.role-cell {
+  grid-column: 2;
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 0.25rem 0.35rem;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.role-chip {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.68rem;
+  font-weight: 650;
+  line-height: 1.35;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.progress-tm {
+  grid-column: 3;
+  min-width: 0;
+  text-align: left;
+  color: color-mix(in srgb, var(--accent) 40%, var(--text-muted));
   font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.done {
+.progress-count {
+  grid-column: 4;
+  min-width: 0;
+  text-align: left;
+  color: var(--accent);
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.progress-track {
+  grid-column: 1 / -1;
+  width: 100%;
+  height: 0.4rem;
+  min-height: 0.4rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--text-muted) 14%, var(--surface));
+  overflow: hidden;
+}
+
+.part-done {
   color: var(--ok);
+  font-size: 0.68rem;
+  font-weight: 650;
+  white-space: nowrap;
+  flex: 0 0 auto;
+}
+
+.role-chip[data-role='owner'] {
+  color: var(--accent);
+}
+
+.role-chip[data-role='translator'] {
+  color: var(--ok);
+}
+
+.role-chip[data-role='viewer'] {
+  color: #b8921f;
+}
+
+.progress-fill {
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+  transition: width 0.2s ease;
 }
 
 .project-actions,
@@ -488,7 +580,7 @@ small {
   margin-top: 0.4rem;
 }
 
-button:not(.back),
+button:not(.back):not(.icon-btn),
 select {
   border: 1px solid var(--border);
   border-radius: 6px;
@@ -499,7 +591,7 @@ select {
   font-size: 0.8rem;
 }
 
-button:not(.back) {
+button:not(.back):not(.icon-btn) {
   cursor: pointer;
 }
 

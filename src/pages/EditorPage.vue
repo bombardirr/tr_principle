@@ -73,7 +73,7 @@ import {
   stopJoinActivityPolling,
 } from '@/jobs/joinActivity'
 import type { Job, JobRole } from '@/types/job'
-import { computeProgress } from '@/jobs/progress'
+import { computeProgress, computeTmCoverage } from '@/jobs/progress'
 import { fingerprintDocx, fingerprintMismatch } from '@/jobs/fingerprint'
 
 const props = defineProps<{ id: string }>()
@@ -380,10 +380,23 @@ async function reportJobProgress() {
   const jobId = record.value?.meta.jobId
   if (!jobId || jobRole.value === 'viewer') return
   const progress = computeProgress(record.value!.segments)
+  let progressTm = 0
+  try {
+    const units = await listTmUnits()
+    progressTm = computeTmCoverage(
+      record.value!.segments,
+      units,
+      record.value!.meta.sourceLang,
+      record.value!.meta.targetLang,
+    ).tmHits
+  } catch {
+    // TM coverage is best-effort.
+  }
   try {
     await patchJobMemberMe(jobId, {
       progressDone: progress.done,
       progressTotal: progress.total,
+      progressTm,
       localProjectId: record.value!.meta.id,
     })
   } catch {

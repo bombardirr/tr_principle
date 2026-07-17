@@ -1,0 +1,2 @@
+ALTER TABLE job_members
+  ADD COLUMN IF NOT EXISTS progress_tm INT NOT NULL DEFAULT 0;

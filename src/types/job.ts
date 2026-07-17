@@ -19,6 +19,7 @@ export type JobMember = {
   partDone: boolean
   progressDone: number
   progressTotal: number
+  progressTm?: number
   lastActiveAt?: string | null
   localProjectId?: string | null
 }
@@ -78,6 +79,7 @@ export type PatchJobMemberInput = {
   partDone?: boolean
   progressDone?: number
   progressTotal?: number
+  progressTm?: number
   localProjectId?: string
 }
 

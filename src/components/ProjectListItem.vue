@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import IconButton from '@/components/IconButton.vue'
 import EditorGlyph from '@/components/EditorGlyph.vue'
@@ -7,12 +7,16 @@ import { ApiError } from '@/auth/api'
 import { getProjectBackup } from '@/projects/api'
 import { deleteProject, getProject, saveProject } from '@/storage/idb'
 import { unpackProjectFile } from '@/storage/projectFile'
+import { langPairLabel } from '@/tm/langPairs'
 import { resegmentParagraphs } from '@/tm/resegment'
 import { SEGMENT_SCHEMA_DATE_SAFE, type ProjectMeta } from '@/types/project'
 
 const props = defineProps<{
   project: ProjectMeta
   glow?: boolean
+  /** Fallback when project meta has no langs yet (e.g. job hub). */
+  sourceLang?: string
+  targetLang?: string
 }>()
 
 const emit = defineEmits<{
@@ -24,6 +28,13 @@ const emit = defineEmits<{
 const { t } = useI18n()
 const busy = ref(false)
 const pending = ref<'delete' | 'resegment' | null>(null)
+
+const langPairText = computed(() => {
+  const source = props.project.sourceLang || props.sourceLang
+  const target = props.project.targetLang || props.targetLang
+  if (!source && !target) return ''
+  return langPairLabel(source, target)
+})
 
 function formatDate(iso: string) {
   try {
@@ -101,6 +112,7 @@ async function restoreFromCloud() {
     <router-link class="item-link" :to="{ name: 'editor', params: { id: project.id } }">
       <span class="name">{{ project.name }}</span>
       <span class="sub">
+        <template v-if="langPairText">{{ langPairText }} · </template>
         {{ t('projects.segments', { done: project.doneCount, total: project.segmentCount }) }}
         ·
         {{ t('projects.updated', { date: formatDate(project.updatedAt) }) }}
@@ -206,6 +218,7 @@ async function restoreFromCloud() {
 .name {
   font-weight: 600;
   color: var(--text);
+  min-width: 0;
 }
 
 .sub {

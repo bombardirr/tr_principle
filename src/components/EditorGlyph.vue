@@ -38,6 +38,7 @@ import {
   Trash2,
   Undo2,
   Upload,
+  UserPlus,
   X,
 } from '@lucide/vue'
 
@@ -66,6 +67,7 @@ export type GlyphName =
   | 'edit'
   | 'plus'
   | 'send'
+  | 'user-plus'
   | 'resegment'
   | 'check'
   | 'close'
@@ -110,6 +112,7 @@ const icons: Record<GlyphName, Component> = {
   edit: Pencil,
   plus: Plus,
   send: SendHorizontal,
+  'user-plus': UserPlus,
   resegment: ListRestart,
   check: Check,
   close: X,

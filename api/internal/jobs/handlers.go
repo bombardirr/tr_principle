@@ -172,6 +172,7 @@ func (h *Handler) PatchMe(w http.ResponseWriter, r *http.Request) {
 		PartDone       *bool      `json:"partDone"`
 		ProgressDone   *int       `json:"progressDone"`
 		ProgressTotal  *int       `json:"progressTotal"`
+		ProgressTm     *int       `json:"progressTm"`
 		LocalProjectID *uuid.UUID `json:"localProjectId"`
 	}
 	if !decodeJSON(w, r, &body) {
@@ -181,6 +182,7 @@ func (h *Handler) PatchMe(w http.ResponseWriter, r *http.Request) {
 		PartDone:       body.PartDone,
 		ProgressDone:   body.ProgressDone,
 		ProgressTotal:  body.ProgressTotal,
+		ProgressTm:     body.ProgressTm,
 		LocalProjectID: body.LocalProjectID,
 	})
 	switch {
