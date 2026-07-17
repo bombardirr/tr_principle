@@ -13,6 +13,7 @@ const props = withDefaults(
 
 const root = ref<HTMLElement | null>(null)
 const overflow = ref(false)
+const scrolling = ref(false)
 const durationSec = ref(12)
 let observer: ResizeObserver | null = null
 
@@ -26,6 +27,7 @@ async function measure() {
   if (!label) return
   const needsScroll = label.scrollWidth > el.clientWidth + 1
   overflow.value = needsScroll
+  if (!needsScroll) scrolling.value = false
   if (needsScroll) {
     durationSec.value = Math.min(24, Math.max(8, label.scrollWidth / 28))
   }
@@ -51,9 +53,16 @@ watch(
   },
 )
 
-function onShowTip(event: MouseEvent) {
-  if (!overflow.value) return
-  void showAtAnchor(event.currentTarget as HTMLElement, props.text)
+function onEnter(event: MouseEvent) {
+  if (overflow.value) {
+    scrolling.value = true
+    void showAtAnchor(event.currentTarget as HTMLElement, props.text)
+  }
+}
+
+function onLeave() {
+  scrolling.value = false
+  hide()
 }
 </script>
 
@@ -62,12 +71,12 @@ function onShowTip(event: MouseEvent) {
     ref="root"
     class="marquee-text"
     :style="{ maxWidth }"
-    @mouseenter="onShowTip"
-    @mouseleave="hide"
+    @mouseenter="onEnter"
+    @mouseleave="onLeave"
   >
     <div
       class="marquee-text__track"
-      :class="{ 'marquee-text__track--scroll': overflow }"
+      :class="{ 'marquee-text__track--scroll': overflow && scrolling }"
       :style="overflow ? { '--marquee-duration': `${durationSec}s` } : undefined"
     >
       <span class="marquee-text__label">{{ text }}</span>
@@ -99,10 +108,6 @@ function onShowTip(event: MouseEvent) {
 
 .marquee-text__track--scroll {
   animation: marquee-scroll var(--marquee-duration, 12s) linear infinite;
-}
-
-.marquee-text__track--scroll:hover {
-  animation-play-state: paused;
 }
 
 .marquee-text__label {
