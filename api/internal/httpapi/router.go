@@ -78,6 +78,11 @@ func NewRouter(
 		r.Post("/api/jobs/{id}/invites", jobsHandler.CreateInvite)
 		r.Get("/api/jobs/{id}/invites", jobsHandler.Invites)
 		r.Post("/api/jobs/{id}/invites/{inviteId}/revoke", jobsHandler.RevokeInvite)
+		r.Get("/api/jobs/{id}/tm/sync", jobsHandler.PullJobTM)
+		r.Post("/api/jobs/{id}/tm/sync", jobsHandler.PushJobTM)
+		r.Get("/api/jobs/{id}/resources", jobsHandler.Resources)
+		r.Patch("/api/jobs/{id}/resources/preset", jobsHandler.PatchResourcePreset)
+		r.Patch("/api/jobs/{id}/resources/me", jobsHandler.PatchResourceMe)
 		r.Post("/api/job-invites/accept", jobsHandler.AcceptInvite)
 	})
 
