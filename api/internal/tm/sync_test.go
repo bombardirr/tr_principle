@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/bombardirr/tr_principle/api/internal/auth"
+	"github.com/bombardirr/tr_principle/api/internal/collab"
 	"github.com/bombardirr/tr_principle/api/internal/db"
 	"github.com/bombardirr/tr_principle/api/internal/glossary"
 	"github.com/bombardirr/tr_principle/api/internal/httpapi"
@@ -52,7 +53,7 @@ func TestTmSyncFlow(t *testing.T) {
 	srv := httptest.NewServer(httpapi.NewRouter(authHandler, tmHandler, glossaryHandler, &projects.Handler{
 		Store:     projects.NewStore(pool),
 		BackupDir: t.TempDir(),
-	}, "http://localhost"))
+	}, &collab.Handler{Store: collab.NewStore(pool)}, "http://localhost"))
 	t.Cleanup(srv.Close)
 
 	emailA := fmt.Sprintf("tmtest_a_%s@example.com", time.Now().Format("150405.000000000"))
@@ -69,16 +70,16 @@ func TestTmSyncFlow(t *testing.T) {
 	older := now.Add(-time.Minute).Format(time.RFC3339Nano)
 	newer := now.Format(time.RFC3339Nano)
 	unit := map[string]any{
-		"id":        unitID,
-		"source":    "Hello",
-		"target":    "Привет",
-		"sourceKey": "hello::en|ru",
+		"id":         unitID,
+		"source":     "Hello",
+		"target":     "Привет",
+		"sourceKey":  "hello::en|ru",
 		"sourceLang": "en",
 		"targetLang": "ru",
-		"createdAt": older,
-		"updatedAt": older,
-		"createdBy": "local",
-		"updatedBy": "local",
+		"createdAt":  older,
+		"updatedAt":  older,
+		"createdBy":  "local",
+		"updatedBy":  "local",
 	}
 
 	mustPush(t, srv.URL+"/api/tm/sync", tokenA, []map[string]any{unit})

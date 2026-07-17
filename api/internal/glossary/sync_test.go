@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/bombardirr/tr_principle/api/internal/auth"
+	"github.com/bombardirr/tr_principle/api/internal/collab"
 	"github.com/bombardirr/tr_principle/api/internal/db"
 	"github.com/bombardirr/tr_principle/api/internal/glossary"
 	"github.com/bombardirr/tr_principle/api/internal/httpapi"
@@ -52,6 +53,7 @@ func TestGlossarySyncFlow(t *testing.T) {
 		&tm.Handler{Store: tm.NewStore(pool)},
 		&glossary.Handler{Store: glossary.NewStore(pool)},
 		&projects.Handler{Store: projects.NewStore(pool), BackupDir: t.TempDir()},
+		&collab.Handler{Store: collab.NewStore(pool)},
 		"http://localhost",
 	))
 	t.Cleanup(srv.Close)

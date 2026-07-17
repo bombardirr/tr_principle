@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/bombardirr/tr_principle/api/internal/auth"
+	"github.com/bombardirr/tr_principle/api/internal/collab"
 	"github.com/bombardirr/tr_principle/api/internal/glossary"
 	"github.com/bombardirr/tr_principle/api/internal/projects"
 	"github.com/bombardirr/tr_principle/api/internal/tm"
@@ -17,6 +18,7 @@ func NewRouter(
 	tmHandler *tm.Handler,
 	glossaryHandler *glossary.Handler,
 	projectsHandler *projects.Handler,
+	collabHandler *collab.Handler,
 	allowedOrigin string,
 ) http.Handler {
 	r := chi.NewRouter()
@@ -61,6 +63,27 @@ func NewRouter(
 		r.Put("/backup", projectsHandler.PutBackup)
 		r.Get("/backup", projectsHandler.GetBackup)
 		r.Head("/backup", projectsHandler.GetBackup)
+	})
+
+	r.Route("/api/projects", func(r chi.Router) {
+		r.Use(authHandler.Middleware)
+		r.Post("/", collabHandler.CreateProject)
+		r.Get("/", collabHandler.ListProjects)
+		r.Route("/{projectID}", func(r chi.Router) {
+			r.Get("/", collabHandler.GetProject)
+			r.Patch("/", collabHandler.PatchProject)
+			r.Get("/members", collabHandler.ListMembers)
+			r.Delete("/members/{userID}", collabHandler.RemoveMember)
+			r.Post("/invites", collabHandler.CreateInvite)
+			r.Get("/invites", collabHandler.ListInvites)
+			r.Patch("/invites/{inviteID}", collabHandler.PatchInvite)
+			r.Post("/invites/{inviteID}/revoke", collabHandler.RevokeInvite)
+		})
+	})
+
+	r.Group(func(r chi.Router) {
+		r.Use(authHandler.Middleware)
+		r.Post("/api/invites/accept", collabHandler.AcceptInvite)
 	})
 
 	return r
