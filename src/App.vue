@@ -18,6 +18,7 @@ import {
   isModifierOnly,
   SHORTCUT_DEFAULTS,
 } from '@/shortcuts/bindings'
+import JoinToast from '@/components/JoinToast.vue'
 
 const { t, locale } = useI18n()
 const route = useRoute()
@@ -281,6 +282,7 @@ async function onLogout() {
     <main class="main" :class="{ 'main--wide': isEditorRoute, 'main--landing': isLanding }">
       <router-view />
     </main>
+    <JoinToast />
   </div>
 </template>
 
@@ -635,7 +637,7 @@ async function onLogout() {
   flex: 1;
   min-width: 0;
   padding: 0 1.5rem 2rem;
-  max-width: 1200px;
+  max-width: 1280px;
   width: 100%;
   margin: 0 auto;
 }

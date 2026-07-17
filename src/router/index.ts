@@ -39,7 +39,7 @@ const router = createRouter({
     {
       path: '/jobs/:id',
       name: 'job-hub',
-      component: () => import('@/pages/JobHubPage.vue'),
+      redirect: to => ({ name: 'projects', query: { job: String(to.params.id) } }),
       meta: { requiresAuth: true },
     },
   ],

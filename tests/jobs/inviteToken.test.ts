@@ -12,8 +12,8 @@ describe('parseJobInviteToken', () => {
     expect(parseJobInviteToken('/job-invite/raw-token#invite')).toBe('raw-token')
   })
 
-  it('accepts a raw token', () => {
-    expect(parseJobInviteToken('  raw-token_123  ')).toBe('raw-token_123')
+  it('rejects a bare token', () => {
+    expect(parseJobInviteToken('  raw-token_123  ')).toBeNull()
   })
 
   it('rejects unrelated URLs and empty input', () => {

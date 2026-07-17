@@ -172,7 +172,6 @@ async function transferOwnership() {
     <aside class="panel" role="dialog" aria-modal="true" :aria-label="t('jobs.panelTitle')">
       <header class="panel-head">
         <div>
-          <p class="eyebrow">{{ t('jobs.sharedWork') }}</p>
           <h2>{{ job?.title || t('jobs.panelTitle') }}</h2>
         </div>
         <button
@@ -308,13 +307,13 @@ async function transferOwnership() {
 }
 
 .panel {
-  width: min(29rem, 100%);
+  width: min(26rem, 100%);
   height: 100%;
   overflow-y: auto;
-  padding: 1.2rem 1.25rem 2rem;
+  padding: 0.75rem 0.85rem 1.25rem;
   background: var(--surface);
   color: var(--text);
-  box-shadow: -16px 0 48px rgba(0, 0, 0, 0.24);
+  box-shadow: -12px 0 36px rgba(0, 0, 0, 0.22);
 }
 
 .panel-head,
@@ -327,18 +326,9 @@ async function transferOwnership() {
 
 .panel-head {
   justify-content: space-between;
-  gap: 1rem;
-  padding-bottom: 1rem;
+  gap: 0.65rem;
+  padding-bottom: 0.55rem;
   border-bottom: 1px solid var(--border);
-}
-
-.eyebrow {
-  margin: 0 0 0.2rem;
-  color: var(--accent);
-  font-size: 0.72rem;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
 }
 
 h2,
@@ -347,19 +337,21 @@ h3 {
 }
 
 h2 {
-  font-size: 1.2rem;
+  font-size: 1.05rem;
+  line-height: 1.25;
 }
 
 h3 {
-  margin: 1.25rem 0 0.65rem;
-  font-size: 0.9rem;
+  margin: 0.75rem 0 0.4rem;
+  font-size: 0.8rem;
 }
 
 .icon-close {
   border: 0;
   background: transparent;
   color: var(--text-muted);
-  font-size: 1.5rem;
+  font-size: 1.35rem;
+  line-height: 1;
   cursor: pointer;
 }
 
@@ -371,33 +363,34 @@ h3 {
 }
 
 .members li {
-  gap: 0.65rem;
-  padding: 0.55rem 0;
+  gap: 0.45rem;
+  padding: 0.32rem 0;
 }
 
 .member-columns {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto auto;
-  gap: 0.75rem;
-  padding: 0 0 0.3rem 2.65rem;
+  gap: 0.5rem;
+  padding: 0 0 0.2rem 2.1rem;
   color: var(--text-muted);
-  font-size: 0.68rem;
+  font-size: 0.65rem;
   font-weight: 600;
 }
 
 .member-columns span:not(:first-child) {
-  min-width: 4.5rem;
+  min-width: 3.75rem;
   text-align: right;
 }
 
 .avatar {
   display: grid;
-  flex: 0 0 2rem;
-  height: 2rem;
+  flex: 0 0 1.55rem;
+  height: 1.55rem;
   place-items: center;
   border-radius: 50%;
   background: var(--surface-2);
   color: var(--accent);
+  font-size: 0.72rem;
   font-weight: 700;
 }
 
@@ -406,18 +399,24 @@ h3 {
   display: flex;
   flex-direction: column;
   min-width: 0;
+  gap: 0.05rem;
 }
 
 .member-main {
   flex: 1 1 auto;
 }
 
+.member-main strong {
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
 .member-progress,
 .member-done {
-  min-width: 4.5rem;
+  min-width: 3.75rem;
   text-align: right;
   color: var(--text-muted);
-  font-size: 0.78rem;
+  font-size: 0.72rem;
 }
 
 .member-done.complete {
@@ -426,30 +425,31 @@ h3 {
 }
 
 .part-done-toggle {
-  margin-top: 0.7rem;
-  padding-top: 0.65rem;
+  margin-top: 0.4rem;
+  padding-top: 0.4rem;
   border-top: 1px solid var(--border);
   font-weight: 600;
+  font-size: 0.8rem;
 }
 
 small,
 .muted {
   color: var(--text-muted);
-  font-size: 0.78rem;
+  font-size: 0.72rem;
 }
 
 .invite-form,
 .transfer-form {
   display: grid;
-  gap: 0.65rem;
-  padding: 0.8rem;
+  gap: 0.4rem;
+  padding: 0.5rem 0.55rem;
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: 8px;
   background: var(--surface-soft);
 }
 
 .transfer-form {
-  margin-top: 0.85rem;
+  margin-top: 0.55rem;
 }
 
 .transfer-form h3 {
@@ -464,9 +464,9 @@ small,
 .transfer-form label {
   display: flex;
   flex-direction: column;
-  gap: 0.3rem;
+  gap: 0.2rem;
   color: var(--text-muted);
-  font-size: 0.78rem;
+  font-size: 0.72rem;
   font-weight: 600;
 }
 
@@ -474,25 +474,26 @@ select,
 .new-link input {
   min-width: 0;
   border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 0.5rem 0.65rem;
+  border-radius: 6px;
+  padding: 0.3rem 0.45rem;
   background: var(--surface-2);
   color: var(--text);
   font: inherit;
+  font-size: 0.8rem;
 }
 
 .check {
   display: flex;
   align-items: center;
-  gap: 0.45rem;
-  font-size: 0.85rem;
+  gap: 0.35rem;
+  font-size: 0.8rem;
 }
 
 button {
-  border-radius: 8px;
-  padding: 0.45rem 0.7rem;
+  border-radius: 6px;
+  padding: 0.3rem 0.55rem;
   font: inherit;
-  font-size: 0.82rem;
+  font-size: 0.78rem;
   font-weight: 600;
   cursor: pointer;
 }
@@ -508,20 +509,20 @@ button:disabled {
 }
 
 .new-link {
-  margin-top: 0.7rem;
-  padding: 0.7rem;
-  border-radius: 10px;
+  margin-top: 0.45rem;
+  padding: 0.45rem 0.5rem;
+  border-radius: 8px;
   background: var(--surface-2);
 }
 
 .new-link p {
-  margin: 0 0 0.45rem;
+  margin: 0 0 0.3rem;
   color: var(--text-muted);
-  font-size: 0.78rem;
+  font-size: 0.72rem;
 }
 
 .new-link > div {
-  gap: 0.4rem;
+  gap: 0.3rem;
 }
 
 .new-link input {
@@ -535,13 +536,13 @@ button:disabled {
 }
 
 .invites {
-  margin-top: 0.8rem;
+  margin-top: 0.45rem;
 }
 
 .invites li {
   justify-content: space-between;
-  gap: 0.65rem;
-  padding: 0.55rem 0;
+  gap: 0.45rem;
+  padding: 0.35rem 0;
   border-bottom: 1px solid var(--border);
 }
 
@@ -553,11 +554,11 @@ button:disabled {
 
 .status {
   color: var(--text-muted);
-  font-size: 0.78rem;
+  font-size: 0.72rem;
 }
 
 .error {
   color: var(--danger);
-  font-size: 0.85rem;
+  font-size: 0.8rem;
 }
 </style>

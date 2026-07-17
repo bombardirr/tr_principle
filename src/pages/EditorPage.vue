@@ -11,9 +11,10 @@ import SharedWorkPanel from '@/components/SharedWorkPanel.vue'
 import DocxPreviewPanel from '@/components/DocxPreviewPanel.vue'
 import GlossaryPanel from '@/components/GlossaryPanel.vue'
 import { buildTranslatedDocx, downloadBlob } from '@/docx/exportDocx'
+import { openDocx, DocxError } from '@/docx/openDocx'
 import { getProject, saveProject } from '@/storage/idb'
 import { readEditorScroll, restoreWindowScroll, writeEditorScroll } from '@/storage/editorScroll'
-import { packProjectFile } from '@/storage/projectFile'
+import { packProjectFile, unpackProjectFile } from '@/storage/projectFile'
 import IconButton from '@/components/IconButton.vue'
 import EditorGlyph from '@/components/EditorGlyph.vue'
 import TooltipWrap from '@/components/TooltipWrap.vue'
@@ -64,9 +65,16 @@ import { pickMagnetRowId } from '@/editor/magnetGeometry'
 import MagneticSegmentRail from '@/components/MagneticSegmentRail.vue'
 import ParagraphBlock from '@/components/ParagraphBlock.vue'
 import { bindProjectToJob } from '@/jobs/localProject'
-import { listMembers, patchJobMemberMe } from '@/jobs/api'
-import { computeProgress } from '@/jobs/progress'
+import { listMembers, patchJobMemberMe, getJob } from '@/jobs/api'
+import {
+  acknowledgeJobJoins,
+  jobHasJoinUnread,
+  startJoinActivityPolling,
+  stopJoinActivityPolling,
+} from '@/jobs/joinActivity'
 import type { Job, JobRole } from '@/types/job'
+import { computeProgress } from '@/jobs/progress'
+import { fingerprintDocx, fingerprintMismatch } from '@/jobs/fingerprint'
 
 const props = defineProps<{ id: string }>()
 const { t } = useI18n()
@@ -169,6 +177,14 @@ const resegmentOpen = ref(false)
 const shareOpen = ref(false)
 const sharedCreateOpen = ref(false)
 const sharedPanelOpen = ref(false)
+const editorOwnedJob = ref<Job | null>(null)
+const sharedJoinUnread = computed(() => {
+  const jobId = record.value?.meta.jobId
+  return Boolean(jobId && jobHasJoinUnread(jobId))
+})
+const emptyDocxInput = ref<HTMLInputElement | null>(null)
+const emptyProjectInput = ref<HTMLInputElement | null>(null)
+const emptyBusy = ref(false)
 const resegmentDeferred = ref(false)
 const thresholdOpen = ref(false)
 
@@ -474,6 +490,11 @@ async function load() {
   record.value = loaded
   await reloadJobMembership(loaded.meta.jobId)
   if (gen !== loadGen) return
+  const emptyNoticeKey = `tr.emptyDocNotice:${props.id}`
+  if (!loaded.segments.length && sessionStorage.getItem(emptyNoticeKey)) {
+    notice.value = t('projects.emptyDoc')
+    sessionStorage.removeItem(emptyNoticeKey)
+  }
   await restorePageScroll()
   await nextTick()
 }
@@ -508,7 +529,38 @@ watch(
   }
 )
 
+watch(
+  () => [record.value?.meta.jobId, user.value?.id] as const,
+  async ([jobId, userId]) => {
+    stopJoinActivityPolling()
+    editorOwnedJob.value = null
+    if (!jobId || !userId) return
+    try {
+      const job = await getJob(jobId)
+      if (job.ownerUserId !== userId) return
+      editorOwnedJob.value = job
+      startJoinActivityPolling(userId, () => (editorOwnedJob.value ? [editorOwnedJob.value] : []))
+    } catch {
+      // Join badges are best-effort while editing offline.
+    }
+  },
+  { immediate: true },
+)
+
+watch(sharedPanelOpen, async open => {
+  const jobId = record.value?.meta.jobId
+  const userId = user.value?.id
+  if (!open || !jobId || !userId) return
+  try {
+    const members = await listMembers(jobId)
+    acknowledgeJobJoins(userId, jobId, members)
+  } catch {
+    // Opening the panel still works without clearing the badge.
+  }
+})
+
 onUnmounted(() => {
+  stopJoinActivityPolling()
   window.removeEventListener('scroll', onPageScroll, PAGE_SCROLL_OPTS)
   window.removeEventListener('beforeunload', onBeforeUnload)
   window.removeEventListener('keydown', onClearFocusKey)
@@ -1334,6 +1386,106 @@ async function downloadFromShareDialog() {
   await downloadProject()
 }
 
+async function applyEmptyProjectContent(next: ProjectRecord) {
+  record.value = next
+  allSaved.value = true
+  activeSegmentId.value = null
+  hoverSegmentId.value = null
+  await saveProject(next)
+  await reportJobProgress()
+  error.value = ''
+}
+
+async function confirmJobFingerprint(docx: ArrayBuffer, filename: string) {
+  const jobId = record.value?.meta.jobId
+  if (!jobId) return true
+  try {
+    const job = await getJob(jobId)
+    const fp = await fingerprintDocx(filename, docx)
+    if (!fingerprintMismatch(job, fp)) return true
+    return window.confirm(`${t('jobs.mismatchTitle')}\n\n${t('jobs.mismatchHint')}`)
+  } catch {
+    return true
+  }
+}
+
+async function onEmptyDocxSelected(event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  input.value = ''
+  if (!file || !record.value || editorReadOnly.value || emptyBusy.value) return
+  emptyBusy.value = true
+  error.value = ''
+  try {
+    const opened = await openDocx(file)
+    if (!(await confirmJobFingerprint(opened.zipBytes, file.name))) return
+    const fp = await fingerprintDocx(file.name, opened.zipBytes)
+    const now = new Date().toISOString()
+    await applyEmptyProjectContent({
+      meta: {
+        ...record.value.meta,
+        name: file.name.replace(/\.docx$/i, '') || record.value.meta.name,
+        updatedAt: now,
+        segmentCount: opened.segments.length,
+        doneCount: countTranslatedSegments(opened.segments),
+        segmentSchemaVersion: SEGMENT_SCHEMA_DATE_SAFE,
+        sourceFilename: fp.filename,
+        sourceHash: fp.hash,
+      },
+      segments: opened.segments,
+      docx: opened.zipBytes,
+    })
+    if (!opened.segments.length) {
+      notice.value = t('projects.emptyDoc')
+    } else {
+      notice.value = ''
+    }
+  } catch (err) {
+    error.value =
+      err instanceof DocxError || err instanceof Error ? err.message : String(err)
+  } finally {
+    emptyBusy.value = false
+  }
+}
+
+async function onEmptyProjectSelected(event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  input.value = ''
+  if (!file || !record.value || editorReadOnly.value || emptyBusy.value) return
+  emptyBusy.value = true
+  error.value = ''
+  try {
+    const imported = await unpackProjectFile(file)
+    if (!(await confirmJobFingerprint(imported.docx, imported.meta.sourceFilename || file.name))) {
+      return
+    }
+    const now = new Date().toISOString()
+    await applyEmptyProjectContent({
+      meta: {
+        ...imported.meta,
+        id: record.value.meta.id,
+        jobId: record.value.meta.jobId,
+        createdAt: record.value.meta.createdAt,
+        updatedAt: now,
+        sourceLang: imported.meta.sourceLang || record.value.meta.sourceLang,
+        targetLang: imported.meta.targetLang || record.value.meta.targetLang,
+      },
+      segments: imported.segments,
+      docx: imported.docx,
+    })
+    if (!imported.segments.length) {
+      notice.value = t('projects.emptyDoc')
+    } else {
+      notice.value = ''
+    }
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : String(err)
+  } finally {
+    emptyBusy.value = false
+  }
+}
+
 function openSharedWork() {
   if (!record.value) return
   if (record.value.meta.jobId) {
@@ -1504,6 +1656,7 @@ async function goBack() {
           <IconButton
             :title="record.meta.jobId ? t('jobs.openPanelHint') : t('jobs.createFromEditorHint')"
             :active="Boolean(record.meta.jobId)"
+            :badge="sharedJoinUnread"
             :disabled="!record.meta.jobId && editorReadOnly"
             @click="openSharedWork"
           >
@@ -1555,7 +1708,6 @@ async function goBack() {
 
     <p v-if="error" class="error">{{ error }}</p>
     <p v-else-if="notice" class="notice">{{ notice }}</p>
-    <p v-if="total === 0" class="notice">{{ t('projects.emptyDoc') }}</p>
 
     <p v-if="projectLease.blocked.value" class="lease-notice" role="status">
       {{ !projectLease.tabLeader.value ? t('editor.leaseBlocked') : t('editor.cloudLockBlocked') }}
@@ -1564,7 +1716,40 @@ async function goBack() {
       {{ t('jobs.viewerReadOnly') }}
     </p>
 
+    <div v-if="total === 0" class="empty-start">
+      <h2>{{ t('editor.emptyStartTitle') }}</h2>
+      <p class="empty-start-hint">{{ t('editor.emptyStartHint') }}</p>
+      <div v-if="!editorReadOnly" class="empty-start-actions">
+        <button
+          type="button"
+          class="empty-start-primary"
+          :disabled="emptyBusy"
+          @click="emptyDocxInput?.click()"
+        >
+          {{ t('editor.emptyStartFromDocx') }}
+        </button>
+        <button type="button" :disabled="emptyBusy" @click="emptyProjectInput?.click()">
+          {{ t('editor.emptyStartImport') }}
+        </button>
+      </div>
+      <input
+        ref="emptyDocxInput"
+        type="file"
+        accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        hidden
+        @change="onEmptyDocxSelected"
+      />
+      <input
+        ref="emptyProjectInput"
+        type="file"
+        accept=".zip,.tcat.zip,application/zip"
+        hidden
+        @change="onEmptyProjectSelected"
+      />
+    </div>
+
     <div
+      v-else
       class="editor-layout"
       :class="{ 'with-preview': previewEnabled, 'editor-readonly': editorReadOnly }"
     >
@@ -1959,6 +2144,62 @@ h1.doc-title {
 .notice {
   color: var(--ok);
   font-size: 0.9rem;
+}
+
+.empty-start {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.55rem;
+  min-height: min(52vh, 28rem);
+  padding: 1.5rem 1rem;
+  text-align: center;
+}
+
+.empty-start h2 {
+  margin: 0;
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.empty-start-hint {
+  margin: 0;
+  max-width: 22rem;
+  color: var(--text-muted);
+  font-size: 0.88rem;
+  line-height: 1.4;
+}
+
+.empty-start-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.45rem;
+  margin-top: 0.35rem;
+}
+
+.empty-start-actions button {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.5rem 0.95rem;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.88rem;
+  cursor: pointer;
+}
+
+.empty-start-actions button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.empty-start-primary {
+  border-color: var(--accent-strong) !important;
+  background: var(--accent-strong) !important;
+  color: var(--accent-text) !important;
 }
 
 .editor-layout {

@@ -10,6 +10,8 @@ const props = defineProps<{
   danger?: boolean
   ghost?: boolean
   wide?: boolean
+  /** Red notification dot (e.g. new shared-work member). */
+  badge?: boolean
 }>()
 
 defineEmits<{
@@ -27,7 +29,7 @@ function onShowTip(event: MouseEvent | FocusEvent) {
   <button
     type="button"
     class="icon-btn"
-    :class="{ active, primary, danger, ghost, wide }"
+    :class="{ active, primary, danger, ghost, wide, 'has-badge': badge }"
     :aria-label="title"
     :aria-pressed="active ? true : undefined"
     :disabled="disabled"
@@ -38,6 +40,7 @@ function onShowTip(event: MouseEvent | FocusEvent) {
     @click="$emit('click')"
   >
     <slot />
+    <span v-if="badge" class="icon-btn__badge" aria-hidden="true" />
     <AppTooltip
       ref="tooltipRef"
       :text="tip.text"
@@ -52,6 +55,7 @@ function onShowTip(event: MouseEvent | FocusEvent) {
 
 <style scoped lang="scss">
 .icon-btn {
+  position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -65,6 +69,18 @@ function onShowTip(event: MouseEvent | FocusEvent) {
   cursor: pointer;
   flex: 0 0 auto;
   transition: color 0.15s ease;
+}
+
+.icon-btn__badge {
+  position: absolute;
+  top: 0.18rem;
+  right: 0.18rem;
+  width: 0.42rem;
+  height: 0.42rem;
+  border-radius: 50%;
+  background: #e05555;
+  box-shadow: 0 0 0 2px var(--surface, var(--bg));
+  pointer-events: none;
 }
 
 .icon-btn:disabled {

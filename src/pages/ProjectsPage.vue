@@ -1,31 +1,31 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { computed, onUnmounted, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { openDocx, DocxError } from '@/docx/openDocx'
 import {
   createProjectId,
-  deleteProject,
-  getProject,
   listProjects,
   saveProject,
 } from '@/storage/idb'
 import { unpackProjectFile } from '@/storage/projectFile'
-import { getProjectBackup } from '@/projects/api'
-import { ApiError } from '@/auth/api'
-import { resegmentParagraphs } from '@/tm/resegment'
 import { SEGMENT_SCHEMA_DATE_SAFE } from '@/types/project'
-import IconButton from '@/components/IconButton.vue'
-import EditorGlyph from '@/components/EditorGlyph.vue'
+import JobHubInline from '@/components/JobHubInline.vue'
+import ProjectListItem from '@/components/ProjectListItem.vue'
 import { useAuth } from '@/auth/session'
 import { listJobs } from '@/jobs/api'
 import { parseJobInviteToken } from '@/jobs/inviteToken'
+import {
+  joinUnreadCount,
+  jobHasJoinUnread,
+  startJoinActivityPolling,
+  stopJoinActivityPolling,
+} from '@/jobs/joinActivity'
 import type { Job } from '@/types/job'
 import type { ProjectMeta } from '@/types/project'
 
-type PendingAction = { type: 'delete' | 'resegment'; id: string }
-
 const { t } = useI18n()
+const route = useRoute()
 const router = useRouter()
 const { user } = useAuth()
 
@@ -36,22 +36,56 @@ const notice = ref('')
 const busy = ref(false)
 const docxInput = ref<HTMLInputElement | null>(null)
 const projectInput = ref<HTMLInputElement | null>(null)
-const pending = ref<PendingAction | null>(null)
 const inviteInput = ref('')
 const inviteError = ref('')
+const openJobId = ref('')
+const hoverJobId = ref('')
+
+const sectionUnread = computed(() => joinUnreadCount.value)
+const relatedJobId = computed(() => hoverJobId.value || openJobId.value)
+
+function isRelatedProject(project: ProjectMeta) {
+  return Boolean(relatedJobId.value && project.jobId === relatedJobId.value)
+}
+
+function openJob(jobId: string) {
+  openJobId.value = jobId
+  void router.replace({ name: 'projects', query: { ...route.query, job: jobId } })
+}
+
+function closeJob() {
+  openJobId.value = ''
+  const query = { ...route.query }
+  delete query.job
+  void router.replace({ name: 'projects', query })
+}
+
+watch(
+  () => route.query.job,
+  job => {
+    openJobId.value = typeof job === 'string' ? job : ''
+  },
+  { immediate: true },
+)
 
 async function refresh() {
   projects.value = await listProjects()
   sharedJobs.value = []
-  if (!user.value?.id) return
+  if (!user.value?.id) {
+    stopJoinActivityPolling()
+    return
+  }
   try {
     sharedJobs.value = await listJobs()
+    startJoinActivityPolling(user.value.id, () => sharedJobs.value)
   } catch {
     // Local projects remain available while shared-work cards are offline.
+    stopJoinActivityPolling()
   }
 }
 
 watch(() => user.value?.id, refresh, { immediate: true })
+onUnmounted(stopJoinActivityPolling)
 
 async function onDocxSelected(e: Event) {
   const input = e.target as HTMLInputElement
@@ -80,6 +114,9 @@ async function onDocxSelected(e: Event) {
       segments: opened.segments,
       docx: opened.zipBytes,
     })
+    if (!opened.segments.length) {
+      sessionStorage.setItem(`tr.emptyDocNotice:${id}`, '1')
+    }
     await router.push({ name: 'editor', params: { id } })
   } catch (err) {
     error.value = err instanceof DocxError || err instanceof Error ? err.message : String(err)
@@ -100,6 +137,9 @@ async function onProjectFileSelected(e: Event) {
   try {
     const record = await unpackProjectFile(file)
     await saveProject(record)
+    if (!record.segments.length) {
+      sessionStorage.setItem(`tr.emptyDocNotice:${record.meta.id}`, '1')
+    }
     await router.push({ name: 'editor', params: { id: record.meta.id } })
   } catch (err) {
     error.value = err instanceof Error ? err.message : String(err)
@@ -108,72 +148,14 @@ async function onProjectFileSelected(e: Event) {
   }
 }
 
-function requestAction(type: PendingAction['type'], id: string) {
-  pending.value = { type, id }
+function onItemNotice(message: string) {
+  notice.value = message
+  if (message) error.value = ''
 }
 
-function cancelPending() {
-  pending.value = null
-}
-
-function isPending(type: PendingAction['type'], id: string) {
-  return pending.value?.type === type && pending.value.id === id
-}
-
-async function confirmRemove(meta: ProjectMeta) {
-  await deleteProject(meta.id)
-  pending.value = null
-  await refresh()
-}
-
-async function confirmResegment(meta: ProjectMeta) {
-  busy.value = true
-  error.value = ''
-  notice.value = ''
-  try {
-    const record = await getProject(meta.id)
-    if (!record) throw new Error('Project not found')
-    const { segments, ambiguousCount } = resegmentParagraphs(record.segments)
-    record.segments = segments
-    record.meta.segmentSchemaVersion = SEGMENT_SCHEMA_DATE_SAFE
-    record.meta.segmentCount = segments.length
-    await saveProject(record)
-    pending.value = null
-    await refresh()
-    notice.value =
-      ambiguousCount > 0
-        ? t('projects.resegmentAmbiguous', { name: meta.name, n: ambiguousCount })
-        : t('projects.resegmentDone', { name: meta.name })
-  } catch (err) {
-    error.value = err instanceof Error ? err.message : String(err)
-  } finally {
-    busy.value = false
-  }
-}
-
-async function restoreFromCloud(meta: ProjectMeta) {
-  const local = await getProject(meta.id)
-  if (local && !window.confirm(t('projects.restoreCloudOverwrite', { name: meta.name }))) {
-    return
-  }
-  busy.value = true
-  error.value = ''
-  notice.value = ''
-  try {
-    const bytes = await getProjectBackup(meta.id)
-    const record = await unpackProjectFile(bytes)
-    await saveProject(record)
-    await refresh()
-    notice.value = t('projects.restoreCloudOk', { name: record.meta.name || meta.name })
-  } catch (err) {
-    if (err instanceof ApiError && err.status === 404) {
-      error.value = t('projects.restoreCloudMissing')
-    } else {
-      error.value = err instanceof Error ? err.message : String(err)
-    }
-  } finally {
-    busy.value = false
-  }
+function onItemError(message: string) {
+  error.value = message
+  if (message) notice.value = ''
 }
 
 function formatDate(iso: string) {
@@ -238,99 +220,78 @@ async function openInvite() {
     <p v-else-if="inviteError" class="error">{{ inviteError }}</p>
     <p v-else-if="notice" class="notice">{{ notice }}</p>
 
-    <p v-if="!projects.length && !sharedJobs.length && !busy" class="empty">
-      {{ t('projects.empty') }}
-    </p>
+    <div class="columns">
+      <section class="column" aria-labelledby="personal-projects-title">
+        <h2 id="personal-projects-title" class="block-title">
+          {{ t('projects.personalProjectsTitle') }}
+        </h2>
+        <ul v-if="projects.length" class="list">
+          <ProjectListItem
+            v-for="p in projects"
+            :key="p.id"
+            :project="p"
+            :glow="isRelatedProject(p)"
+            @changed="refresh"
+            @notice="onItemNotice"
+            @error="onItemError"
+          />
+        </ul>
+        <p v-else-if="!busy" class="empty">{{ t('projects.empty') }}</p>
+      </section>
 
-    <h2 class="block-title">{{ t('projects.personalProjectsTitle') }}</h2>
-    <ul class="list">
-      <li v-for="p in projects" :key="p.id" class="item">
-        <router-link class="item-link" :to="{ name: 'editor', params: { id: p.id } }">
-          <span class="name">
-            {{ p.name }}
-            <span v-if="p.jobId" class="shared-badge">{{ t('jobs.sharedBadge') }}</span>
+      <section class="column" aria-labelledby="shared-works-title">
+        <h2 id="shared-works-title" class="block-title">
+          {{ t('projects.sharedWorksTitle') }}
+          <span
+            v-if="sectionUnread && !openJobId"
+            class="section-badge"
+            :title="t('jobs.joinUnreadHint')"
+            :aria-label="t('jobs.joinUnreadHint')"
+          >
+            {{ sectionUnread }}
           </span>
-          <span class="sub">
-            {{ t('projects.segments', { done: p.doneCount, total: p.segmentCount }) }}
-            ·
-            {{ t('projects.updated', { date: formatDate(p.updatedAt) }) }}
-          </span>
-        </router-link>
-        <div class="item-actions" @click.stop>
-          <template v-if="isPending('resegment', p.id)">
-            <div class="action-confirm">
-              <IconButton
-                :title="t('projects.confirmResegment', { name: p.name })"
-                :disabled="busy"
-                @click="confirmResegment(p)"
-              >
-                <EditorGlyph name="check" />
-              </IconButton>
-              <IconButton :title="t('projects.deleteCancel')" @click="cancelPending">
-                <EditorGlyph name="close" />
-              </IconButton>
-            </div>
-          </template>
-          <template v-else-if="isPending('delete', p.id)">
-            <div class="action-confirm">
-              <IconButton
-                danger
-                :title="t('projects.confirmDelete', { name: p.name })"
-                @click="confirmRemove(p)"
-              >
-                <EditorGlyph name="check" />
-              </IconButton>
-              <IconButton :title="t('projects.deleteCancel')" @click="cancelPending">
-                <EditorGlyph name="close" />
-              </IconButton>
-            </div>
-          </template>
-          <template v-else>
-            <IconButton
-              :title="t('projects.restoreCloudHint')"
-              :disabled="busy"
-              @click="restoreFromCloud(p)"
-            >
-              <EditorGlyph name="cloud-download" />
-            </IconButton>
-            <IconButton
-              :title="t('projects.resegment')"
-              :disabled="busy"
-              @click="requestAction('resegment', p.id)"
-            >
-              <EditorGlyph name="resegment" />
-            </IconButton>
-            <IconButton
-              danger
-              :title="t('projects.delete')"
-              :disabled="busy"
-              @click="requestAction('delete', p.id)"
-            >
-              <EditorGlyph name="trash" />
-            </IconButton>
-          </template>
-        </div>
-      </li>
-    </ul>
+        </h2>
 
-    <section class="viewer-jobs">
-      <h2>{{ t('projects.sharedWorksTitle') }}</h2>
-      <p class="viewer-hint">{{ t('projects.sharedWorksHint') }}</p>
-      <ul class="list">
-        <li v-for="job in sharedJobs" :key="job.id" class="item viewer-item">
-          <router-link class="viewer-card" :to="{ name: 'job-hub', params: { id: job.id } }">
-            <span class="name">
-              {{ job.title }}
-            </span>
-            <span class="sub">
-              {{ job.sourceLang || '—' }} → {{ job.targetLang || '—' }} ·
-              {{ t('projects.updated', { date: formatDate(job.updatedAt) }) }}
-            </span>
-          </router-link>
-        </li>
-      </ul>
-      <p v-if="!sharedJobs.length && !busy" class="empty">{{ t('projects.noSharedWorks') }}</p>
-    </section>
+        <JobHubInline
+          v-if="openJobId"
+          :job-id="openJobId"
+          @close="closeJob"
+          @changed="refresh"
+          @notice="onItemNotice"
+          @error="onItemError"
+        />
+
+        <template v-else>
+          <ul v-if="sharedJobs.length" class="list">
+            <li
+              v-for="job in sharedJobs"
+              :key="job.id"
+              class="item viewer-item"
+              :class="{ 'has-join-unread': jobHasJoinUnread(job.id) }"
+              @mouseenter="hoverJobId = job.id"
+              @mouseleave="hoverJobId = ''"
+            >
+              <button type="button" class="viewer-card" @click="openJob(job.id)">
+                <span class="name">
+                  {{ job.title }}
+                  <span
+                    v-if="jobHasJoinUnread(job.id)"
+                    class="join-dot"
+                    :title="t('jobs.joinUnreadHint')"
+                    aria-hidden="true"
+                  />
+                </span>
+                <span class="sub">
+                  {{ job.sourceLang || '—' }} → {{ job.targetLang || '—' }} ·
+                  {{ t('projects.updated', { date: formatDate(job.updatedAt) }) }}
+                </span>
+              </button>
+            </li>
+          </ul>
+          <p v-else-if="!busy" class="empty">{{ t('projects.noSharedWorks') }}</p>
+        </template>
+      </section>
+    </div>
   </section>
 </template>
 
@@ -356,9 +317,24 @@ h1 {
 }
 
 .block-title {
-  margin: 1.2rem 0 0;
+  margin: 0;
   color: var(--text);
   font-size: 1.15rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 1.25rem 1.75rem;
+  align-items: start;
+  margin-top: 0.35rem;
+}
+
+.column {
+  min-width: 0;
 }
 
 .actions {
@@ -416,20 +392,19 @@ button.primary {
   color: var(--text-muted);
 }
 
-.viewer-jobs {
-  margin-top: 1.6rem;
-}
-
-.viewer-jobs h2 {
-  margin: 0;
-  color: var(--text);
-  font-size: 1.15rem;
-}
-
-.viewer-hint {
-  margin: 0.3rem 0 0;
-  color: var(--text-muted);
-  font-size: 0.85rem;
+.section-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.15rem;
+  height: 1.15rem;
+  padding: 0 0.35rem;
+  border-radius: 999px;
+  background: #e05555;
+  color: #fff;
+  font-size: 0.68rem;
+  font-weight: 700;
+  line-height: 1;
 }
 
 .list {
@@ -457,14 +432,8 @@ button.primary {
   border-color: var(--border-strong);
 }
 
-.item-link {
-  flex: 1 1 auto;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0.15rem;
-  text-decoration: none;
-  color: inherit;
+.item.has-join-unread {
+  border-color: color-mix(in srgb, #e05555 45%, var(--border));
 }
 
 .viewer-card {
@@ -479,23 +448,27 @@ button.primary {
   background: transparent;
   text-align: left;
   text-decoration: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  width: 100%;
 }
 
 .name {
   font-weight: 600;
   color: var(--text);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex-wrap: wrap;
 }
 
-.shared-badge {
-  display: inline-block;
-  margin-left: 0.35rem;
-  border-radius: 999px;
-  padding: 0.1rem 0.45rem;
-  background: color-mix(in srgb, var(--accent) 15%, transparent);
-  color: var(--accent);
-  font-size: 0.68rem;
-  font-weight: 700;
-  vertical-align: 0.08rem;
+.join-dot {
+  width: 0.45rem;
+  height: 0.45rem;
+  border-radius: 50%;
+  background: #e05555;
+  flex: 0 0 auto;
 }
 
 .sub {
@@ -503,16 +476,9 @@ button.primary {
   color: var(--text-muted);
 }
 
-.item-actions {
-  flex: 0 0 auto;
-  display: inline-flex;
-  align-items: center;
-  gap: 0.05rem;
-}
-
-.action-confirm {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.05rem;
+@media (max-width: 860px) {
+  .columns {
+    grid-template-columns: 1fr;
+  }
 }
 </style>

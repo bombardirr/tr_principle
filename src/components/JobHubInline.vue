@@ -1,8 +1,10 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
-import { useRoute } from 'vue-router'
+import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAuth } from '@/auth/session'
+import IconButton from '@/components/IconButton.vue'
+import EditorGlyph from '@/components/EditorGlyph.vue'
+import ProjectListItem from '@/components/ProjectListItem.vue'
 import SharedWorkPanel from '@/components/SharedWorkPanel.vue'
 import { openDocx } from '@/docx/openDocx'
 import { createEmptyJobProject } from '@/jobs/createProject'
@@ -12,10 +14,21 @@ import { getJob, listMembers, patchJobMemberMe } from '@/jobs/api'
 import { createProjectId, getProject, listProjects, saveProject } from '@/storage/idb'
 import { unpackProjectFile } from '@/storage/projectFile'
 import { SEGMENT_SCHEMA_DATE_SAFE, type ProjectMeta, type ProjectRecord } from '@/types/project'
+import { acknowledgeJobJoins } from '@/jobs/joinActivity'
 import type { Job, JobMember } from '@/types/job'
 
+const props = defineProps<{
+  jobId: string
+}>()
+
+const emit = defineEmits<{
+  close: []
+  changed: []
+  notice: [message: string]
+  error: [message: string]
+}>()
+
 const { t } = useI18n()
-const route = useRoute()
 const { user } = useAuth()
 
 const job = ref<Job | null>(null)
@@ -30,35 +43,56 @@ const error = ref('')
 const pendingProject = ref<ProjectRecord | null>(null)
 const mismatchOpen = ref(false)
 
-const jobId = computed(() => String(route.params.id ?? ''))
 const myMember = computed(() => members.value.find(member => member.userId === user.value?.id))
 const canHaveProject = computed(
-  () => myMember.value?.role === 'owner' || myMember.value?.role === 'translator'
+  () => myMember.value?.role === 'owner' || myMember.value?.role === 'translator',
 )
 const linkedProject = computed(() => {
   const localId = myMember.value?.localProjectId
-  return projects.value.find(project => project.id === localId || project.jobId === jobId.value)
+  return projects.value.find(project => project.id === localId || project.jobId === props.jobId)
 })
 
-onMounted(load)
+watch(
+  () => props.jobId,
+  () => {
+    void load()
+  },
+  { immediate: true },
+)
 
 async function load() {
+  if (!props.jobId) return
   busy.value = true
   error.value = ''
+  job.value = null
   try {
     const [nextJob, nextMembers, nextProjects] = await Promise.all([
-      getJob(jobId.value),
-      listMembers(jobId.value),
+      getJob(props.jobId),
+      listMembers(props.jobId),
       listProjects(),
     ])
     job.value = nextJob
     members.value = nextMembers
     projects.value = nextProjects
+    if (user.value?.id && nextJob.ownerUserId === user.value.id) {
+      acknowledgeJobJoins(user.value.id, nextJob.id, nextMembers)
+    }
   } catch (err) {
     error.value = err instanceof Error ? err.message : String(err)
   } finally {
     busy.value = false
   }
+}
+
+function closePanel() {
+  panelOpen.value = false
+  void load()
+  emit('changed')
+}
+
+async function onProjectChanged() {
+  await load()
+  emit('changed')
 }
 
 function memberName(member: JobMember) {
@@ -77,6 +111,7 @@ async function bind(record: ProjectRecord) {
   mismatchOpen.value = false
   pendingProject.value = null
   await load()
+  emit('changed')
 }
 
 async function bindWithWarning(record: ProjectRecord) {
@@ -133,6 +168,9 @@ async function onDocxSelected(event: Event) {
       docx: opened.zipBytes,
     }
     await bindWithWarning(record)
+    if (!opened.segments.length) {
+      sessionStorage.setItem(`tr.emptyDocNotice:${record.meta.id}`, '1')
+    }
   } catch (err) {
     error.value = err instanceof Error ? err.message : String(err)
   } finally {
@@ -172,24 +210,33 @@ async function onProjectFileSelected(event: Event) {
 
 <template>
   <section class="job-hub">
-    <router-link class="back" to="/projects">← {{ t('jobs.backToProjects') }}</router-link>
+    <button type="button" class="back" @click="emit('close')">
+      ← {{ t('jobs.backToSharedList') }}
+    </button>
 
     <header class="hub-head">
-      <div>
-        <p class="eyebrow">{{ t('jobs.sharedWork') }}</p>
-        <h1>{{ job?.title || t('jobs.panelTitle') }}</h1>
-        <p v-if="job" class="muted">{{ job.sourceLang || '—' }} → {{ job.targetLang || '—' }}</p>
-      </div>
-      <button type="button" :disabled="busy" @click="panelOpen = true">
-        {{ t('jobs.manageWork') }}
-      </button>
+      <h3 class="hub-title">
+        <span>{{ job?.title || t('jobs.panelTitle') }}</span>
+        <span v-if="job" class="lang-chip">
+          {{ job.sourceLang || '—' }} → {{ job.targetLang || '—' }}
+        </span>
+      </h3>
     </header>
 
     <p v-if="error" class="error" role="alert">{{ error }}</p>
     <p v-if="busy && !job" class="muted">{{ t('jobs.loading') }}</p>
 
     <section v-if="job" class="hub-card">
-      <h2>{{ t('jobs.membersTitle') }}</h2>
+      <div class="hub-card-head">
+        <h4>{{ t('jobs.membersTitle') }}</h4>
+        <IconButton
+          :title="t('jobs.manageWork')"
+          :disabled="busy"
+          @click="panelOpen = true"
+        >
+          <EditorGlyph name="send" />
+        </IconButton>
+      </div>
       <ul class="members">
         <li v-for="member in members" :key="member.userId">
           <span>
@@ -204,18 +251,17 @@ async function onProjectFileSelected(event: Event) {
       </ul>
     </section>
 
-    <section v-if="job && canHaveProject" class="hub-card">
-      <h2>{{ t('jobs.myProjectTitle') }}</h2>
-      <template v-if="linkedProject">
-        <p class="muted">{{ t('jobs.linkedProject', { name: linkedProject.name }) }}</p>
-        <router-link
-          class="primary-link"
-          :to="{ name: 'editor', params: { id: linkedProject.id } }"
-        >
-          {{ t('jobs.openLinkedProject') }}
-        </router-link>
-      </template>
-      <template v-else>
+    <template v-if="job && canHaveProject">
+      <ul v-if="linkedProject" class="list">
+        <ProjectListItem
+          :project="linkedProject"
+          glow
+          @changed="onProjectChanged"
+          @notice="emit('notice', $event)"
+          @error="emit('error', $event)"
+        />
+      </ul>
+      <section v-else class="hub-card">
         <p class="muted">{{ t('jobs.noLinkedProject') }}</p>
         <div class="project-actions">
           <button type="button" class="primary" :disabled="busy" @click="docxInput?.click()">
@@ -239,7 +285,7 @@ async function onProjectFileSelected(event: Event) {
             {{ t('jobs.bindProject') }}
           </button>
         </div>
-      </template>
+      </section>
       <input
         ref="docxInput"
         type="file"
@@ -254,10 +300,10 @@ async function onProjectFileSelected(event: Event) {
         hidden
         @change="onProjectFileSelected"
       />
-    </section>
+    </template>
 
     <section v-else-if="job" class="hub-card">
-      <h2>{{ t('jobs.viewerHubTitle') }}</h2>
+      <h4>{{ t('jobs.viewerHubTitle') }}</h4>
       <p class="muted">{{ t('jobs.viewerHubHint') }}</p>
     </section>
 
@@ -265,15 +311,12 @@ async function onProjectFileSelected(event: Event) {
       v-if="panelOpen"
       :open="panelOpen"
       :job-id="jobId"
-      @close="
-        panelOpen = false
-        load()
-      "
+      @close="closePanel"
     />
 
     <div v-if="mismatchOpen" class="modal-backdrop">
       <div class="modal" role="alertdialog" aria-modal="true">
-        <h2>{{ t('jobs.mismatchTitle') }}</h2>
+        <h4>{{ t('jobs.mismatchTitle') }}</h4>
         <p>{{ t('jobs.mismatchHint') }}</p>
         <div class="project-actions">
           <button type="button" @click="mismatchOpen = false">
@@ -295,18 +338,25 @@ async function onProjectFileSelected(event: Event) {
 
 <style scoped lang="scss">
 .job-hub {
-  max-width: 58rem;
-  margin: 0 auto;
-  padding: 1.25rem 0 2rem;
+  margin-top: 0.55rem;
   color: var(--text);
 }
 
 .back {
+  display: inline-block;
+  margin: 0 0 0.35rem;
+  border: 0;
+  padding: 0;
+  background: transparent;
   color: var(--text-muted);
-  text-decoration: none;
+  font: inherit;
+  font-size: 0.8rem;
+  cursor: pointer;
+  text-align: left;
 }
 
 .hub-head,
+.hub-card-head,
 .members li,
 .project-actions,
 .bind-row {
@@ -315,45 +365,74 @@ async function onProjectFileSelected(event: Event) {
 }
 
 .hub-head {
-  justify-content: space-between;
-  gap: 1rem;
-  margin: 1rem 0;
+  margin: 0 0 0.45rem;
 }
 
-.eyebrow {
-  margin: 0 0 0.2rem;
+.hub-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem 0.55rem;
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.lang-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.12rem 0.45rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 14%, var(--surface-soft));
   color: var(--accent);
   font-size: 0.72rem;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  font-weight: 650;
+  line-height: 1.3;
 }
 
-h1,
-h2,
+.hub-card-head {
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.25rem;
+}
+
+.hub-card-head h4 {
+  margin: 0;
+}
+
+h4,
 .muted {
   margin: 0;
 }
 
-h1 {
-  font-size: 1.7rem;
+h4 {
+  margin-bottom: 0.35rem;
+  font-size: 0.8rem;
+  font-weight: 650;
 }
 
-h2 {
-  margin-bottom: 0.8rem;
-  font-size: 1rem;
+.hub-card-head h4 {
+  margin-bottom: 0;
 }
 
 .muted,
 small {
   color: var(--text-muted);
+  font-size: 0.78rem;
+}
+
+.list {
+  list-style: none;
+  padding: 0;
+  margin: 0.55rem 0 0;
 }
 
 .hub-card {
-  margin-top: 0.85rem;
-  padding: 1rem;
+  margin-top: 0.45rem;
+  padding: 0.5rem 0.6rem;
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: 8px;
   background: var(--surface-soft);
 }
 
@@ -365,16 +444,37 @@ small {
 
 .members li {
   justify-content: space-between;
-  gap: 1rem;
-  padding: 0.55rem 0;
+  gap: 0.65rem;
+  padding: 0.28rem 0;
   border-bottom: 1px solid var(--border);
-  font-size: 0.85rem;
+  font-size: 0.8rem;
+  line-height: 1.3;
+}
+
+.members li:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+
+.members li:first-child {
+  padding-top: 0;
 }
 
 .members li > span:first-child {
   display: flex;
   flex: 1 1 auto;
-  flex-direction: column;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
+.members li > span:first-child strong {
+  font-weight: 600;
+}
+
+.members li > span:first-child small {
+  font-size: 0.72rem;
 }
 
 .done {
@@ -384,45 +484,39 @@ small {
 .project-actions,
 .bind-row {
   flex-wrap: wrap;
-  gap: 0.5rem;
-  margin-top: 0.8rem;
+  gap: 0.35rem;
+  margin-top: 0.4rem;
 }
 
-button,
-.primary-link,
+button:not(.back),
 select {
   border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 0.5rem 0.8rem;
+  border-radius: 6px;
+  padding: 0.28rem 0.55rem;
   background: var(--surface);
   color: var(--text);
   font: inherit;
+  font-size: 0.8rem;
 }
 
-button,
-.primary-link {
+button:not(.back) {
   cursor: pointer;
-  text-decoration: none;
 }
 
-.primary,
-.primary-link {
+.primary {
   border-color: var(--accent-strong);
   background: var(--accent-strong);
   color: var(--accent-text);
 }
 
-.primary-link {
-  display: inline-block;
-  margin-top: 0.8rem;
-}
-
 .bind-row select {
-  min-width: 15rem;
+  min-width: 10rem;
 }
 
 .error {
+  margin: 0.3rem 0;
   color: var(--danger);
+  font-size: 0.8rem;
 }
 
 .modal-backdrop {
@@ -436,9 +530,9 @@ button,
 }
 
 .modal {
-  width: min(28rem, 100%);
-  padding: 1.25rem;
-  border-radius: 12px;
+  width: min(26rem, 100%);
+  padding: 0.85rem 1rem;
+  border-radius: 10px;
   background: var(--surface);
 }
 </style>
