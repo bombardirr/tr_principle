@@ -65,20 +65,18 @@ func NewRouter(
 		r.Head("/backup", projectsHandler.GetBackup)
 	})
 
-	r.Route("/api/projects", func(r chi.Router) {
+	r.Group(func(r chi.Router) {
 		r.Use(authHandler.Middleware)
-		r.Post("/", collabHandler.CreateProject)
-		r.Get("/", collabHandler.ListProjects)
-		r.Route("/{projectID}", func(r chi.Router) {
-			r.Get("/", collabHandler.GetProject)
-			r.Patch("/", collabHandler.PatchProject)
-			r.Get("/members", collabHandler.ListMembers)
-			r.Delete("/members/{userID}", collabHandler.RemoveMember)
-			r.Post("/invites", collabHandler.CreateInvite)
-			r.Get("/invites", collabHandler.ListInvites)
-			r.Patch("/invites/{inviteID}", collabHandler.PatchInvite)
-			r.Post("/invites/{inviteID}/revoke", collabHandler.RevokeInvite)
-		})
+		r.Post("/api/projects", collabHandler.CreateProject)
+		r.Get("/api/projects", collabHandler.ListProjects)
+		r.Get("/api/projects/{projectID}", collabHandler.GetProject)
+		r.Patch("/api/projects/{projectID}", collabHandler.PatchProject)
+		r.Get("/api/projects/{projectID}/members", collabHandler.ListMembers)
+		r.Delete("/api/projects/{projectID}/members/{userID}", collabHandler.RemoveMember)
+		r.Post("/api/projects/{projectID}/invites", collabHandler.CreateInvite)
+		r.Get("/api/projects/{projectID}/invites", collabHandler.ListInvites)
+		r.Patch("/api/projects/{projectID}/invites/{inviteID}", collabHandler.PatchInvite)
+		r.Post("/api/projects/{projectID}/invites/{inviteID}/revoke", collabHandler.RevokeInvite)
 	})
 
 	r.Group(func(r chi.Router) {
