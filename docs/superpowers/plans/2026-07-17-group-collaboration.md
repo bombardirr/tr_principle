@@ -70,7 +70,7 @@
 - Produces: dialog emits `download` → parent calls existing `packProjectFile`
 - Consumes: `packProjectFile` from `@/storage/projectFile`
 
-- [ ] **Step 1: Write failing test — audit `by` survives pack/unpack**
+- [x] **Step 1: Write failing test — audit `by` survives pack/unpack**
 
 ```ts
 // tests/storage/projectFile.actors.test.ts
@@ -107,12 +107,12 @@ describe('projectFile actors', () => {
 })
 ```
 
-- [ ] **Step 2: Run test**
+- [x] **Step 2: Run test**
 
 Run: `npx vitest run tests/storage/projectFile.actors.test.ts`  
 Expected: PASS if pack already preserves audit (documents invariant). If FAIL, fix `cloneProjectRecord` / pack to deep-clone `audit`.
 
-- [ ] **Step 3: Add i18n keys**
+- [x] **Step 3: Add i18n keys**
 
 ```ts
 // en — under editor:
@@ -125,15 +125,15 @@ shareDownload: 'Download .tcat.zip',
 
 Mirror in `ru.ts`.
 
-- [ ] **Step 4: Implement `ShareProjectDialog.vue`**
+- [x] **Step 4: Implement `ShareProjectDialog.vue`**
 
 Minimal modal: title, `shareImportHint` paragraph, primary button Download, secondary Close. On Download emit `download`.
 
-- [ ] **Step 5: Wire EditorPage**
+- [x] **Step 5: Wire EditorPage**
 
 Replace or supplement archive `IconButton` with Share that opens dialog; on download call existing `downloadProject()` / `packProjectFile`. Tooltip: `shareProjectHint`.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/components/ShareProjectDialog.vue src/pages/EditorPage.vue src/i18n/locales/en.ts src/i18n/locales/ru.ts tests/storage/projectFile.actors.test.ts
@@ -150,7 +150,7 @@ git commit -m "Add F1 share dialog with import hint for .tcat.zip handoff."
 - Create: `api/migrations/008_shared_projects.sql`
 - Test: exercise via later Go tests (Task 4)
 
-- [ ] **Step 1: Write migration**
+- [x] **Step 1: Write migration**
 
 ```sql
 -- +goose Up
@@ -211,7 +211,7 @@ DROP TABLE IF EXISTS projects;
 
 Keep legacy `project_locks` for solo backup-era clients until Editor uses `shared_project_locks` for cloud-shared projects only.
 
-- [ ] **Step 2: Commit migration**
+- [x] **Step 2: Commit migration**
 
 ```bash
 git add api/migrations/008_shared_projects.sql
@@ -223,7 +223,7 @@ git commit -m "Add shared projects, members, and invite tables."
 **Files:**
 - Create: `api/migrations/009_project_tm.sql`
 
-- [ ] **Step 1: Write migration**
+- [x] **Step 1: Write migration**
 
 ```sql
 -- +goose Up
@@ -264,7 +264,7 @@ DROP TABLE IF EXISTS project_tm_attachments;
 DROP TABLE IF EXISTS project_tm_units;
 ```
 
-- [ ] **Step 2: Commit**
+- [x] **Step 2: Commit**
 
 ```bash
 git add api/migrations/009_project_tm.sql
@@ -285,7 +285,7 @@ git commit -m "Add project TM units and attachment ACL table."
   - `RoleOf(ctx, projectID, userID) (role, error)`
   - `CanEdit(role) bool` — owner|editor
 
-- [ ] **Step 1: Failing test — burning invite max_uses=1**
+- [x] **Step 1: Failing test — burning invite max_uses=1**
 
 ```go
 func TestAcceptInviteBurnsAfterOneUse(t *testing.T) {
@@ -294,11 +294,11 @@ func TestAcceptInviteBurnsAfterOneUse(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: Implement store + invite hash**
+- [x] **Step 2: Implement store + invite hash**
 
 Use `sha256.Sum256` of raw token; raw token = base64url 32 random bytes. Reject if `revoked_at != nil`, `expires_at < now`, `uses_count >= max_uses` (when max_uses set), or named mismatch.
 
-- [ ] **Step 3: Tests pass + commit**
+- [x] **Step 3: Tests pass + commit**
 
 ```bash
 git add api/internal/collab
@@ -329,9 +329,9 @@ POST   /api/invites/accept   body: { "token": "..." }
 
 Member list JSON **must not** include email — only `userId`, `displayName`, `role`.
 
-- [ ] **Step 1: Integration test create → invite → accept → list members**
-- [ ] **Step 2: Implement handlers + mount**
-- [ ] **Step 3: Commit**
+- [x] **Step 1: Integration test create → invite → accept → list members**
+- [x] **Step 2: Implement handlers + mount**
+- [x] **Step 3: Commit**
 
 ```bash
 git commit -m "Expose shared project and invite HTTP APIs."
@@ -368,10 +368,10 @@ GET    /api/projects/{id}/presence
 
 Presence entries: `{ userId, displayName, holderId, updatedAt }` — no email.
 
-- [ ] **Step 1: Test — viewer cannot acquire lock; second editor gets 409**
-- [ ] **Step 2: Implement server lock/presence/sync**
-- [ ] **Step 3: Client: promote local project (POST /api/projects with same id), sync loop, use shared lock when `meta.cloudShared === true` (add flag on meta)**
-- [ ] **Step 4: Commit**
+- [x] **Step 1: Test — viewer cannot acquire lock; second editor gets 409**
+- [x] **Step 2: Implement server lock/presence/sync**
+- [x] **Step 3: Client: promote local project (POST /api/projects with same id), sync loop, use shared lock when `meta.cloudShared === true` (add flag on meta)**
+- [x] **Step 4: Commit**
 
 ```bash
 git commit -m "Add shared project sync, lock, and presence heartbeats."
@@ -384,10 +384,10 @@ git commit -m "Add shared project sync, lock, and presence heartbeats."
 - Modify: `src/router/index.ts`, `src/pages/EditorPage.vue` or settings dialog
 - i18n
 
-- [ ] **Step 1: Route `/invite/:token` → accept API → open project**
-- [ ] **Step 2: Owner panel: create open/burning/TTL invite, copy link, revoke; list members; remove member**
-- [ ] **Step 3: Named invite UI can be “paste user id” deferred — schema supports it; ship open+burning+TTL first**
-- [ ] **Step 4: Commit**
+- [x] **Step 1: Route `/invite/:token` → accept API → open project**
+- [x] **Step 2: Owner panel: create open/burning/TTL invite, copy link, revoke; list members; remove member**
+- [x] **Step 3: Named invite UI can be “paste user id” deferred — schema supports it; ship open+burning+TTL first**
+- [x] **Step 4: Commit**
 
 ```bash
 git commit -m "Add invite accept page and project members/invites UI."
@@ -409,10 +409,10 @@ git commit -m "Add invite accept page and project members/invites UI."
 - **8a:** project TM only + default attachment + sync/match/write  
 - **8b:** attach personal TM (`kind=user`) + Export/Clone endpoints + UI checkboxes (owner only)
 
-- [ ] **Step 1: Go tests for export 403 and clone copies with new ids**
-- [ ] **Step 2: Implement 8a then 8b**
-- [ ] **Step 3: Client merges readable project TM into match list; writes on confirm to writable project TM**
-- [ ] **Step 4: Commit**
+- [x] **Step 1: Go tests for export 403 and clone copies with new ids**
+- [x] **Step 2: Implement 8a then 8b**
+- [x] **Step 3: Client merges readable project TM into match list; writes on confirm to writable project TM**
+- [x] **Step 4: Commit**
 
 ```bash
 git commit -m "Add project TM with attachment ACL, export, and clone."
@@ -420,9 +420,9 @@ git commit -m "Add project TM with attachment ACL, export, and clone."
 
 ### Task 9: F2.0 PLAN checkboxes + smoke
 
-- [ ] Mark F2.0 items in `PLAN.md`
-- [ ] Manual smoke: two users, invite, lock, edit, match from project TM
-- [ ] Commit PLAN
+- [x] Mark F2.0 items in `PLAN.md`
+- [ ] Manual smoke: two users, invite, lock, edit, match from project TM — **manual smoke pending**
+- [x] Commit PLAN
 
 ---
 
