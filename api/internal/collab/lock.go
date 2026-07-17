@@ -28,43 +28,37 @@ func (s *Store) ClaimSharedLock(ctx context.Context, userID, projectID uuid.UUID
 		return SharedLock{}, errors.New("holderId required")
 	}
 	expires := now.Add(SharedLockTTL)
-	var existing struct {
-		UserID    uuid.UUID
-		HolderID  string
-		Token     string
-		ExpiresAt time.Time
-	}
+	newToken := uuid.NewString()
+	var lock SharedLock
 	err := s.pool.QueryRow(ctx, `
-		SELECT holder_user_id, holder_id, token, expires_at
-		FROM shared_project_locks WHERE project_id = $1
-	`, projectID).Scan(&existing.UserID, &existing.HolderID, &existing.Token, &existing.ExpiresAt)
-	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-		return SharedLock{}, err
-	}
-	if err == nil && existing.ExpiresAt.After(now) {
-		if existing.UserID != userID || existing.HolderID != holderID {
-			return SharedLock{HolderID: existing.HolderID, ExpiresAt: existing.ExpiresAt}, ErrSharedLockHeld
-		}
-		if token != "" && token != existing.Token {
-			return SharedLock{}, ErrSharedInvalidToken
-		}
-		token = existing.Token
-	} else {
-		token = uuid.NewString()
-	}
-	_, err = s.pool.Exec(ctx, `
 		INSERT INTO shared_project_locks (project_id, holder_user_id, holder_id, token, expires_at)
 		VALUES ($1, $2, $3, $4, $5)
 		ON CONFLICT (project_id) DO UPDATE SET
 			holder_user_id = EXCLUDED.holder_user_id,
 			holder_id = EXCLUDED.holder_id,
-			token = EXCLUDED.token,
+			token = CASE
+				WHEN shared_project_locks.expires_at <= $6 THEN EXCLUDED.token
+				WHEN $7 = '' THEN shared_project_locks.token
+				ELSE $7
+			END,
 			expires_at = EXCLUDED.expires_at
-	`, projectID, userID, holderID, token, expires)
+		WHERE shared_project_locks.expires_at <= $6
+			OR (
+				shared_project_locks.holder_user_id = $2
+				AND shared_project_locks.holder_id = $3
+				AND ($7 = '' OR shared_project_locks.token = $7)
+			)
+		RETURNING holder_id, token, expires_at
+	`, projectID, userID, holderID, newToken, expires, now, token).Scan(
+		&lock.HolderID, &lock.Token, &lock.ExpiresAt,
+	)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return SharedLock{}, ErrSharedLockHeld
+	}
 	if err != nil {
 		return SharedLock{}, err
 	}
-	return SharedLock{HolderID: holderID, Token: token, ExpiresAt: expires}, nil
+	return lock, nil
 }
 
 func (s *Store) ReleaseSharedLock(ctx context.Context, userID, projectID uuid.UUID, holderID, token string) error {

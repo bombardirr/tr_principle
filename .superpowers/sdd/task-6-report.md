@@ -20,3 +20,18 @@
 - Presence is process-local and expires after 45 seconds; it intentionally does not return email addresses.
 - Sync is full-snapshot last-write-wins, with no OT or segment-level conflict resolution.
 - No Task 7 invite UI or Task 8 project TM changes were added.
+
+## Blocking review fixes
+
+- `ClaimSharedLock` now uses a single conditional `INSERT ... ON CONFLICT DO UPDATE ... WHERE ... RETURNING` statement. An active lock can only be renewed by the same user and holder with its valid token; every other active claim receives `ErrSharedLockHeld`.
+- Added a PostgreSQL-backed concurrent-claim regression test. It delays competing inserts so both callers contend for the same row, verifies exactly one successful claim, and confirms that the winner can renew its token.
+- `useProjectAccess` now treats `401`, `403`, and `409` lock-claim API responses as non-editable. Network failures and server errors remain offline-friendly and editable.
+- Added frontend regression coverage for both `401` and `403`.
+
+## Review-fix verification
+
+- `npm test -- tests/composables/useProjectAccess.test.ts` — first red run: 2 failures (401/403 incorrectly left `cloudOk=true`); after the fix: 2 passed.
+- `cmd /c "set DATABASE_URL=postgres://appzac:appzac@localhost:55432/appzac?sslmode=disable&& go test ./internal/collab -run TestClaimSharedLockAtomicallyExcludesConcurrentClaims -count=1"` — passed.
+- `npm test` — passed: 34 files, 149 tests.
+- `cmd /c "set DATABASE_URL=postgres://appzac:appzac@localhost:55432/appzac?sslmode=disable&& go test ./..."` — passed.
+- `npm run build` — passed.

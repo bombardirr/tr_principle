@@ -26,7 +26,7 @@ export function useProjectAccess(projectId: MaybeRefOrGetter<string>) {
       cloudToken.value = res.token
       cloudOk.value = true
     } catch (e) {
-      if (e instanceof ApiError && e.status === 409) {
+      if (e instanceof ApiError && (e.status === 401 || e.status === 403 || e.status === 409)) {
         cloudOk.value = false
         cloudToken.value = ''
         return
