@@ -224,7 +224,8 @@ Outbox / очередь push — **не** в этом пункте («позже
 
 ### Фаза F: работа в группе ← **в MVP** (F0 ✓; код: F1 → F2.0 → F2.1)
 
-Спека: [`docs/superpowers/specs/2026-07-17-group-collaboration-design.md`](docs/superpowers/specs/2026-07-17-group-collaboration-design.md)
+Спека: [`docs/superpowers/specs/2026-07-17-group-collaboration-design.md`](docs/superpowers/specs/2026-07-17-group-collaboration-design.md)  
+План: [`docs/superpowers/plans/2026-07-17-group-collaboration.md`](docs/superpowers/plans/2026-07-17-group-collaboration.md)
 
 > Сейчас аккаунт изолирован: облачная **TM = один user**, **backup/lock проекта = один user**. Attribution («Вы» / ник / «Инкогнито»+цвет) уже готово на клиенте; *другие актёры* — когда появятся shared project / team TM.
 
