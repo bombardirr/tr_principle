@@ -359,6 +359,11 @@ export default {
       'The selected copy does not match the shared work filename or document fingerprint. You can still link it if this is intentional.',
     mismatchCancel: 'Choose another copy',
     mismatchContinue: 'Link anyway',
+    sharedExactWarnTitle: 'This segment is already in shared TM',
+    sharedExactWarnHint:
+      'Another job member saved an exact or context match for this source. You can still confirm your translation.',
+    sharedExactWarnCancel: 'Cancel',
+    sharedExactWarnContinue: 'Confirm anyway',
   },
   glossary: {
     title: 'Glossary',

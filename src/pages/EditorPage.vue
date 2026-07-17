@@ -5,6 +5,7 @@ import { useI18n } from 'vue-i18n'
 import MarqueeText from '@/components/MarqueeText.vue'
 import ProjectSettingsDialog from '@/components/ProjectSettingsDialog.vue'
 import ResegmentDialog from '@/components/ResegmentDialog.vue'
+import SharedExactWarnDialog from '@/components/SharedExactWarnDialog.vue'
 import ShareProjectDialog from '@/components/ShareProjectDialog.vue'
 import CreateSharedWorkDialog from '@/components/CreateSharedWorkDialog.vue'
 import SharedWorkPanel from '@/components/SharedWorkPanel.vue'
@@ -67,6 +68,7 @@ import { bindProjectToJob } from '@/jobs/localProject'
 import { listJobResources, listMembers, patchJobMemberMe, pushJobTm } from '@/jobs/api'
 import { mergeTmSources, pullAllJobTm } from '@/jobs/tm'
 import { computeProgress } from '@/jobs/progress'
+import { shouldWarnSharedExact } from '@/jobs/sharedExactWarn'
 import type { Job, JobResource, JobRole } from '@/types/job'
 
 const props = defineProps<{ id: string }>()
@@ -169,6 +171,8 @@ const needsProjectSettings = computed(() => {
 const settingsOpen = ref(false)
 const settingsMode = ref<'first' | 'edit'>('first')
 const resegmentOpen = ref(false)
+const sharedExactWarnOpen = ref(false)
+const sharedExactConfirmSegId = ref<string | null>(null)
 const shareOpen = ref(false)
 const sharedCreateOpen = ref(false)
 const sharedPanelOpen = ref(false)
@@ -1087,7 +1091,18 @@ function redoSegment(segId: string) {
   if (snap) restoreSegmentSnapshot(segId, snap)
 }
 
-async function saveSegmentToTmById(segId: string) {
+function jobTmHitsFor(seg: Segment): TmMatch[] {
+  if (!record.value?.meta.jobId || !jobTmUnits.value.length) return []
+  return findTmMatches(
+    jobTmUnits.value,
+    seg.source,
+    record.value.meta.sourceLang,
+    record.value.meta.targetLang,
+    { ...tmMatchOptions(), ...segmentNeighbors(seg) },
+  )
+}
+
+async function performSaveSegmentToTm(segId: string) {
   if (!record.value || editorReadOnly.value) return
   const seg = record.value.segments.find(s => s.id === segId)
   if (!seg || !seg.target.trim()) return
@@ -1111,6 +1126,34 @@ async function saveSegmentToTmById(segId: string) {
   } catch (e) {
     setSaveError(e)
   }
+}
+
+async function saveSegmentToTmById(segId: string) {
+  if (!record.value || editorReadOnly.value) return
+  const seg = record.value.segments.find(s => s.id === segId)
+  if (!seg || !seg.target.trim()) return
+
+  if (
+    record.value.meta.jobId &&
+    shouldWarnSharedExact(jobTmHitsFor(seg), editActor())
+  ) {
+    sharedExactConfirmSegId.value = segId
+    sharedExactWarnOpen.value = true
+    return
+  }
+  await performSaveSegmentToTm(segId)
+}
+
+function cancelSharedExactWarn() {
+  sharedExactWarnOpen.value = false
+  sharedExactConfirmSegId.value = null
+}
+
+async function confirmSharedExactWarn() {
+  const segId = sharedExactConfirmSegId.value
+  sharedExactWarnOpen.value = false
+  sharedExactConfirmSegId.value = null
+  if (segId) await performSaveSegmentToTm(segId)
 }
 
 async function exportTmxFile() {
@@ -1701,6 +1744,11 @@ async function goBack() {
       @save="saveProjectSettings"
     />
     <ResegmentDialog :open="resegmentOpen" @later="deferResegment" @confirm="confirmResegment" />
+    <SharedExactWarnDialog
+      :open="sharedExactWarnOpen"
+      @cancel="cancelSharedExactWarn"
+      @continue="confirmSharedExactWarn"
+    />
     <ShareProjectDialog
       :open="shareOpen"
       @close="closeShareDialog"
