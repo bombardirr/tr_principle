@@ -243,10 +243,11 @@ Outbox / очередь push — **не** в этом пункте («позже
 
 #### Подзадачи F (новая нарезка)
 
-**J0 — спека** ← ✓
+**J0 — спека + cleanup** ← ✓
 
 - [x] Спека shared work / jobs (файл выше)
 - [x] Старая co-edit спека помечена Superseded
+- [x] Удалён F2.0 co-edit код + `011_drop_coedit.sql` (см. note)
 
 **J1 — job + handoff**
 

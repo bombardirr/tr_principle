@@ -28,13 +28,6 @@ const router = createRouter({
       meta: { requiresAuth: true },
     },
     {
-      path: '/invite/:token',
-      name: 'invite-accept',
-      component: () => import('@/pages/InviteAcceptPage.vue'),
-      props: true,
-      meta: { requiresAuth: true },
-    },
-    {
       path: '/project/:id',
       name: 'editor',
       component: () => import('@/pages/EditorPage.vue'),

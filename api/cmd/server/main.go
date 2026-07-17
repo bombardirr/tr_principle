@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/bombardirr/tr_principle/api/internal/auth"
-	"github.com/bombardirr/tr_principle/api/internal/collab"
 	"github.com/bombardirr/tr_principle/api/internal/config"
 	"github.com/bombardirr/tr_principle/api/internal/db"
 	"github.com/bombardirr/tr_principle/api/internal/glossary"
@@ -54,9 +53,7 @@ func main() {
 		Store:     projects.NewStore(pool),
 		BackupDir: cfg.BackupDir,
 	}
-	collabHandler := &collab.Handler{Store: collab.NewStore(pool)}
-
-	api := httpapi.NewRouter(handler, tmHandler, glossaryHandler, projectsHandler, collabHandler, cfg.AllowedOrigin)
+	api := httpapi.NewRouter(handler, tmHandler, glossaryHandler, projectsHandler, cfg.AllowedOrigin)
 	handlerRoot := httpapi.MountSPA(api, cfg.PublicDir)
 
 	srv := &http.Server{

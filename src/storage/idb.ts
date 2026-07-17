@@ -42,7 +42,6 @@ export function cloneProjectRecord(record: ProjectRecord): ProjectRecord {
     meta: {
       id: record.meta.id,
       name: record.meta.name,
-      cloudShared: record.meta.cloudShared,
       createdAt: record.meta.createdAt,
       updatedAt: record.meta.updatedAt,
       sourceLang: record.meta.sourceLang,

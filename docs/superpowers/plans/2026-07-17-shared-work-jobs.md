@@ -32,15 +32,16 @@ Present in repo (do **not** build F2.1 on it):
 | TM attach ACL ideas (`can_read/write/export/clone`) | Presence-as-who-edits-segment |
 | `cloudShared` flag → migrate meaning to `jobId` | Forcing all members onto one segment store |
 
-**Task 0** makes freeze explicit so agents do not wire new UI to co-edit sync.
+**Task 0** removes co-edit so agents do not wire new UI to old sync.
 
 ## File map
 
 | Create | Role |
 |--------|------|
-| `api/migrations/011_jobs.sql` | `jobs`, `job_members`, `job_invites`, resource preset/override tables |
+| `api/migrations/011_drop_coedit.sql` | drop F2.0 co-edit tables (done) |
+| `api/migrations/012_jobs.sql` | `jobs`, `job_members`, `job_invites`, resource preset/override tables |
 | `api/internal/jobs/*` | store, invites, handlers, fingerprint helpers |
-| `api/migrations/012_job_tm.sql` | job-scoped TM units (or rename/adapt `project_tm_*` → job in a follow-up migration) |
+| `api/migrations/013_job_tm.sql` | job-scoped TM units |
 | `src/types/job.ts` | Job, member, invite, resource types |
 | `src/jobs/api.ts` | HTTP client |
 | `src/jobs/fingerprint.ts` | filename + hash of docx bytes |
@@ -51,7 +52,7 @@ Present in repo (do **not** build F2.1 on it):
 
 | Modify | Role |
 |--------|------|
-| `api/internal/httpapi/router.go` | mount `/api/jobs…`; leave old collab routes mounted but unused by new UI |
+| `api/internal/httpapi/router.go` | mount `/api/jobs…` (solo lock/backup already restored) |
 | `src/types/project.ts` | `meta.jobId`, fingerprint fields |
 | `src/pages/EditorPage.vue` / `ProjectsPage.vue` | create job, panel, join |
 | `src/i18n/locales/{ru,en}.ts` | copy |
@@ -59,31 +60,24 @@ Present in repo (do **not** build F2.1 on it):
 
 ---
 
-## Part 0 — Freeze co-edit product path
+## Part 0 — Remove co-edit product path
 
-### Task 0: Document freeze + stop new UI on co-edit sync
+### Task 0: Delete F2.0 co-edit (done)
 
-**Files:**
-- Create: `docs/superpowers/notes/2026-07-17-f20-coedit-freeze.md` (short)
-- Modify: `PLAN.md` already points at jobs — ensure Editor/Projects do not advertise co-edit lock as the collab model in user-facing copy if any new strings say “shared editing”
+Co-edit code and tables removed; see `docs/superpowers/notes/2026-07-17-f20-coedit-removed.md`.
 
-- [ ] **Step 1: Write freeze note** listing routes/tables that are legacy (`/api/projects` collab sync/lock/presence, `projects`/`project_sync_state` as co-edit). State: new feature work uses `/api/jobs` only.
-
-- [ ] **Step 2: Commit**
-
-```bash
-git add docs/superpowers/notes/2026-07-17-f20-coedit-freeze.md
-git commit -m "Note freeze of co-edit F2.0 paths in favor of jobs model."
-```
+- [x] **Step 1:** Remove `api/internal/collab`, client co-edit UI/API, restore solo lock/backup routes
+- [x] **Step 2:** Migration `011_drop_coedit.sql`
+- [ ] **Step 3: Commit** cleanup when ready
 
 ---
 
 ## Part J1 — Job + handoff
 
-### Task 1: Migration `011_jobs.sql`
+### Task 1: Migration `012_jobs.sql`
 
 **Files:**
-- Create: `api/migrations/011_jobs.sql`
+- Create: `api/migrations/012_jobs.sql`
 
 ```sql
 -- +goose Up
@@ -240,9 +234,9 @@ export function fingerprintMismatch(
 ### Task 6: Job TM tables + sync API
 
 **Files:**
-- Create: `api/migrations/012_job_tm.sql` (`job_tm_units`, `job_resource_presets`, `job_member_resource_overrides`)
+- Create: `api/migrations/013_job_tm.sql` (`job_tm_units`, `job_resource_presets`, `job_member_resource_overrides`)
 - Create: `api/internal/jobs/tm.go`, handlers for sync + preset/override
-- Prefer **new job_*** tables** over overloading `project_tm_*` (clearer semantics). Optionally leave old tables frozen.
+- Prefer **new job_*** tables** over overloading old project TM (removed).
 
 Preset row: `kind='job_tm'` (built-in job memory) + later personal attaches.  
 Defaults on job create: insert job TM attachment preset `can_read=true`, `can_write=true` for translators; export/clone owner-only defaults in override logic.

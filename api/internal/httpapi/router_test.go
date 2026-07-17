@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/bombardirr/tr_principle/api/internal/auth"
-	"github.com/bombardirr/tr_principle/api/internal/collab"
 	"github.com/bombardirr/tr_principle/api/internal/glossary"
 	"github.com/bombardirr/tr_principle/api/internal/httpapi"
 	"github.com/bombardirr/tr_principle/api/internal/projects"
@@ -23,7 +22,6 @@ func TestProjectRoutes_NoTrailingSlash(t *testing.T) {
 		&tm.Handler{},
 		&glossary.Handler{},
 		&projects.Handler{},
-		&collab.Handler{},
 		"http://localhost",
 	)
 
@@ -31,10 +29,11 @@ func TestProjectRoutes_NoTrailingSlash(t *testing.T) {
 		method string
 		path   string
 	}{
-		{http.MethodGet, "/api/projects"},
-		{http.MethodPost, "/api/projects"},
-		{http.MethodGet, "/api/projects/test-id"},
-		{http.MethodPatch, "/api/projects/test-id"},
+		{http.MethodPost, "/api/projects/test-id/lock"},
+		{http.MethodDelete, "/api/projects/test-id/lock"},
+		{http.MethodPut, "/api/projects/test-id/backup"},
+		{http.MethodGet, "/api/projects/test-id/backup"},
+		{http.MethodHead, "/api/projects/test-id/backup"},
 	}
 
 	for _, tt := range tests {

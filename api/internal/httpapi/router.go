@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"github.com/bombardirr/tr_principle/api/internal/auth"
-	"github.com/bombardirr/tr_principle/api/internal/collab"
 	"github.com/bombardirr/tr_principle/api/internal/glossary"
 	"github.com/bombardirr/tr_principle/api/internal/projects"
 	"github.com/bombardirr/tr_principle/api/internal/tm"
@@ -18,7 +17,6 @@ func NewRouter(
 	tmHandler *tm.Handler,
 	glossaryHandler *glossary.Handler,
 	projectsHandler *projects.Handler,
-	collabHandler *collab.Handler,
 	allowedOrigin string,
 ) http.Handler {
 	r := chi.NewRouter()
@@ -58,41 +56,11 @@ func NewRouter(
 
 	r.Route("/api/projects/{projectID}", func(r chi.Router) {
 		r.Use(authHandler.Middleware)
-		r.Post("/lock", collabHandler.ClaimSharedOrSoloLock(projectsHandler.ClaimLock))
-		r.Delete("/lock", collabHandler.ReleaseSharedOrSoloLock(projectsHandler.ReleaseLock))
-		r.Get("/sync", collabHandler.PullSync)
-		r.Post("/sync", collabHandler.PushSync)
-		r.Post("/presence", collabHandler.PostPresence)
-		r.Get("/presence", collabHandler.GetPresence)
+		r.Post("/lock", projectsHandler.ClaimLock)
+		r.Delete("/lock", projectsHandler.ReleaseLock)
 		r.Put("/backup", projectsHandler.PutBackup)
 		r.Get("/backup", projectsHandler.GetBackup)
 		r.Head("/backup", projectsHandler.GetBackup)
-	})
-
-	r.Group(func(r chi.Router) {
-		r.Use(authHandler.Middleware)
-		r.Post("/api/projects", collabHandler.CreateProject)
-		r.Get("/api/projects", collabHandler.ListProjects)
-		r.Get("/api/projects/{projectID}", collabHandler.GetProject)
-		r.Patch("/api/projects/{projectID}", collabHandler.PatchProject)
-		r.Get("/api/projects/{projectID}/members", collabHandler.ListMembers)
-		r.Delete("/api/projects/{projectID}/members/{userID}", collabHandler.RemoveMember)
-		r.Post("/api/projects/{projectID}/invites", collabHandler.CreateInvite)
-		r.Get("/api/projects/{projectID}/invites", collabHandler.ListInvites)
-		r.Patch("/api/projects/{projectID}/invites/{inviteID}", collabHandler.PatchInvite)
-		r.Post("/api/projects/{projectID}/invites/{inviteID}/revoke", collabHandler.RevokeInvite)
-		r.Get("/api/projects/{projectID}/tm/sync", collabHandler.PullProjectTm)
-		r.Post("/api/projects/{projectID}/tm/sync", collabHandler.PushProjectTm)
-		r.Get("/api/projects/{projectID}/tm-attachments", collabHandler.ListTmAttachments)
-		r.Post("/api/projects/{projectID}/tm-attachments", collabHandler.AttachPersonalTm)
-		r.Patch("/api/projects/{projectID}/tm-attachments/{attachmentID}", collabHandler.PatchTmAttachment)
-		r.Post("/api/projects/{projectID}/tm-attachments/{attachmentID}/export", collabHandler.ExportTmAttachment)
-		r.Post("/api/projects/{projectID}/tm-attachments/{attachmentID}/clone", collabHandler.CloneTmAttachment)
-	})
-
-	r.Group(func(r chi.Router) {
-		r.Use(authHandler.Middleware)
-		r.Post("/api/invites/accept", collabHandler.AcceptInvite)
 	})
 
 	return r

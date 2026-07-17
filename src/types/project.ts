@@ -81,8 +81,6 @@ export type LangCode = 'ru' | 'en' | 'en-GB'
 export interface ProjectMeta {
   id: string
   name: string
-  /** Project has a server-backed shared collaboration record. */
-  cloudShared?: boolean
   createdAt: string
   updatedAt: string
   sourceLang?: LangCode | string
