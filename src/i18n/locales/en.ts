@@ -364,6 +364,12 @@ export default {
       'Another job member saved an exact or context match for this source. You can still confirm your translation.',
     sharedExactWarnCancel: 'Cancel',
     sharedExactWarnContinue: 'Confirm anyway',
+    transferTitle: 'Transfer ownership',
+    transferHint: 'Make another member the owner. You will become a translator.',
+    transferLabel: 'New owner',
+    transferChoose: 'Choose a member',
+    transferAction: 'Transfer ownership',
+    transferConfirm: 'Make {name} the owner of this shared work?',
   },
   glossary: {
     title: 'Glossary',

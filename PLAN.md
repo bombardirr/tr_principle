@@ -251,23 +251,25 @@ Outbox / очередь push — **не** в этом пункте («позже
 
 **J1 — job + handoff**
 
-- [ ] `jobs` / members / invites
-- [ ] «Сделать общей работой»; in-app клон; импорт + join; warn по fingerprint
-- [ ] Owner / translator / viewer; transfer owner (можно с J4)
+- [x] `jobs` / members / invites
+- [x] «Сделать общей работой»; in-app клон; импорт + join; warn по fingerprint
+- [x] Owner / translator / viewer; transfer owner
 
 **J2 — живые базы**
 
-- [ ] Пресет ресурсов на job + override у участника (Read/Write)
-- [ ] Live shared TM (адапт идей project TM ACL)
+- [x] Пресет ресурсов на job + override у участника (Read/Write)
+- [x] Live shared TM (адапт идей project TM ACL)
 
 **J3 — прогресс для PM**
 
-- [ ] Прогресс по участникам + «моя часть готова»; без лживого % на весь документ
+- [x] Прогресс по участникам + «моя часть готова»; без лживого % на весь документ
 
 **J4 — guard + polish**
 
-- [ ] Soft-warning при confirm, если Exact в общей ТМ не от тебя
-- [ ] Transfer owner (если не в J1)
+- [x] Soft-warning при confirm, если Exact в общей ТМ не от тебя
+- [x] Transfer owner
+
+_Ручной smoke (create → invite → join → TM → progress → transfer) по-прежнему полезен._
 
 **Позже:** XLIFF; glossary на том же attach; E2E TM; зоны сегментов. Co-edit F2.1 locks — **не планируем**.
 

@@ -11,6 +11,7 @@ import {
   patchJobResourcePreset,
   patchMyJobResource,
   revokeInvite,
+  transferJob,
 } from '@/jobs/api'
 import { inviteLink } from '@/jobs/localProject'
 import { useAuth } from '@/auth/session'
@@ -40,11 +41,15 @@ const role = ref<'translator' | 'viewer'>('translator')
 const oneTime = ref(true)
 const inviteUrl = ref('')
 const copied = ref(false)
+const transferTargetId = ref('')
 const loading = ref(false)
 const busy = ref(false)
 const error = ref('')
 
 const isOwner = computed(() => job.value?.ownerUserId === user.value?.id)
+const transferCandidates = computed(() =>
+  members.value.filter(member => member.userId !== user.value?.id)
+)
 const myMember = computed(() => members.value.find(member => member.userId === user.value?.id))
 const canMarkPartDone = computed(() => myMember.value && myMember.value.role !== 'viewer')
 
@@ -192,6 +197,25 @@ async function revoke(invite: JobInvite) {
     busy.value = false
   }
 }
+
+async function transferOwnership() {
+  if (busy.value || !transferTargetId.value) return
+  const target = members.value.find(member => member.userId === transferTargetId.value)
+  if (!target) return
+  if (!window.confirm(t('jobs.transferConfirm', { name: memberName(target) }))) return
+  busy.value = true
+  error.value = ''
+  try {
+    job.value = await transferJob(props.jobId, transferTargetId.value)
+    members.value = await listMembers(props.jobId)
+    transferTargetId.value = ''
+    invites.value = []
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : String(err)
+  } finally {
+    busy.value = false
+  }
+}
 </script>
 
 <template>
@@ -245,6 +269,28 @@ async function revoke(invite: JobInvite) {
             />
             <span>{{ t('jobs.myPartDone') }}</span>
           </label>
+
+          <div v-if="isOwner && transferCandidates.length" class="transfer-form">
+            <h3>{{ t('jobs.transferTitle') }}</h3>
+            <p class="muted">{{ t('jobs.transferHint') }}</p>
+            <label>
+              <span>{{ t('jobs.transferLabel') }}</span>
+              <select v-model="transferTargetId" :disabled="busy">
+                <option value="">{{ t('jobs.transferChoose') }}</option>
+                <option v-for="member in transferCandidates" :key="member.userId" :value="member.userId">
+                  {{ memberName(member) }} ({{ roleLabel(member.role) }})
+                </option>
+              </select>
+            </label>
+            <button
+              type="button"
+              class="secondary"
+              :disabled="busy || !transferTargetId"
+              @click="transferOwnership"
+            >
+              {{ t('jobs.transferAction') }}
+            </button>
+          </div>
         </section>
 
         <section v-if="resource">
@@ -487,13 +533,26 @@ small,
   font-size: 0.78rem;
 }
 
-.invite-form {
+.invite-form,
+.transfer-form {
   display: grid;
   gap: 0.65rem;
   padding: 0.8rem;
   border: 1px solid var(--border);
   border-radius: 10px;
   background: var(--surface-soft);
+}
+
+.transfer-form {
+  margin-top: 0.85rem;
+}
+
+.transfer-form h3 {
+  margin: 0;
+}
+
+.transfer-form p {
+  margin: 0;
 }
 
 .resource-card {
@@ -532,7 +591,8 @@ legend {
   font-size: 0.78rem;
 }
 
-.invite-form label:not(.check) {
+.invite-form label:not(.check),
+.transfer-form label {
   display: flex;
   flex-direction: column;
   gap: 0.3rem;

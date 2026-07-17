@@ -68,7 +68,7 @@ Co-edit code and tables removed; see `docs/superpowers/notes/2026-07-17-f20-coed
 
 - [x] **Step 1:** Remove `api/internal/collab`, client co-edit UI/API, restore solo lock/backup routes
 - [x] **Step 2:** Migration `011_drop_coedit.sql`
-- [ ] **Step 3: Commit** cleanup when ready
+- [x] **Step 3: Commit** cleanup when ready
 
 ---
 
@@ -128,7 +128,7 @@ DROP TABLE IF EXISTS job_members;
 DROP TABLE IF EXISTS jobs;
 ```
 
-- [ ] **Step 1: Add migration file** (goose style like `008_shared_projects.sql`)
+- [x] **Step 1: Add migration file** (goose style like `008_shared_projects.sql`)
 - [ ] **Step 2: Commit** `Add jobs, members, and invite tables.`
 
 ### Task 2: Go jobs store — create, invite, accept, fingerprint fields
@@ -297,9 +297,9 @@ Rule: exact/context hit from job TM where `createdBy/updatedBy` ≠ current acto
 - Modify: `PLAN.md` checkboxes J1–J4
 - Commit plan link
 
-- [ ] **Step 1: Owner UI transfer**
-- [ ] **Step 2: Tick PLAN J1–J4; note manual smoke**
-- [ ] **Step 3: Commit** `Complete shared-work J4 transfer and PLAN status.`
+- [x] **Step 1: Owner UI transfer**
+- [x] **Step 2: Tick PLAN J1–J4; note manual smoke**
+- [x] **Step 3: Commit** `Complete shared-work J4 transfer and PLAN status.`
 
 ---
 
