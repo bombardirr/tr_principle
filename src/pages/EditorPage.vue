@@ -5,6 +5,7 @@ import { useI18n } from 'vue-i18n'
 import MarqueeText from '@/components/MarqueeText.vue'
 import ProjectSettingsDialog from '@/components/ProjectSettingsDialog.vue'
 import ProjectMembersPanel from '@/components/ProjectMembersPanel.vue'
+import ProjectTmAttachmentsPanel from '@/components/ProjectTmAttachmentsPanel.vue'
 import ResegmentDialog from '@/components/ResegmentDialog.vue'
 import ShareProjectDialog from '@/components/ShareProjectDialog.vue'
 import DocxPreviewPanel from '@/components/DocxPreviewPanel.vue'
@@ -19,6 +20,7 @@ import TooltipWrap from '@/components/TooltipWrap.vue'
 import { publicActorLabel, useAuth } from '@/auth/session'
 import { useProjectAccess } from '@/composables/useProjectAccess'
 import { postProjectPresence } from '@/projects/collabApi'
+import { pullProjectTm, pushProjectTm } from '@/projects/projectTmApi'
 import { pullProjectSnapshot, pushProjectSnapshot } from '@/projects/collabSync'
 import { withSegmentAudit } from '@/utils/segmentAudit'
 import { scheduleProjectBackup, pushProjectBackup } from '@/projects/backup'
@@ -94,6 +96,7 @@ const projectLease = useProjectAccess(() => props.id)
 const { settings: tmSettings, toggleAutoSaveToTm } = useTmSettings()
 const { bindings: shortcutBindings, reload: reloadShortcuts } = useShortcutBindings()
 const tmUnits = shallowRef<TmUnit[]>([])
+const projectTmUnits = shallowRef<TmUnit[]>([])
 const glossaryTerms = shallowRef<GlossaryTerm[]>([])
 const glossaryOpen = ref(false)
 const tmImportInput = ref<HTMLInputElement | null>(null)
@@ -116,6 +119,11 @@ function clearTmAutosave(segId: string) {
 
 const done = computed(() => (record.value ? countTranslatedSegments(record.value.segments) : 0))
 const total = computed(() => record.value?.segments.length ?? 0)
+const matchTmUnits = computed(() => {
+  const byId = new Map<string, TmUnit>()
+  for (const unit of [...tmUnits.value, ...projectTmUnits.value]) byId.set(unit.id, unit)
+  return [...byId.values()]
+})
 
 const tmCoveragePct = computed(() => {
   if (!record.value?.segments.length) return 0
@@ -124,7 +132,7 @@ const tmCoveragePct = computed(() => {
   for (const seg of record.value.segments) {
     if (
       findTmMatches(
-        tmUnits.value,
+        matchTmUnits.value,
         seg.source,
         record.value.meta.sourceLang,
         record.value.meta.targetLang,
@@ -164,6 +172,7 @@ const settingsMode = ref<'first' | 'edit'>('first')
 const resegmentOpen = ref(false)
 const shareOpen = ref(false)
 const membersOpen = ref(false)
+const projectTmOpen = ref(false)
 const resegmentDeferred = ref(false)
 const thresholdOpen = ref(false)
 
@@ -377,11 +386,30 @@ async function persistNow(): Promise<void> {
       onlyIds,
     })
     markTmDirty(...dirty)
+    await syncProjectTm(dirty)
     tmAutosaveIds.value = new Set()
     tmUnits.value = await listTmUnits()
   }
   allSaved.value = true
   error.value = ''
+}
+
+async function reloadProjectTm() {
+  if (!record.value?.meta.cloudShared) {
+    projectTmUnits.value = []
+    return
+  }
+  const response = await pullProjectTm(record.value.meta.id)
+  projectTmUnits.value = response.units.filter(unit => !unit.deletedAt)
+}
+
+async function syncProjectTm(ids: string[]) {
+  if (!record.value?.meta.cloudShared || !ids.length) return
+  const pending = new Set(ids)
+  const units = (await listTmUnits()).filter(unit => pending.has(unit.id))
+  if (!units.length) return
+  await pushProjectTm(record.value.meta.id, units)
+  await reloadProjectTm()
 }
 
 async function persistScroll() {
@@ -453,6 +481,11 @@ async function load() {
   }
   if (gen !== loadGen) return
   record.value = loaded
+  try {
+    await reloadProjectTm()
+  } catch {
+    // Local TM stays available if the shared TM cannot be reached.
+  }
   startPresenceHeartbeat()
   await restorePageScroll()
   await nextTick()
@@ -722,7 +755,7 @@ function segmentNeighbors(seg: Segment): {
 function matchesFor(seg: Segment): TmMatch[] {
   if (!record.value) return []
   return findTmMatches(
-    tmUnits.value,
+    matchTmUnits.value,
     seg.source,
     record.value.meta.sourceLang,
     record.value.meta.targetLang,
@@ -734,7 +767,7 @@ function matchesFor(seg: Segment): TmMatch[] {
 function needsTmSave(seg: Segment): boolean {
   if (!record.value || !seg.target.trim()) return false
   const key = tmLookupKey(seg.source, record.value.meta.sourceLang, record.value.meta.targetLang)
-  return !tmUnits.value.some(u => u.sourceKey === key && u.target === seg.target)
+  return !matchTmUnits.value.some(u => u.sourceKey === key && u.target === seg.target)
 }
 
 function insertConcordanceTarget(segId: string, target: string) {
@@ -1068,6 +1101,7 @@ async function saveSegmentToTmById(segId: string) {
       onlyIds: [segId],
     })
     markTmDirty(...dirty)
+    await syncProjectTm(dirty)
     clearTmAutosave(segId)
     tmUnits.value = await listTmUnits()
   } catch (e) {
@@ -1495,6 +1529,14 @@ async function goBack() {
           >
             <EditorGlyph name="settings" />
           </IconButton>
+          <IconButton
+            v-if="record.meta.cloudShared"
+            :title="t('projectTm.manageHint')"
+            :active="projectTmOpen"
+            @click="projectTmOpen = true"
+          >
+            <EditorGlyph name="tm-commit" />
+          </IconButton>
           <IconButton :title="t('editor.importTmxHint')" @click="openTmxImport">
             <EditorGlyph name="import" />
           </IconButton>
@@ -1570,7 +1612,7 @@ async function goBack() {
             :force-chrome-reveal="railChromeSegId === seg.id"
             :matches-for="matchesFor"
             :needs-tm-save="needsTmSave"
-            :tm-units="tmUnits"
+            :tm-units="matchTmUnits"
             :glossary-terms="glossaryForPair"
             :source-lang="record.meta.sourceLang"
             :target-lang="record.meta.targetLang"
@@ -1649,6 +1691,13 @@ async function goBack() {
       :open="membersOpen"
       :project-id="record.meta.id"
       @close="membersOpen = false"
+    />
+    <ProjectTmAttachmentsPanel
+      v-if="record.meta.cloudShared"
+      :open="projectTmOpen"
+      :project-id="record.meta.id"
+      @close="projectTmOpen = false"
+      @changed="reloadProjectTm"
     />
   </section>
   <p v-else-if="error" class="error">{{ error }}</p>

@@ -81,6 +81,13 @@ func NewRouter(
 		r.Get("/api/projects/{projectID}/invites", collabHandler.ListInvites)
 		r.Patch("/api/projects/{projectID}/invites/{inviteID}", collabHandler.PatchInvite)
 		r.Post("/api/projects/{projectID}/invites/{inviteID}/revoke", collabHandler.RevokeInvite)
+		r.Get("/api/projects/{projectID}/tm/sync", collabHandler.PullProjectTm)
+		r.Post("/api/projects/{projectID}/tm/sync", collabHandler.PushProjectTm)
+		r.Get("/api/projects/{projectID}/tm-attachments", collabHandler.ListTmAttachments)
+		r.Post("/api/projects/{projectID}/tm-attachments", collabHandler.AttachPersonalTm)
+		r.Patch("/api/projects/{projectID}/tm-attachments/{attachmentID}", collabHandler.PatchTmAttachment)
+		r.Post("/api/projects/{projectID}/tm-attachments/{attachmentID}/export", collabHandler.ExportTmAttachment)
+		r.Post("/api/projects/{projectID}/tm-attachments/{attachmentID}/clone", collabHandler.CloneTmAttachment)
 	})
 
 	r.Group(func(r chi.Router) {

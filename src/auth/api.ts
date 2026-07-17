@@ -67,6 +67,18 @@ export async function apiFetch<T>(
   return data as T
 }
 
+export async function apiBlob(path: string, options: RequestInit = {}): Promise<Blob> {
+  const headers = new Headers(options.headers)
+  const token = getStoredToken()
+  if (token) headers.set('Authorization', `Bearer ${token}`)
+  const res = await fetch(`${apiBase()}${path}`, { ...options, headers })
+  if (!res.ok) {
+    const data = await res.json().catch(() => null)
+    throw new ApiError(res.status, data?.error ? String(data.error) : res.statusText)
+  }
+  return res.blob()
+}
+
 export async function register(email: string, password: string) {
   return apiFetch<{ token: string; user: AuthUser }>('/api/auth/register', {
     method: 'POST',
