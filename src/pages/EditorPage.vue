@@ -6,6 +6,8 @@ import MarqueeText from '@/components/MarqueeText.vue'
 import ProjectSettingsDialog from '@/components/ProjectSettingsDialog.vue'
 import ResegmentDialog from '@/components/ResegmentDialog.vue'
 import ShareProjectDialog from '@/components/ShareProjectDialog.vue'
+import CreateSharedWorkDialog from '@/components/CreateSharedWorkDialog.vue'
+import SharedWorkPanel from '@/components/SharedWorkPanel.vue'
 import DocxPreviewPanel from '@/components/DocxPreviewPanel.vue'
 import GlossaryPanel from '@/components/GlossaryPanel.vue'
 import { buildTranslatedDocx, downloadBlob } from '@/docx/exportDocx'
@@ -61,6 +63,8 @@ import {
 import { pickMagnetRowId } from '@/editor/magnetGeometry'
 import MagneticSegmentRail from '@/components/MagneticSegmentRail.vue'
 import ParagraphBlock from '@/components/ParagraphBlock.vue'
+import { bindProjectToJob } from '@/jobs/localProject'
+import type { Job } from '@/types/job'
 
 const props = defineProps<{ id: string }>()
 const { t } = useI18n()
@@ -159,6 +163,8 @@ const settingsOpen = ref(false)
 const settingsMode = ref<'first' | 'edit'>('first')
 const resegmentOpen = ref(false)
 const shareOpen = ref(false)
+const sharedCreateOpen = ref(false)
+const sharedPanelOpen = ref(false)
 const resegmentDeferred = ref(false)
 const thresholdOpen = ref(false)
 
@@ -1294,6 +1300,29 @@ async function downloadFromShareDialog() {
   await downloadProject()
 }
 
+function openSharedWork() {
+  if (!record.value) return
+  if (record.value.meta.jobId) {
+    sharedPanelOpen.value = true
+  } else if (!projectLease.blocked.value) {
+    sharedCreateOpen.value = true
+  }
+}
+
+async function onSharedWorkCreated(job: Job) {
+  if (!record.value) return
+  try {
+    record.value = bindProjectToJob(record.value, job)
+    await saveProject(record.value)
+    sharedCreateOpen.value = false
+    sharedPanelOpen.value = true
+    notice.value = t('jobs.createdNotice')
+    error.value = ''
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : String(err)
+  }
+}
+
 async function exportDocx() {
   if (!record.value) return
   if (!allSaved.value) {
@@ -1436,6 +1465,14 @@ async function goBack() {
           </IconButton>
           <IconButton :title="t('editor.shareProjectHint')" @click="openShareDialog">
             <EditorGlyph name="archive" />
+          </IconButton>
+          <IconButton
+            :title="record.meta.jobId ? t('jobs.openPanelHint') : t('jobs.createFromEditorHint')"
+            :active="Boolean(record.meta.jobId)"
+            :disabled="!record.meta.jobId && projectLease.blocked.value"
+            @click="openSharedWork"
+          >
+            <EditorGlyph name="send" />
           </IconButton>
           <IconButton
             :title="t('editor.cloudBackupHint')"
@@ -1592,6 +1629,18 @@ async function goBack() {
       :open="shareOpen"
       @close="closeShareDialog"
       @download="downloadFromShareDialog"
+    />
+    <CreateSharedWorkDialog
+      :open="sharedCreateOpen"
+      :project="record"
+      @close="sharedCreateOpen = false"
+      @created="onSharedWorkCreated"
+    />
+    <SharedWorkPanel
+      v-if="record.meta.jobId"
+      :open="sharedPanelOpen"
+      :job-id="record.meta.jobId"
+      @close="sharedPanelOpen = false"
     />
   </section>
   <p v-else-if="error" class="error">{{ error }}</p>

@@ -34,6 +34,12 @@ const router = createRouter({
       props: true,
       meta: { requiresAuth: true },
     },
+    {
+      path: '/job-invite/:token',
+      name: 'job-invite',
+      component: () => import('@/pages/JobInviteAcceptPage.vue'),
+      meta: { requiresAuth: true },
+    },
   ],
 })
 

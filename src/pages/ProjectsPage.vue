@@ -209,7 +209,10 @@ function formatDate(iso: string) {
     <ul class="list">
       <li v-for="p in projects" :key="p.id" class="item">
         <router-link class="item-link" :to="{ name: 'editor', params: { id: p.id } }">
-          <span class="name">{{ p.name }}</span>
+          <span class="name">
+            {{ p.name }}
+            <span v-if="p.jobId" class="shared-badge">{{ t('jobs.sharedBadge') }}</span>
+          </span>
           <span class="sub">
             {{ t('projects.segments', { done: p.doneCount, total: p.segmentCount }) }}
             ·
@@ -371,6 +374,18 @@ button.primary {
 .name {
   font-weight: 600;
   color: var(--text);
+}
+
+.shared-badge {
+  display: inline-block;
+  margin-left: 0.35rem;
+  border-radius: 999px;
+  padding: 0.1rem 0.45rem;
+  background: color-mix(in srgb, var(--accent) 15%, transparent);
+  color: var(--accent);
+  font-size: 0.68rem;
+  font-weight: 700;
+  vertical-align: 0.08rem;
 }
 
 .sub {
