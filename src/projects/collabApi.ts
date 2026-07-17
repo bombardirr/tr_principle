@@ -12,6 +12,29 @@ export type CloudProject = {
   updatedAt: string
 }
 
+export type ProjectMember = {
+  userId: string
+  displayName: string
+  role: 'owner' | 'editor' | 'viewer'
+}
+
+export type ProjectInvite = {
+  id: string
+  projectId: string
+  role: 'editor' | 'viewer'
+  expiresAt: string | null
+  maxUses: number | null
+  usesCount: number
+  revokedAt: string | null
+  createdAt: string
+}
+
+export type CreateProjectInvite = {
+  role: ProjectInvite['role']
+  expiresAt?: string
+  maxUses?: number
+}
+
 export type ProjectSyncPull = {
   until: string
   meta: ProjectMeta
@@ -45,6 +68,40 @@ export function listCloudProjects() {
 
 export function getCloudProject(projectId: string) {
   return apiFetch<CloudProject>(`/api/projects/${projectId}`)
+}
+
+export function listProjectMembers(projectId: string) {
+  return apiFetch<{ members: ProjectMember[] }>(`/api/projects/${projectId}/members`)
+}
+
+export function removeProjectMember(projectId: string, userId: string) {
+  return apiFetch<void>(`/api/projects/${projectId}/members/${userId}`, {
+    method: 'DELETE',
+  })
+}
+
+export function createProjectInvite(projectId: string, invite: CreateProjectInvite) {
+  return apiFetch<{ invite: ProjectInvite; token: string }>(`/api/projects/${projectId}/invites`, {
+    method: 'POST',
+    body: JSON.stringify(invite),
+  })
+}
+
+export function listProjectInvites(projectId: string) {
+  return apiFetch<{ invites: ProjectInvite[] }>(`/api/projects/${projectId}/invites`)
+}
+
+export function revokeProjectInvite(projectId: string, inviteId: string) {
+  return apiFetch<ProjectInvite>(`/api/projects/${projectId}/invites/${inviteId}/revoke`, {
+    method: 'POST',
+  })
+}
+
+export function acceptProjectInvite(token: string) {
+  return apiFetch<{ projectId: string; role: ProjectMember['role'] }>('/api/invites/accept', {
+    method: 'POST',
+    body: JSON.stringify({ token }),
+  })
 }
 
 export function pullProjectSync(projectId: string, since?: string) {

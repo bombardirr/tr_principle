@@ -1,4 +1,9 @@
-import { createCloudProject, pullProjectSync, pushProjectSync } from '@/projects/collabApi'
+import {
+  createCloudProject,
+  getCloudProject,
+  pullProjectSync,
+  pushProjectSync,
+} from '@/projects/collabApi'
 import { saveProject } from '@/storage/idb'
 import type { ProjectRecord } from '@/types/project'
 
@@ -19,6 +24,24 @@ export async function pullProjectSnapshot(record: ProjectRecord): Promise<Projec
     ...record,
     meta: { ...record.meta, ...remote.meta, cloudShared: true },
     segments: remote.segments,
+  }
+}
+
+/** Build a local editable snapshot after accepting a shared-project invite. */
+export async function fetchSharedProject(projectId: string): Promise<ProjectRecord> {
+  const [project, snapshot] = await Promise.all([getCloudProject(projectId), pullProjectSync(projectId)])
+  return {
+    meta: {
+      ...snapshot.meta,
+      id: project.id,
+      name: project.name,
+      sourceLang: project.sourceLang,
+      targetLang: project.targetLang,
+      cloudShared: true,
+    },
+    segments: snapshot.segments,
+    // Original DOCX bytes remain local to the owner; translation editing works from the snapshot.
+    docx: new ArrayBuffer(0),
   }
 }
 

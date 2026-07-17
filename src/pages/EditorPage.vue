@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import MarqueeText from '@/components/MarqueeText.vue'
 import ProjectSettingsDialog from '@/components/ProjectSettingsDialog.vue'
+import ProjectMembersPanel from '@/components/ProjectMembersPanel.vue'
 import ResegmentDialog from '@/components/ResegmentDialog.vue'
 import ShareProjectDialog from '@/components/ShareProjectDialog.vue'
 import DocxPreviewPanel from '@/components/DocxPreviewPanel.vue'
@@ -162,6 +163,7 @@ const settingsOpen = ref(false)
 const settingsMode = ref<'first' | 'edit'>('first')
 const resegmentOpen = ref(false)
 const shareOpen = ref(false)
+const membersOpen = ref(false)
 const resegmentDeferred = ref(false)
 const thresholdOpen = ref(false)
 
@@ -1174,6 +1176,11 @@ function onClearFocusKey(e: KeyboardEvent) {
       shareOpen.value = false
       return
     }
+    if (membersOpen.value) {
+      e.preventDefault()
+      membersOpen.value = false
+      return
+    }
     if (thresholdOpen.value) {
       e.preventDefault()
       thresholdOpen.value = false
@@ -1480,6 +1487,14 @@ async function goBack() {
           >
             <EditorGlyph name="cloud-upload" />
           </IconButton>
+          <IconButton
+            v-if="record.meta.cloudShared"
+            :title="t('invites.manageHint')"
+            :active="membersOpen"
+            @click="membersOpen = true"
+          >
+            <EditorGlyph name="settings" />
+          </IconButton>
           <IconButton :title="t('editor.importTmxHint')" @click="openTmxImport">
             <EditorGlyph name="import" />
           </IconButton>
@@ -1628,6 +1643,12 @@ async function goBack() {
       :open="shareOpen"
       @close="closeShareDialog"
       @download="downloadFromShareDialog"
+    />
+    <ProjectMembersPanel
+      v-if="record.meta.cloudShared"
+      :open="membersOpen"
+      :project-id="record.meta.id"
+      @close="membersOpen = false"
     />
   </section>
   <p v-else-if="error" class="error">{{ error }}</p>
