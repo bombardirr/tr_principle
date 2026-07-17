@@ -67,14 +67,6 @@ func (s *Store) CreateJob(
 		return Job{}, err
 	}
 
-	if _, err := tx.Exec(ctx, `
-		INSERT INTO job_resource_presets (
-			job_id, kind, can_read, can_write, can_export, can_clone
-		) VALUES ($1, 'job_tm', true, true, false, false)
-	`, jobID); err != nil {
-		return Job{}, err
-	}
-
 	if err := tx.Commit(ctx); err != nil {
 		return Job{}, err
 	}

@@ -5,7 +5,6 @@ import { useI18n } from 'vue-i18n'
 import MarqueeText from '@/components/MarqueeText.vue'
 import ProjectSettingsDialog from '@/components/ProjectSettingsDialog.vue'
 import ResegmentDialog from '@/components/ResegmentDialog.vue'
-import SharedExactWarnDialog from '@/components/SharedExactWarnDialog.vue'
 import ShareProjectDialog from '@/components/ShareProjectDialog.vue'
 import CreateSharedWorkDialog from '@/components/CreateSharedWorkDialog.vue'
 import SharedWorkPanel from '@/components/SharedWorkPanel.vue'
@@ -65,11 +64,9 @@ import { pickMagnetRowId } from '@/editor/magnetGeometry'
 import MagneticSegmentRail from '@/components/MagneticSegmentRail.vue'
 import ParagraphBlock from '@/components/ParagraphBlock.vue'
 import { bindProjectToJob } from '@/jobs/localProject'
-import { listJobResources, listMembers, patchJobMemberMe, pushJobTm } from '@/jobs/api'
-import { mergeTmSources, pullAllJobTm } from '@/jobs/tm'
+import { listMembers, patchJobMemberMe } from '@/jobs/api'
 import { computeProgress } from '@/jobs/progress'
-import { shouldWarnSharedExact } from '@/jobs/sharedExactWarn'
-import type { Job, JobResource, JobRole } from '@/types/job'
+import type { Job, JobRole } from '@/types/job'
 
 const props = defineProps<{ id: string }>()
 const { t } = useI18n()
@@ -98,8 +95,6 @@ const projectLease = useProjectAccess(() => props.id)
 const { settings: tmSettings, toggleAutoSaveToTm } = useTmSettings()
 const { bindings: shortcutBindings, reload: reloadShortcuts } = useShortcutBindings()
 const tmUnits = shallowRef<TmUnit[]>([])
-const jobTmUnits = shallowRef<TmUnit[]>([])
-const jobTmResource = shallowRef<JobResource | null>(null)
 const jobRole = ref<JobRole | null>(null)
 const glossaryTerms = shallowRef<GlossaryTerm[]>([])
 const glossaryOpen = ref(false)
@@ -124,7 +119,7 @@ function clearTmAutosave(segId: string) {
 const done = computed(() => (record.value ? countTranslatedSegments(record.value.segments) : 0))
 const total = computed(() => record.value?.segments.length ?? 0)
 const editorReadOnly = computed(() => projectLease.blocked.value || jobRole.value === 'viewer')
-const matchTmUnits = computed(() => mergeTmSources(tmUnits.value, jobTmUnits.value))
+const matchTmUnits = computed(() => tmUnits.value)
 
 const tmCoveragePct = computed(() => {
   if (!record.value?.segments.length) return 0
@@ -171,8 +166,6 @@ const needsProjectSettings = computed(() => {
 const settingsOpen = ref(false)
 const settingsMode = ref<'first' | 'edit'>('first')
 const resegmentOpen = ref(false)
-const sharedExactWarnOpen = ref(false)
-const sharedExactConfirmSegId = ref<string | null>(null)
 const shareOpen = ref(false)
 const sharedCreateOpen = ref(false)
 const sharedPanelOpen = ref(false)
@@ -356,22 +349,6 @@ function setSaveError(e: unknown) {
   }
 }
 
-async function reloadJobTm(jobId = record.value?.meta.jobId) {
-  jobTmUnits.value = []
-  jobTmResource.value = null
-  if (!jobId) return
-  try {
-    const resources = await listJobResources(jobId)
-    const resource = resources.find(item => item.kind === 'job_tm') ?? null
-    jobTmResource.value = resource
-    if (resource?.enabled && resource.canRead) {
-      jobTmUnits.value = await pullAllJobTm(jobId)
-    }
-  } catch {
-    // The personal TM remains available while the job service is offline.
-  }
-}
-
 async function reloadJobMembership(jobId = record.value?.meta.jobId) {
   jobRole.value = null
   if (!jobId || !user.value) return
@@ -396,17 +373,6 @@ async function reportJobProgress() {
   } catch {
     // Progress reporting must not turn a successful local save into a failure.
   }
-}
-
-async function pushUnitsToJob(ids: string[], units: TmUnit[]) {
-  const jobId = record.value?.meta.jobId
-  const resource = jobTmResource.value
-  if (!jobId || !resource?.enabled || !resource.canWrite || !ids.length) return
-  const wanted = new Set(ids)
-  const changed = units.filter(unit => wanted.has(unit.id))
-  if (!changed.length) return
-  await pushJobTm(jobId, changed)
-  jobTmUnits.value = mergeTmSources(jobTmUnits.value, changed)
 }
 
 async function persistNow(): Promise<void> {
@@ -438,9 +404,7 @@ async function persistNow(): Promise<void> {
       onlyIds,
     })
     markTmDirty(...dirty)
-    const nextTmUnits = await listTmUnits()
-    tmUnits.value = nextTmUnits
-    await pushUnitsToJob(dirty, nextTmUnits)
+    tmUnits.value = await listTmUnits()
     tmAutosaveIds.value = new Set()
   }
   allSaved.value = true
@@ -509,8 +473,6 @@ async function load() {
   if (gen !== loadGen) return
   record.value = loaded
   await reloadJobMembership(loaded.meta.jobId)
-  if (gen !== loadGen) return
-  await reloadJobTm(loaded.meta.jobId)
   if (gen !== loadGen) return
   await restorePageScroll()
   await nextTick()
@@ -1091,18 +1053,7 @@ function redoSegment(segId: string) {
   if (snap) restoreSegmentSnapshot(segId, snap)
 }
 
-function jobTmHitsFor(seg: Segment): TmMatch[] {
-  if (!record.value?.meta.jobId || !jobTmUnits.value.length) return []
-  return findTmMatches(
-    jobTmUnits.value,
-    seg.source,
-    record.value.meta.sourceLang,
-    record.value.meta.targetLang,
-    { ...tmMatchOptions(), ...segmentNeighbors(seg) },
-  )
-}
-
-async function performSaveSegmentToTm(segId: string) {
+async function saveSegmentToTmById(segId: string) {
   if (!record.value || editorReadOnly.value) return
   const seg = record.value.segments.find(s => s.id === segId)
   if (!seg || !seg.target.trim()) return
@@ -1120,40 +1071,10 @@ async function performSaveSegmentToTm(segId: string) {
     })
     markTmDirty(...dirty)
     clearTmAutosave(segId)
-    const nextTmUnits = await listTmUnits()
-    tmUnits.value = nextTmUnits
-    await pushUnitsToJob(dirty, nextTmUnits)
+    tmUnits.value = await listTmUnits()
   } catch (e) {
     setSaveError(e)
   }
-}
-
-async function saveSegmentToTmById(segId: string) {
-  if (!record.value || editorReadOnly.value) return
-  const seg = record.value.segments.find(s => s.id === segId)
-  if (!seg || !seg.target.trim()) return
-
-  if (
-    record.value.meta.jobId &&
-    shouldWarnSharedExact(jobTmHitsFor(seg), editActor())
-  ) {
-    sharedExactConfirmSegId.value = segId
-    sharedExactWarnOpen.value = true
-    return
-  }
-  await performSaveSegmentToTm(segId)
-}
-
-function cancelSharedExactWarn() {
-  sharedExactWarnOpen.value = false
-  sharedExactConfirmSegId.value = null
-}
-
-async function confirmSharedExactWarn() {
-  const segId = sharedExactConfirmSegId.value
-  sharedExactWarnOpen.value = false
-  sharedExactConfirmSegId.value = null
-  if (segId) await performSaveSegmentToTm(segId)
 }
 
 async function exportTmxFile() {
@@ -1429,10 +1350,8 @@ async function onSharedWorkCreated(job: Job) {
     await saveProject(record.value)
     await reloadJobMembership(job.id)
     await reportJobProgress()
-    await reloadJobTm(job.id)
     sharedCreateOpen.value = false
     sharedPanelOpen.value = true
-    notice.value = t('jobs.createdNotice')
     error.value = ''
   } catch (err) {
     error.value = err instanceof Error ? err.message : String(err)
@@ -1744,11 +1663,6 @@ async function goBack() {
       @save="saveProjectSettings"
     />
     <ResegmentDialog :open="resegmentOpen" @later="deferResegment" @confirm="confirmResegment" />
-    <SharedExactWarnDialog
-      :open="sharedExactWarnOpen"
-      @cancel="cancelSharedExactWarn"
-      @continue="confirmSharedExactWarn"
-    />
     <ShareProjectDialog
       :open="shareOpen"
       @close="closeShareDialog"
@@ -1765,7 +1679,6 @@ async function goBack() {
       :open="sharedPanelOpen"
       :job-id="record.meta.jobId"
       @close="sharedPanelOpen = false"
-      @resources-changed="reloadJobTm()"
     />
   </section>
   <p v-else-if="error" class="error">{{ error }}</p>

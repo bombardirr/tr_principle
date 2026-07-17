@@ -73,6 +73,14 @@ func TestHTTPJobTMSyncACLAndAttribution(t *testing.T) {
 		"token": invite["token"],
 	}, http.StatusOK)
 
+	// job_tm is not auto-seeded; insert preset so ACL/sync paths can be exercised.
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO job_resource_presets (job_id, kind, can_read, can_write, can_export, can_clone)
+		VALUES ($1, 'job_tm', true, true, false, false)
+	`, jobID); err != nil {
+		t.Fatal(err)
+	}
+
 	resources := requestJSON(t, http.MethodGet, srv.URL+"/api/jobs/"+jobID.String()+"/resources", memberToken, nil, http.StatusOK)
 	resource := resources["resources"].([]any)[0].(map[string]any)
 	if resource["kind"] != "job_tm" || resource["canRead"] != true || resource["canWrite"] != true {

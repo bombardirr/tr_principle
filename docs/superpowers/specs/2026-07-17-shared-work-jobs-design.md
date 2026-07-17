@@ -30,31 +30,42 @@ The earlier design assumed one cloud bilingual, membership, and write locks (pro
 
 ### Shared work (`job`)
 
-- A **job** (UI: «общая работа» / shared work) is a cloud card that ties people and resource presets together.
-- Creating a local project from DOCX stays as today. An explicit action **«Сделать общей работой»** creates the job and links the creator’s copy (`jobId`).
-- Anyone may create a job (owner = creator). Owner may **transfer ownership** later.
-- Supervisor is invited as **viewer (PM)** — metrics and roster, not co-editing.
+- A **job** (UI: «общая работа») is a cloud card: members, invites, later attached bases, progress, final result for boss.
+- **Job ≠ project.** Membership does **not** require a local bilingual project.
+- `/projects` IA (**locked A**): two blocks — **Проекты** | **Общие работы**. Click a job → **job hub** (not straight into editor).
+- Creating a local project from DOCX stays available. Owner may also **«Сделать общей работой»** from an existing project (links `meta.jobId`).
+- Anyone may create a job (owner = creator). Owner may **transfer ownership**.
+- Supervisor is **viewer** — stats + final downloadable result only; **no** bilingual project required for boss.
+
+### Join (locked: membership-first)
+
+- Invite link (header paste **or** `/job-invite/:token`) → accept → **membership** with optional `local_project_id`.
+- Join **without** local project is allowed → land on **job hub**.
+- From invite UI / job hub the member may later: import `.tcat.zip`, create from DOCX, or create empty shell, then bind.
+- Fingerprint mismatch → **warn** only when binding a project that has fingerprint data; never hard-block.
 
 ### Personal copies
 
-- Each translator has their own IndexedDB project (segments, styles, local backup).
-- Join paths:
-  1. **In-app send / clone** — recipient gets a copy linked to the same `jobId`.
-  2. **Import file** (`.tcat.zip`; XLIFF later) then **join job** via link/code.
-- If imported DOCX **name or content hash** differs from the job fingerprint → **warn**, do not hard-block (wrong file = user’s problem).
+- Each translator’s segments stay in their IndexedDB project (`meta.jobId` when bound).
+- Boss does not need a project — only job hub stats + finalized result download.
 
 ### Progress (split-by-agreement)
 
-- Verbal split of one document means a single document-level % would lie.
-- MVP shows **per-member** progress (done segments / source words on **their** copy) and a manual **«моя часть готова»**.
-- **No** aggregate “document 100%” until a later feature (zones or PM acceptance).
+- Per member, from **their** linked project when present:
+  - **TM coverage %** — segments with a usable TM hit / all segments
+  - **Translated %** — actually translated segments / all segments
+- Manual **«моя часть готова»** / finalize project for delivery.
+- Normal that after verbal split + peer review clicks, one member can show ~100% translated and another ~50%.
+- **No** fake single document-level % as the only truth.
+- Finalizing translator marks project complete → translated DOCX available for **boss download** on job hub.
 
-### Resources (TM / glossary)
+### Resources (TM / glossary) — attach model
 
-- Job holds a **preset** of recommended memories/termbases and default Read/Write.
-- Each member has **overrides**: enable/disable, Read / Write (and later Export / Clone as already designed for TM ACL).
-- Matching uses the member’s effective attachments; confirm/autosave writes only where Write is on.
-- Live sync applies to **resource stores**, not to colleagues’ segment grids.
+- **No** auto built-in ephemeral `job_tm` as the default product path (removed).
+- Members **attach** selected bases they can access; job has preset defaults + per-member overrides (Read/Write; export/clone later).
+- Writes to **writable shared** bases go through a **deferred pending stack** (configurable delay on project create + settings): send/cancel all or per item; top item auto-flushes if untouched when timer expires — so accidental bad confirms can be fixed before leaving the device.
+- Personal-only TM may write immediately (default).
+- Live sync applies to **resource stores**, not segment grids.
 
 ### Duplicate work soft guard
 
@@ -144,17 +155,22 @@ Owner opens project → create job → link local project → edit preset → co
 
 Owner selects member / sends invite → accept → server records membership → client creates local copy from payload or pulls package → `jobId` set.
 
-### Join via import
+### Join (membership-first)
 
-Import `.tcat.zip` → prompt «Присоединиться к общей работе?» with token → compare fingerprint → warn if mismatch → membership + `jobId`.
+Paste link in header or open `/job-invite/:token` → accept → membership (`local_project_id` optional) → **job hub**.  
+Optionally import / create DOCX / empty shell / bind existing project from invite UI or hub; fingerprint warn on bind only.
 
 ### Report progress
 
-Client periodically or on save posts done/total (+ part_done). Viewer UI lists members without email.
+Client posts TM-coverage % + translated % (+ part_done). Viewer UI lists members without email. Boss downloads finalized DOCX from hub.
 
 ### Confirm warning
 
-Before finalize segment: if job shared TM has exact hit from other actor → modal/toast confirm.
+Before finalize segment: if an **attached** shared TM has exact hit from other actor → modal confirm (re-enabled after attach-bases).
+
+### Deferred shared TM writes
+
+Pending stack with configurable delay; send/cancel all or per item; auto-flush top when timer expires if unchanged.
 
 ### Transfer owner
 
@@ -173,12 +189,30 @@ Owner picks another member → role swap; former owner may remain translator.
 
 Bilingual segment sync endpoints from the superseded design are **not** part of this model.
 
-## UI (minimal)
+## UI (minimal) — locked IA
 
-- Projects list: badge «общая работа»; viewer sees jobs they observe.
-- Job panel: members, progress per person, invites, preset resources, transfer owner.
-- Editor: attachment overrides; soft warning on confirm; share/join entry points.
-- Clear copy when enabling Write on a shared resource (text leaves the device).
+### `/projects` (variant A)
+
+Two blocks on one page:
+
+1. **Проекты** — personal bilingual copies (open editor as today); optional badge if bound to a job.
+2. **Общие работы** — job cards (all roles). Click → **job hub**.
+
+### Job hub (`/jobs/:id`)
+
+- Members, invites, per-member dual progress, transfer owner (owner).
+- Translator/owner: open linked project; **create project** (DOCX / empty); import `.tcat.zip` then bind.
+- Viewer/boss: stats + **final result download** (no project required).
+- Resources / attach UI — when J2 attach ships.
+
+### Chrome
+
+- Header control: **paste invite link** (full URL or raw token) → same accept flow as `/job-invite/:token`.
+
+### Join
+
+- Primary: accept membership **without** local project → job hub.
+- Optional: import / create / bind project from invite UI or hub; fingerprint warn on bind.
 
 ## Delivery phases
 

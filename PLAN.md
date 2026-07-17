@@ -257,8 +257,8 @@ Outbox / очередь push — **не** в этом пункте («позже
 
 **J2 — живые базы**
 
-- [x] Пресет ресурсов на job + override у участника (Read/Write)
-- [x] Live shared TM (адапт идей project TM ACL)
+- [ ] Пресет ресурсов на job + override у участника (Read/Write) — **отложено:** авто-`job_tm` убран; следующий шаг — attach выбранных баз
+- [ ] Live shared TM через attach (не временная job TM)
 
 **J3 — прогресс для PM**
 
@@ -266,12 +266,12 @@ Outbox / очередь push — **не** в этом пункте («позже
 
 **J4 — guard + polish**
 
-- [x] Soft-warning при confirm, если Exact в общей ТМ не от тебя
+- [ ] Soft-warning при confirm по attached shared TM (вернуть после attach баз; код soft-warn снят вместе с авто-`job_tm`)
 - [x] Transfer owner
 
-_Ручной smoke (create → invite → join → TM → progress → transfer) по-прежнему полезен._
+_Ручной smoke: create → invite → join без проекта → хаб → создать/привязать проект → progress → transfer._
 
-**Позже:** XLIFF; glossary на том же attach; E2E TM; зоны сегментов. Co-edit F2.1 locks — **не планируем**.
+**Следом (J5 в плане):** paste invite в шапке; IA A (Проекты | Общие работы); job hub; deferred TM stack; attach баз; dual % + finalize для начальника.
 
 #### Порядок
 
@@ -286,8 +286,8 @@ _Ручной smoke (create → invite → join → TM → progress → transfer
 | **Облачная TM** | Память переводов на сервере у аккаунта; браузер кэширует локально и синкает. | **В MVP** — одна TM на пользователя на всех устройствах. |
 | **MT** | Machine Translation — подсказка из движка (DeepL/Google/…), не из вашей памяти. | После MVP; отдельный ключ API, квоты, UI «вставить из MT». |
 | **multi-TM** | Несколько памятей сразу (проектная + общая + клиентская) с приоритетом и штрафами. | После MVP; в MVP достаточно **одной** облачной TM на user. |
-| **Общая работа (job)** | Карточка связки: участники + пресет баз; у каждого своя bilingual-копия. | **В MVP** — фаза F (новая спека). |
-| **Общая ТМ (на job)** | Память, привязанная к общей работе; live Exact между копиями. | **В MVP** — J2. |
+| **Общая работа (job)** | Карточка: участники + позже attach баз; у каждого своя bilingual-копия (опционально). | **В MVP** — фаза F. Join без проекта → хаб. |
+| **Общая ТМ (attach)** | Базы, которые участники подключают к работе. | **В MVP** — J2; авто-`job_tm` убран. |
 | **Глоссарий** | Termbase: термины source→target, подсветка в source. | **В MVP** — фаза C (C1 ✓; C2 на job attach). |
 | **SRX** | Правила сегментации. | После MVP. |
 

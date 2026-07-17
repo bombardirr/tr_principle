@@ -20,19 +20,30 @@
 - No aggregate document % under verbal split — per-member progress + `part_done`
 - Enabling Write on shared resource requires short privacy copy in UI
 - E2E encryption out of scope
+- **No auto `job_tm`** — live bases come from **attach** of selected DBs (J2 redo); built-in ephemeral job TM removed from product path
+- **Job ≠ project** — join may create membership with `local_project_id = null`
+
+## Locked product decisions (do not re-ask)
+
+| Decision | Choice |
+|----------|--------|
+| `/projects` IA | **A** — two blocks: «Проекты» + «Общие работы»; click job → **job hub** |
+| Join without local project | **1** — membership only → job hub; create/import/bind project later inside hub |
+| Invite entry | Paste link in app chrome/header **and** `/job-invite/:token`; same accept flow |
+| Invite / hub project actions | Create from DOCX, empty shell, or import `.tcat.zip`; then bind `local_project_id` |
+| Boss (viewer) | Stats + final downloadable result only — **no** bilingual project required |
+| Auto built-in `job_tm` | **Removed** from product; J2 = attach selected bases |
 
 ## Legacy F2.0 code (read before coding)
 
-Present in repo (do **not** build F2.1 on it):
+Co-edit F2.0 **removed** (Task 0 / `011_drop_coedit.sql`). Do not rebuild it.
 
-| Keep / adapt | Freeze / stop using for product |
-|--------------|----------------------------------|
-| F1 `ShareProjectDialog` | `POST/GET …/sync` bilingual snapshot as “collab truth” |
-| Invite token hash pattern | `shared_project_locks` as UX for co-edit |
-| TM attach ACL ideas (`can_read/write/export/clone`) | Presence-as-who-edits-segment |
-| `cloudShared` flag → migrate meaning to `jobId` | Forcing all members onto one segment store |
-
-**Task 0** removes co-edit so agents do not wire new UI to old sync.
+| Keep / adapt | Do not revive |
+|--------------|---------------|
+| F1 `ShareProjectDialog` | Shared bilingual sync as “collab truth” |
+| Invite token hash pattern | `shared_project_locks` / presence-as-editor |
+| TM attach ACL ideas (`can_read/write/export/clone`) | Auto built-in ephemeral `job_tm` as default product path |
+| `meta.jobId` | Forcing all members onto one segment store |
 
 ## File map
 
@@ -303,21 +314,117 @@ Rule: exact/context hit from job TM where `createdBy/updatedBy` ≠ current acto
 
 ---
 
+## Part J5 — Job hub IA + deferred TM save + finalize (next)
+
+> Tasks 0–10 landed a first slice; auto `job_tm` product path was **removed**. Execute J5 next.
+
+### Locked IA (variant A)
+
+`/projects` shows **two blocks**:
+
+1. **Проекты** — personal bilingual copies (as today), optional badge if `meta.jobId` set.
+2. **Общие работы** — job cards for every membership (owner / translator / viewer). Click → **job hub** (not straight into editor).
+
+**Job hub** (page or full panel): members, invites, progress, «создать/открыть/привязать мой проект», later resources, later finalize/result for boss.
+
+### Locked join (variant 1)
+
+- `POST /api/job-invites/accept` with **optional** `localProjectId`.
+- Join **without** local project = membership only → land on **job hub**.
+- Create / import / bind project **later** from hub or invite UI.
+- Fingerprint warn only when binding a local project that has docx fingerprint.
+
+### Task 11: Paste invite link in chrome + join without project
+
+**Files:**
+- Modify: app header / `ProjectsPage` chrome — paste/open invite URL or raw token → route to accept flow
+- Modify: `JobInviteAcceptPage.vue` — primary CTA «Вступить в работу» **without** requiring local project; then show hub actions
+- Modify: accept API client — `localProjectId` optional (already on server)
+
+- [ ] **Step 1: Header control** «Вставить ссылку-приглашение» → parse `/job-invite/:token` or bare token → navigate
+- [ ] **Step 2: Accept without project** → membership → redirect to job hub (`/jobs/:id` or hub panel)
+- [ ] **Step 3: Vitest/router smoke + Commit** `Allow job join without local project; paste invite in chrome.`
+
+### Task 12: `/projects` IA variant A + job hub
+
+**Files:**
+- Create: `src/pages/JobHubPage.vue` (or expand `SharedWorkPanel` to route `/jobs/:id`)
+- Modify: `ProjectsPage.vue` — two blocks «Проекты» | «Общие работы»
+- Modify: router; i18n
+
+**Job hub actions (translator/owner):** open my linked project if any; **создать проект** (DOCX / empty shell); import `.tcat.zip` then bind; invites/members/progress; viewer: stats only + later result download.
+
+- [ ] **Step 1: Route `/jobs/:id` hub**
+- [ ] **Step 2: ProjectsPage two-block IA**
+- [ ] **Step 3: Create/import/bind project from hub** (empty shell allowed)
+- [ ] **Step 4: Commit** `Add job hub and split Projects / Shared works lists.`
+
+### Task 13: Deferred TM write stack (delay before writable bases)
+
+After attach-bases exists (Task 14+), TM writes that target **writable shared bases** go through a **pending stack**, not immediately.
+
+**Behavior:**
+- On project create + project settings: configurable delay (seconds) before the **top** pending TU is flushed to allowed writable bases.
+- If user edits/cancels that pending item before timer fires — it does not flush.
+- If user does nothing — top of stack flushes when timer expires; next item becomes top.
+- UI: **send all** / **cancel all** / **send one** / **cancel one**.
+- Manual save-to-TM still enters the same stack when destination includes shared writable bases; personal-only TM may write immediately (product default: personal immediate, shared via stack).
+
+**Files:** `src/tm/pendingStack.ts` (or similar), EditorPage / project settings, vitest.
+
+- [ ] **Step 1: Unit tests** stack order, delay flush, cancel one/all
+- [ ] **Step 2: Settings** delay on create project + project settings
+- [ ] **Step 3: Wire confirm/autosave** into stack for shared writable destinations
+- [ ] **Step 4: Commit** `Add deferred TM write stack with per-item flush controls.`
+
+### Task 14: Attach selected bases (replaces auto job_tm)
+
+**Files:** reuse dormant `job_resource_*` / sync ideas; new attach UI; no auto ephemeral job TM.
+
+- [ ] **Step 1: Attach personal / cloud TM refs to job** with preset + member overrides
+- [ ] **Step 2: Editor match/write** only via attached bases + privacy copy on Write
+- [ ] **Step 3: Commit** `Attach selectable TM bases to shared work.`
+
+### Task 15: Dual progress metrics + finalize for boss
+
+**Progress (per member, from their linked project):**
+- **TM coverage %** — segments with a usable TM hit / all segments
+- **Translated %** — actually translated segments / all segments  
+Normal that after verbal split + peer review clicks, one member can show ~100% translated and another ~50%.
+
+**Finalize:**
+- Finalizing translator marks **their project** complete → translated DOCX becomes available for **boss download** (upload result blob or generate on finalize).
+- **Viewer/boss does not need a bilingual project** — only job stats + result download.
+
+- [ ] **Step 1: Report both %** on `PATCH …/members/me` (+ UI columns)
+- [ ] **Step 2: Finalize project** API + boss download entry on job hub
+- [ ] **Step 3: Commit** `Add dual progress metrics and boss result finalize.`
+
+### Task 11–12 (IA / join) — do next before attach
+
+See Tasks 11–12 below (paste link, join without project, IA A, job hub). Soft-warn (old Task 9) re-enable only after attach-bases ships.
+
+---
+
 ## Spec coverage checklist
 
 | Spec item | Task |
 |-----------|------|
-| Freeze co-edit north star | Task 0 |
+| Remove co-edit | Task 0 |
 | jobs / members / invites | Tasks 1–3 |
-| Create shared work + clone/import join + fingerprint warn | Tasks 4–5 |
-| Resource preset + overrides + live TM | Tasks 6–7 |
+| Create shared work + import join + fingerprint warn | Tasks 4–5 |
+| Auto job_tm product path | **Removed** (shelved; Task 14 attach replaces) |
 | Per-member progress + part_done + viewer | Task 8 |
-| Soft confirm warning | Task 9 |
+| Soft confirm warning | Task 9 (re-wire after Task 14) |
 | Transfer owner | Tasks 3 + 10 |
-| No email / privacy copy on Write | Tasks 3, 7 |
+| `/projects` IA A + join without project + paste link | Tasks 11–12 |
+| Deferred TM write stack | Task 13 |
+| Attach selected bases | Task 14 |
+| Dual progress % + boss finalize/download | Task 15 |
+| No email | all member/TM UI |
 | No shared bilingual sync | Task 0 + all tasks avoid it |
 | XLIFF / E2E / zones | out of plan |
 
 ## Execution note
 
-Prefer executing **Part 0 + J1 (Tasks 0–5)** first as a shippable slice; then J2→J4. Do not start F2.1 segment locks.
+**Next:** Tasks **11–12** (paste invite, join without project, job hub IA A), then **14** attach bases, **13** deferred TM stack, **15** dual progress + boss result. Do not revive auto `job_tm`. Do not start F2.1 segment locks.

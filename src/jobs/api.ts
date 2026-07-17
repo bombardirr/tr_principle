@@ -8,27 +8,9 @@ import type {
   Job,
   JobInvite,
   JobMember,
-  JobResource,
   PatchJobInput,
   PatchJobMemberInput,
-  PatchJobResourceInput,
 } from '@/types/job'
-import type { TmUnit } from '@/types/tm'
-
-type JobTmPullResponse = {
-  until: string
-  units: TmUnit[]
-  hasMore: boolean
-}
-
-type JobTmPushResponse = {
-  ok: boolean
-  until: string
-}
-
-function jobPath(jobId: string) {
-  return `/api/jobs/${encodeURIComponent(jobId)}`
-}
 
 export async function createJob(input: CreateJobInput) {
   return apiFetch<Job>('/api/jobs', {
@@ -96,41 +78,6 @@ export async function revokeInvite(jobId: string, inviteId: string) {
 export async function acceptInvite(input: AcceptInviteInput) {
   return apiFetch<AcceptInviteResponse>('/api/job-invites/accept', {
     method: 'POST',
-    body: JSON.stringify(input),
-  })
-}
-
-export async function pullJobTm(jobId: string, since: string) {
-  return apiFetch<JobTmPullResponse>(
-    `${jobPath(jobId)}/tm/sync?since=${encodeURIComponent(since)}`,
-  )
-}
-
-export async function pushJobTm(jobId: string, units: TmUnit[]) {
-  return apiFetch<JobTmPushResponse>(`${jobPath(jobId)}/tm/sync`, {
-    method: 'POST',
-    body: JSON.stringify({ units }),
-  })
-}
-
-export async function listJobResources(jobId: string) {
-  const response = await apiFetch<{ resources: JobResource[] }>(`${jobPath(jobId)}/resources`)
-  return response.resources
-}
-
-export async function patchJobResourcePreset(jobId: string, input: PatchJobResourceInput) {
-  return apiFetch<{ kind: string; preset: JobResource['preset'] }>(
-    `${jobPath(jobId)}/resources/preset`,
-    {
-      method: 'PATCH',
-      body: JSON.stringify(input),
-    },
-  )
-}
-
-export async function patchMyJobResource(jobId: string, input: PatchJobResourceInput) {
-  return apiFetch<JobResource>(`${jobPath(jobId)}/resources/me`, {
-    method: 'PATCH',
     body: JSON.stringify(input),
   })
 }
