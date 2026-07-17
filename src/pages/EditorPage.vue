@@ -64,7 +64,9 @@ import { pickMagnetRowId } from '@/editor/magnetGeometry'
 import MagneticSegmentRail from '@/components/MagneticSegmentRail.vue'
 import ParagraphBlock from '@/components/ParagraphBlock.vue'
 import { bindProjectToJob } from '@/jobs/localProject'
-import type { Job } from '@/types/job'
+import { listJobResources, pushJobTm } from '@/jobs/api'
+import { mergeTmSources, pullAllJobTm } from '@/jobs/tm'
+import type { Job, JobResource } from '@/types/job'
 
 const props = defineProps<{ id: string }>()
 const { t } = useI18n()
@@ -93,6 +95,8 @@ const projectLease = useProjectAccess(() => props.id)
 const { settings: tmSettings, toggleAutoSaveToTm } = useTmSettings()
 const { bindings: shortcutBindings, reload: reloadShortcuts } = useShortcutBindings()
 const tmUnits = shallowRef<TmUnit[]>([])
+const jobTmUnits = shallowRef<TmUnit[]>([])
+const jobTmResource = shallowRef<JobResource | null>(null)
 const glossaryTerms = shallowRef<GlossaryTerm[]>([])
 const glossaryOpen = ref(false)
 const tmImportInput = ref<HTMLInputElement | null>(null)
@@ -115,7 +119,7 @@ function clearTmAutosave(segId: string) {
 
 const done = computed(() => (record.value ? countTranslatedSegments(record.value.segments) : 0))
 const total = computed(() => record.value?.segments.length ?? 0)
-const matchTmUnits = computed(() => tmUnits.value)
+const matchTmUnits = computed(() => mergeTmSources(tmUnits.value, jobTmUnits.value))
 
 const tmCoveragePct = computed(() => {
   if (!record.value?.segments.length) return 0
@@ -344,6 +348,33 @@ function setSaveError(e: unknown) {
   }
 }
 
+async function reloadJobTm(jobId = record.value?.meta.jobId) {
+  jobTmUnits.value = []
+  jobTmResource.value = null
+  if (!jobId) return
+  try {
+    const resources = await listJobResources(jobId)
+    const resource = resources.find(item => item.kind === 'job_tm') ?? null
+    jobTmResource.value = resource
+    if (resource?.enabled && resource.canRead) {
+      jobTmUnits.value = await pullAllJobTm(jobId)
+    }
+  } catch {
+    // The personal TM remains available while the job service is offline.
+  }
+}
+
+async function pushUnitsToJob(ids: string[], units: TmUnit[]) {
+  const jobId = record.value?.meta.jobId
+  const resource = jobTmResource.value
+  if (!jobId || !resource?.enabled || !resource.canWrite || !ids.length) return
+  const wanted = new Set(ids)
+  const changed = units.filter(unit => wanted.has(unit.id))
+  if (!changed.length) return
+  await pushJobTm(jobId, changed)
+  jobTmUnits.value = mergeTmSources(jobTmUnits.value, changed)
+}
+
 async function persistNow(): Promise<void> {
   if (!record.value || projectLease.blocked.value) return
   clearSaveTimer()
@@ -372,8 +403,10 @@ async function persistNow(): Promise<void> {
       onlyIds,
     })
     markTmDirty(...dirty)
+    const nextTmUnits = await listTmUnits()
+    tmUnits.value = nextTmUnits
+    await pushUnitsToJob(dirty, nextTmUnits)
     tmAutosaveIds.value = new Set()
-    tmUnits.value = await listTmUnits()
   }
   allSaved.value = true
   error.value = ''
@@ -440,6 +473,8 @@ async function load() {
   let loaded = withNormalizedRecord(found)
   if (gen !== loadGen) return
   record.value = loaded
+  await reloadJobTm(loaded.meta.jobId)
+  if (gen !== loadGen) return
   await restorePageScroll()
   await nextTick()
 }
@@ -1037,7 +1072,9 @@ async function saveSegmentToTmById(segId: string) {
     })
     markTmDirty(...dirty)
     clearTmAutosave(segId)
-    tmUnits.value = await listTmUnits()
+    const nextTmUnits = await listTmUnits()
+    tmUnits.value = nextTmUnits
+    await pushUnitsToJob(dirty, nextTmUnits)
   } catch (e) {
     setSaveError(e)
   }
@@ -1314,6 +1351,7 @@ async function onSharedWorkCreated(job: Job) {
   try {
     record.value = bindProjectToJob(record.value, job)
     await saveProject(record.value)
+    await reloadJobTm(job.id)
     sharedCreateOpen.value = false
     sharedPanelOpen.value = true
     notice.value = t('jobs.createdNotice')
@@ -1641,6 +1679,7 @@ async function goBack() {
       :open="sharedPanelOpen"
       :job-id="record.meta.jobId"
       @close="sharedPanelOpen = false"
+      @resources-changed="reloadJobTm()"
     />
   </section>
   <p v-else-if="error" class="error">{{ error }}</p>

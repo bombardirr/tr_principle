@@ -79,3 +79,25 @@ export type PatchJobMemberInput = {
   progressTotal?: number
   localProjectId?: string
 }
+
+export type JobResourceAcl = {
+  canRead: boolean
+  canWrite: boolean
+  canExport: boolean
+  canClone: boolean
+}
+
+export type JobResource = JobResourceAcl & {
+  kind: 'job_tm'
+  enabled: boolean
+  preset: JobResourceAcl
+}
+
+export type PatchJobResourceInput = {
+  kind?: 'job_tm'
+  enabled?: boolean
+  canRead?: boolean
+  canWrite?: boolean
+  canExport?: boolean
+  canClone?: boolean
+}

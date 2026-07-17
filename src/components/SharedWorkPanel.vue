@@ -1,23 +1,40 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { createInvite, getJob, listInvites, listMembers, revokeInvite } from '@/jobs/api'
+import {
+  createInvite,
+  getJob,
+  listInvites,
+  listJobResources,
+  listMembers,
+  patchJobResourcePreset,
+  patchMyJobResource,
+  revokeInvite,
+} from '@/jobs/api'
 import { inviteLink } from '@/jobs/localProject'
 import { useAuth } from '@/auth/session'
-import type { Job, JobInvite, JobMember } from '@/types/job'
+import type {
+  Job,
+  JobInvite,
+  JobMember,
+  JobResource,
+  JobResourceAcl,
+  PatchJobResourceInput,
+} from '@/types/job'
 
 const props = defineProps<{
   open: boolean
   jobId: string
 }>()
 
-const emit = defineEmits<{ close: [] }>()
+const emit = defineEmits<{ close: []; resourcesChanged: [] }>()
 const { t } = useI18n()
 const { user } = useAuth()
 
 const job = ref<Job | null>(null)
 const members = ref<JobMember[]>([])
 const invites = ref<JobInvite[]>([])
+const resource = ref<JobResource | null>(null)
 const role = ref<'translator' | 'viewer'>('translator')
 const oneTime = ref(true)
 const inviteUrl = ref('')
@@ -41,17 +58,61 @@ async function load() {
   error.value = ''
   inviteUrl.value = ''
   try {
-    const [nextJob, nextMembers] = await Promise.all([
+    const [nextJob, nextMembers, nextResources] = await Promise.all([
       getJob(props.jobId),
       listMembers(props.jobId),
+      listJobResources(props.jobId),
     ])
     job.value = nextJob
     members.value = nextMembers
+    resource.value = nextResources.find(item => item.kind === 'job_tm') ?? null
     invites.value = nextJob.ownerUserId === user.value?.id ? await listInvites(props.jobId) : []
   } catch (err) {
     error.value = err instanceof Error ? err.message : String(err)
   } finally {
     loading.value = false
+  }
+}
+
+type ResourceFlag = keyof JobResourceAcl
+const resourceFlags: ResourceFlag[] = ['canRead', 'canWrite', 'canExport', 'canClone']
+
+function checked(event: Event) {
+  return (event.target as HTMLInputElement).checked
+}
+
+async function updatePreset(flag: ResourceFlag, value: boolean) {
+  if (busy.value || !resource.value) return
+  busy.value = true
+  error.value = ''
+  try {
+    const response = await patchJobResourcePreset(props.jobId, {
+      kind: 'job_tm',
+      [flag]: value,
+    } as PatchJobResourceInput)
+    resource.value = { ...resource.value, preset: response.preset }
+    emit('resourcesChanged')
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : String(err)
+  } finally {
+    busy.value = false
+  }
+}
+
+async function updateMine(flag: ResourceFlag | 'enabled', value: boolean) {
+  if (busy.value || !resource.value) return
+  busy.value = true
+  error.value = ''
+  try {
+    resource.value = await patchMyJobResource(props.jobId, {
+      kind: 'job_tm',
+      [flag]: value,
+    } as PatchJobResourceInput)
+    emit('resourcesChanged')
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : String(err)
+  } finally {
+    busy.value = false
   }
 }
 
@@ -143,6 +204,50 @@ async function revoke(invite: JobInvite) {
               </span>
             </li>
           </ul>
+        </section>
+
+        <section v-if="resource">
+          <h3>{{ t('jobs.resourcesTitle') }}</h3>
+          <div class="resource-card">
+            <div>
+              <strong>{{ t('jobs.jobTmTitle') }}</strong>
+              <p class="muted">{{ t('jobs.jobTmHint') }}</p>
+            </div>
+
+            <fieldset v-if="isOwner" :disabled="busy">
+              <legend>{{ t('jobs.resourcePreset') }}</legend>
+              <label v-for="flag in resourceFlags" :key="`preset-${flag}`" class="check">
+                <input
+                  type="checkbox"
+                  :checked="resource.preset[flag]"
+                  @change="updatePreset(flag, checked($event))"
+                />
+                <span>{{ t(`jobs.resourceFlags.${flag}`) }}</span>
+              </label>
+            </fieldset>
+
+            <fieldset :disabled="busy">
+              <legend>{{ t('jobs.personalAccess') }}</legend>
+              <label class="check">
+                <input
+                  type="checkbox"
+                  :checked="resource.enabled"
+                  @change="updateMine('enabled', checked($event))"
+                />
+                <span>{{ t('jobs.resourceEnabled') }}</span>
+              </label>
+              <label v-for="flag in resourceFlags" :key="`mine-${flag}`" class="check">
+                <input
+                  type="checkbox"
+                  :checked="resource[flag]"
+                  @change="updateMine(flag, checked($event))"
+                />
+                <span>{{ t(`jobs.resourceFlags.${flag}`) }}</span>
+              </label>
+            </fieldset>
+
+            <p class="privacy-note">{{ t('jobs.writePrivacy') }}</p>
+          </div>
         </section>
 
         <section v-if="isOwner">
@@ -309,6 +414,42 @@ small,
   border: 1px solid var(--border);
   border-radius: 10px;
   background: var(--surface-soft);
+}
+
+.resource-card {
+  display: grid;
+  gap: 0.75rem;
+  padding: 0.8rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-soft);
+}
+
+.resource-card p {
+  margin: 0.25rem 0 0;
+}
+
+fieldset {
+  display: grid;
+  gap: 0.45rem;
+  margin: 0;
+  border: 0;
+  padding: 0;
+}
+
+legend {
+  margin-bottom: 0.4rem;
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.privacy-note {
+  border-left: 3px solid var(--accent);
+  padding: 0.55rem 0.65rem;
+  background: var(--surface-2);
+  color: var(--text-muted);
+  font-size: 0.78rem;
 }
 
 .invite-form label:not(.check) {

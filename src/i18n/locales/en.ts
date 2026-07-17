@@ -312,6 +312,20 @@ export default {
     revoked: 'Revoked',
     noInvites: 'No invitations yet.',
     never: 'Never',
+    resourcesTitle: 'Resources',
+    jobTmTitle: 'Shared translation memory',
+    jobTmHint: 'Matches saved by job members are available in the editor.',
+    resourcePreset: 'Default access for translators',
+    personalAccess: 'My access overrides',
+    resourceEnabled: 'Enabled',
+    resourceFlags: {
+      canRead: 'Read matches',
+      canWrite: 'Write new matches',
+      canExport: 'Export',
+      canClone: 'Clone',
+    },
+    writePrivacy:
+      'When Write is enabled, saved translations are shared with job members and attributed by display name or anonymous ID. Email is never shown.',
     joinTitle: 'Join shared work',
     joinHint:
       'Import the .tcat.zip received from the owner, or choose an existing local copy, then join.',
