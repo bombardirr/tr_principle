@@ -17,6 +17,8 @@ import EditorGlyph from '@/components/EditorGlyph.vue'
 import TooltipWrap from '@/components/TooltipWrap.vue'
 import { publicActorLabel, useAuth } from '@/auth/session'
 import { useProjectAccess } from '@/composables/useProjectAccess'
+import { postProjectPresence } from '@/projects/collabApi'
+import { pullProjectSnapshot, pushProjectSnapshot } from '@/projects/collabSync'
 import { withSegmentAudit } from '@/utils/segmentAudit'
 import { scheduleProjectBackup, pushProjectBackup } from '@/projects/backup'
 import { useTmSettings } from '@/composables/useTmSettings'
@@ -36,9 +38,7 @@ import {
   deleteTmForSegmentSource,
 } from '@/storage/tmIdb'
 import { markTmDirty } from '@/tm/sync'
-import {
-  listGlossaryTerms,
-} from '@/storage/glossaryIdb'
+import { listGlossaryTerms } from '@/storage/glossaryIdb'
 import type { GlossaryTerm } from '@/types/glossary'
 import {
   countTranslatedSegments,
@@ -77,9 +77,11 @@ const saving = ref(false)
 const allSaved = ref(true)
 let saveTimer: ReturnType<typeof setTimeout> | null = null
 let loadGen = 0
+let presenceTimer: ReturnType<typeof setInterval> | null = null
 
 const SAVE_IDLE_MS = 3000
 const UNDO_SAVE_IDLE_MS = 1500
+const PRESENCE_HEARTBEAT_MS = 20_000
 const segHistory = useSegmentHistory()
 
 const previewEnabled = ref(readPreviewEnabled())
@@ -111,9 +113,7 @@ function clearTmAutosave(segId: string) {
   tmAutosaveIds.value = next
 }
 
-const done = computed(() =>
-  record.value ? countTranslatedSegments(record.value.segments) : 0,
-)
+const done = computed(() => (record.value ? countTranslatedSegments(record.value.segments) : 0))
 const total = computed(() => record.value?.segments.length ?? 0)
 
 const tmCoveragePct = computed(() => {
@@ -127,7 +127,7 @@ const tmCoveragePct = computed(() => {
         seg.source,
         record.value.meta.sourceLang,
         record.value.meta.targetLang,
-        { ...opts, ...segmentNeighbors(seg) },
+        { ...opts, ...segmentNeighbors(seg) }
       ).length
     ) {
       hit++
@@ -136,13 +136,15 @@ const tmCoveragePct = computed(() => {
   return Math.round((hit / record.value.segments.length) * 100)
 })
 
-const donePct = computed(() =>
-  total.value ? Math.round((done.value / total.value) * 100) : 0,
-)
+const donePct = computed(() => (total.value ? Math.round((done.value / total.value) * 100) : 0))
 
 const langPairTitle = computed(() => {
   const meta = record.value?.meta
-  if (!meta?.sourceLang || !meta?.targetLang || !findLangPairPreset(meta.sourceLang, meta.targetLang)) {
+  if (
+    !meta?.sourceLang ||
+    !meta?.targetLang ||
+    !findLangPairPreset(meta.sourceLang, meta.targetLang)
+  ) {
     return t('editor.langPairChoose')
   }
   return langPairLabel(meta.sourceLang, meta.targetLang)
@@ -164,7 +166,7 @@ const resegmentDeferred = ref(false)
 const thresholdOpen = ref(false)
 
 const needsResegment = computed(() =>
-  projectNeedsResegment(record.value?.meta, record.value?.segments),
+  projectNeedsResegment(record.value?.meta, record.value?.segments)
 )
 
 const thresholdPct = computed(() => {
@@ -208,7 +210,7 @@ watch(
   () => props.id,
   () => {
     resegmentDeferred.value = false
-  },
+  }
 )
 
 watch(
@@ -231,7 +233,7 @@ watch(
       settingsOpen.value = true
     }
   },
-  { immediate: true },
+  { immediate: true }
 )
 
 function openProjectSettings() {
@@ -295,9 +297,7 @@ const displayName = computed(() => {
   return name.replace(/\.docx$/i, '') || name
 })
 
-const progressTitle = computed(() =>
-  t('editor.progress', { done: done.value, total: total.value }),
-)
+const progressTitle = computed(() => t('editor.progress', { done: done.value, total: total.value }))
 
 const saveStatusTitle = computed(() => {
   if (saving.value) return t('editor.saving')
@@ -312,7 +312,7 @@ const savePhase = computed(() => {
 })
 
 function normalizeStatuses(segments: Segment[]): Segment[] {
-  return segments.map((s) => ({
+  return segments.map(s => ({
     ...s,
     status: normalizeSegmentStatus(s),
   }))
@@ -345,7 +345,7 @@ async function persistNow(): Promise<void> {
   if (!record.value || projectLease.blocked.value) return
   clearSaveTimer()
 
-  const segments = record.value.segments.map((s) => ({
+  const segments = record.value.segments.map(s => ({
     ...s,
     status: finalizeSegmentStatus(s),
   }))
@@ -356,6 +356,12 @@ async function persistNow(): Promise<void> {
   }
 
   await saveProject(record.value)
+  if (record.value.meta.cloudShared && projectLease.cloudToken.value) {
+    await pushProjectSnapshot(record.value, {
+      holderId: projectLease.holderId,
+      token: projectLease.cloudToken.value,
+    })
+  }
   if (projectLease.isLeader.value) {
     scheduleProjectBackup(record.value)
   }
@@ -405,8 +411,7 @@ async function restorePageScroll() {
   const snap = readEditorScroll(props.id)
   if (!snap) return
   const focusId =
-    snap.activeSegmentId &&
-    record.value?.segments.some((s) => s.id === snap.activeSegmentId)
+    snap.activeSegmentId && record.value?.segments.some(s => s.id === snap.activeSegmentId)
       ? snap.activeSegmentId
       : null
   if (focusId) activeSegmentId.value = focusId
@@ -435,9 +440,37 @@ async function load() {
     record.value = null
     return
   }
-  record.value = withNormalizedRecord(found)
+  let loaded = withNormalizedRecord(found)
+  if (loaded.meta.cloudShared) {
+    try {
+      loaded = await pullProjectSnapshot(loaded)
+      await saveProject(loaded)
+    } catch {
+      // Keep the local snapshot available while offline.
+    }
+  }
+  if (gen !== loadGen) return
+  record.value = loaded
+  startPresenceHeartbeat()
   await restorePageScroll()
   await nextTick()
+}
+
+function stopPresenceHeartbeat() {
+  if (presenceTimer) {
+    clearInterval(presenceTimer)
+    presenceTimer = null
+  }
+}
+
+function startPresenceHeartbeat() {
+  stopPresenceHeartbeat()
+  if (!record.value?.meta.cloudShared) return
+  const heartbeat = () => {
+    void postProjectPresence(record.value!.meta.id, projectLease.holderId).catch(() => {})
+  }
+  heartbeat()
+  presenceTimer = setInterval(heartbeat, PRESENCE_HEARTBEAT_MS)
 }
 
 function onBeforeUnload(e: BeforeUnloadEvent) {
@@ -450,7 +483,7 @@ const PAGE_SCROLL_OPTS: AddEventListenerOptions = { passive: true }
 onMounted(() => {
   projectLease.start()
   void load()
-  void listTmUnits().then((units) => {
+  void listTmUnits().then(units => {
     tmUnits.value = units
   })
   void reloadGlossary()
@@ -463,9 +496,12 @@ onMounted(() => {
   reloadShortcuts()
 })
 
-watch(() => props.id, () => {
-  void load()
-})
+watch(
+  () => props.id,
+  () => {
+    void load()
+  }
+)
 
 onUnmounted(() => {
   window.removeEventListener('scroll', onPageScroll, PAGE_SCROLL_OPTS)
@@ -474,6 +510,7 @@ onUnmounted(() => {
   chromeMq?.removeEventListener('change', onChromeMq)
   chromeMq = null
   if (pageScrollSaveTimer) clearTimeout(pageScrollSaveTimer)
+  stopPresenceHeartbeat()
   void persistScroll()
   clearSaveTimer()
   if (previewTimer) clearTimeout(previewTimer)
@@ -485,9 +522,7 @@ onUnmounted(() => {
 /** Replace a segment immutably so shallowRef children re-render. */
 function patchSegment(segId: string, patch: Partial<Segment>) {
   if (!record.value) return
-  const segments = record.value.segments.map((s) =>
-    s.id === segId ? { ...s, ...patch } : s,
-  )
+  const segments = record.value.segments.map(s => (s.id === segId ? { ...s, ...patch } : s))
   record.value = {
     meta: record.value.meta,
     segments,
@@ -537,14 +572,14 @@ function updateTarget(seg: Segment, value: string, styles?: Segment['targetStyle
       after: value,
     }),
   })
-  const after = record.value?.segments.find((s) => s.id === seg.id)
+  const after = record.value?.segments.find(s => s.id === seg.id)
   if (after) segHistory.commit(after, { coalesce: true })
   markTmAutosave(seg.id)
   scheduleSave()
 }
 
 function updateTargetById(segId: string, value: string, styles?: Segment['targetStyles']) {
-  const seg = record.value?.segments.find((s) => s.id === segId)
+  const seg = record.value?.segments.find(s => s.id === segId)
   if (seg) updateTarget(seg, value, styles)
 }
 
@@ -571,14 +606,14 @@ function copySource(seg: Segment) {
       after: plain,
     }),
   })
-  const after = record.value?.segments.find((s) => s.id === seg.id)
+  const after = record.value?.segments.find(s => s.id === seg.id)
   if (after) segHistory.commit(after)
   markTmAutosave(seg.id)
   scheduleSave()
 }
 
 function copySourceById(segId: string) {
-  const seg = record.value?.segments.find((s) => s.id === segId)
+  const seg = record.value?.segments.find(s => s.id === segId)
   if (seg) copySource(seg)
 }
 
@@ -603,13 +638,13 @@ function leaveEmpty(seg: Segment) {
       after: '',
     }),
   })
-  const after = record.value?.segments.find((s) => s.id === seg.id)
+  const after = record.value?.segments.find(s => s.id === seg.id)
   if (after) segHistory.commit(after)
   scheduleSave()
 }
 
 function leaveEmptyById(segId: string) {
-  const seg = record.value?.segments.find((s) => s.id === segId)
+  const seg = record.value?.segments.find(s => s.id === segId)
   if (seg) leaveEmpty(seg)
 }
 
@@ -634,14 +669,14 @@ function resetTarget(seg: Segment) {
       after: '',
     }),
   })
-  const after = record.value?.segments.find((s) => s.id === seg.id)
+  const after = record.value?.segments.find(s => s.id === seg.id)
   if (after) segHistory.commit(after)
   void removeSegmentFromTm(seg)
   scheduleSave()
 }
 
 function resetTargetById(segId: string) {
-  const seg = record.value?.segments.find((s) => s.id === segId)
+  const seg = record.value?.segments.find(s => s.id === segId)
   if (seg) resetTarget(seg)
 }
 
@@ -662,8 +697,7 @@ async function removeSegmentFromTm(seg: Segment) {
 function tmMatchOptions() {
   return {
     punctuationMode: tmSettings.value.punctuationMode,
-    fuzzyMinScore:
-      record.value?.meta.fuzzyMinScore ?? tmSettings.value.fuzzyMinScore,
+    fuzzyMinScore: record.value?.meta.fuzzyMinScore ?? tmSettings.value.fuzzyMinScore,
     enableFragments: false,
   }
 }
@@ -675,7 +709,7 @@ function segmentNeighbors(seg: Segment): {
 } {
   if (!record.value) return {}
   const segs = record.value.segments
-  const i = segs.findIndex((s) => s.id === seg.id)
+  const i = segs.findIndex(s => s.id === seg.id)
   if (i < 0) return {}
   return {
     contextBefore: segs[i - 1]?.source,
@@ -690,24 +724,20 @@ function matchesFor(seg: Segment): TmMatch[] {
     seg.source,
     record.value.meta.sourceLang,
     record.value.meta.targetLang,
-    { ...tmMatchOptions(), ...segmentNeighbors(seg) },
+    { ...tmMatchOptions(), ...segmentNeighbors(seg) }
   )
 }
 
 /** Show “save to TM” only when target is non-empty and not already stored for this source. */
 function needsTmSave(seg: Segment): boolean {
   if (!record.value || !seg.target.trim()) return false
-  const key = tmLookupKey(
-    seg.source,
-    record.value.meta.sourceLang,
-    record.value.meta.targetLang,
-  )
-  return !tmUnits.value.some((u) => u.sourceKey === key && u.target === seg.target)
+  const key = tmLookupKey(seg.source, record.value.meta.sourceLang, record.value.meta.targetLang)
+  return !tmUnits.value.some(u => u.sourceKey === key && u.target === seg.target)
 }
 
 function insertConcordanceTarget(segId: string, target: string) {
   if (!record.value || projectLease.blocked.value) return
-  const seg = record.value.segments.find((s) => s.id === segId)
+  const seg = record.value.segments.find(s => s.id === segId)
   if (!seg) return
   notice.value = ''
   segHistory.seed(seg)
@@ -728,7 +758,7 @@ function insertConcordanceTarget(segId: string, target: string) {
       after: target,
     }),
   })
-  const after = record.value?.segments.find((s) => s.id === segId)
+  const after = record.value?.segments.find(s => s.id === segId)
   if (after) segHistory.commit(after)
   activateSegment(segId)
   scheduleSave()
@@ -738,7 +768,7 @@ const glossaryForPair = computed(() => {
   const meta = record.value?.meta
   if (!meta?.sourceLang || !meta?.targetLang) return []
   return glossaryTerms.value.filter(
-    (t) => t.sourceLang === meta.sourceLang && t.targetLang === meta.targetLang,
+    t => t.sourceLang === meta.sourceLang && t.targetLang === meta.targetLang
   )
 })
 
@@ -748,7 +778,7 @@ async function reloadGlossary() {
 
 function insertGlossaryTarget(segId: string, targetTerm: string) {
   if (!record.value || projectLease.blocked.value) return
-  const seg = record.value.segments.find((s) => s.id === segId)
+  const seg = record.value.segments.find(s => s.id === segId)
   if (!seg) return
   notice.value = ''
   segHistory.seed(seg)
@@ -772,7 +802,7 @@ function insertGlossaryTarget(segId: string, targetTerm: string) {
       after: next,
     }),
   })
-  const after = record.value?.segments.find((s) => s.id === segId)
+  const after = record.value?.segments.find(s => s.id === segId)
   if (after) segHistory.commit(after)
   activateSegment(segId)
   scheduleSave()
@@ -780,7 +810,7 @@ function insertGlossaryTarget(segId: string, targetTerm: string) {
 
 function applyTmMatch(segId: string, match: TmMatch) {
   if (!record.value || projectLease.blocked.value) return
-  const seg = record.value.segments.find((s) => s.id === segId)
+  const seg = record.value.segments.find(s => s.id === segId)
   if (!seg) return
   notice.value = ''
   segHistory.seed(seg)
@@ -801,14 +831,14 @@ function applyTmMatch(segId: string, match: TmMatch) {
       after: match.target,
     }),
   })
-  const after = record.value?.segments.find((s) => s.id === segId)
+  const after = record.value?.segments.find(s => s.id === segId)
   if (after) segHistory.commit(after)
   scheduleSave()
 }
 
 function restoreSegmentSnapshot(
   segId: string,
-  snap: { target: string; status: Segment['status']; targetStyles?: TargetStyleRange[] },
+  snap: { target: string; status: Segment['status']; targetStyles?: TargetStyleRange[] }
 ) {
   if (!record.value || projectLease.blocked.value) return
   patchSegment(segId, {
@@ -835,7 +865,7 @@ const projectFonts = computed(() => collectProjectFonts(record.value?.segments ?
 
 function onTargetSelection(
   segId: string,
-  range: { start: number; end: number; collapsed?: boolean } | null,
+  range: { start: number; end: number; collapsed?: boolean } | null
 ) {
   if (!range) {
     if (targetSelection.value?.segId === segId) targetSelection.value = null
@@ -850,7 +880,7 @@ const stylePaintNonce = ref(0)
 /** Real range selection → that range; collapsed caret / no sel → entire plain target. */
 function styleRangeForApply(
   sel: { start: number; end: number; collapsed?: boolean } | null | undefined,
-  plainLen: number,
+  plainLen: number
 ): { start: number; end: number } {
   if (sel && !sel.collapsed && sel.start !== sel.end) {
     return { start: sel.start, end: sel.end }
@@ -866,7 +896,7 @@ function styleRangeForApply(
  */
 function styleRangeForUi(
   sel: { start: number; end: number; collapsed?: boolean } | null | undefined,
-  plainLen: number,
+  plainLen: number
 ): { start: number; end: number } {
   if (plainLen <= 0) return { start: 0, end: 0 }
   if (sel && !sel.collapsed && sel.start !== sel.end) {
@@ -928,7 +958,7 @@ function styleUiFromUniform(
   styles: TargetStyleRange[] | undefined,
   plainLen: number,
   start: number,
-  end: number,
+  end: number
 ): StyleUiState {
   const args = [styles, plainLen, start, end] as const
   const font = selectionUniformValue(...args, 'font')
@@ -981,7 +1011,7 @@ function styleToolbarLive(segId: string) {
 
 function applyStyleToSegment(segId: string, patch: StyleApplyPatch) {
   if (!record.value || projectLease.blocked.value) return
-  const seg = record.value.segments.find((s) => s.id === segId)
+  const seg = record.value.segments.find(s => s.id === segId)
   if (!seg) return
   const sel = targetSelection.value?.segId === segId ? targetSelection.value : null
   const { start, end } = styleRangeForApply(sel, seg.target.length)
@@ -1021,14 +1051,12 @@ function redoSegment(segId: string) {
 
 async function saveSegmentToTmById(segId: string) {
   if (!record.value || projectLease.blocked.value) return
-  const seg = record.value.segments.find((s) => s.id === segId)
+  const seg = record.value.segments.find(s => s.id === segId)
   if (!seg || !seg.target.trim()) return
 
   const status = finalizeSegmentStatus({ ...seg, status: seg.target.trim() ? 'done' : seg.status })
   patchSegment(segId, { status })
-  const segments = record.value.segments.map((s) =>
-    s.id === segId ? { ...s, status } : s,
-  )
+  const segments = record.value.segments.map(s => (s.id === segId ? { ...s, status } : s))
   try {
     const dirty = await recordDoneSegmentsInTm(segments, {
       sourceLang: record.value.meta.sourceLang,
@@ -1094,7 +1122,7 @@ async function withSaving<T>(fn: () => Promise<T>): Promise<T | undefined> {
 }
 
 function activateSegment(segId: string) {
-  const seg = record.value?.segments.find((s) => s.id === segId)
+  const seg = record.value?.segments.find(s => s.id === segId)
   if (seg) segHistory.seed(seg)
   hoverSegmentId.value = segId
   if (activeSegmentId.value === segId) return
@@ -1116,11 +1144,7 @@ function onPreviewSelectSegment(segId: string) {
 function deactivateEditor() {
   const el = document.activeElement
   if (el instanceof HTMLElement) {
-    if (
-      el.closest('.editor-layout') ||
-      el.closest('.rich-target-inner') ||
-      el.isContentEditable
-    ) {
+    if (el.closest('.editor-layout') || el.closest('.rich-target-inner') || el.isContentEditable) {
       el.blur()
     }
   }
@@ -1171,7 +1195,7 @@ const railHovered = ref(false)
  * (no active segment, no row hover, no rail hover).
  */
 const idleViewportChrome = computed(
-  () => !activeSegmentId.value && !hoverSegmentId.value && !railHovered.value,
+  () => !activeSegmentId.value && !hoverSegmentId.value && !railHovered.value
 )
 const segmentListEl = ref<HTMLElement | null>(null)
 const chromeStacked = ref(false)
@@ -1190,7 +1214,7 @@ function onRowHover(segId: string | null) {
   hoverSegmentId.value = segId
 }
 
-watch(activeSegmentId, (id) => {
+watch(activeSegmentId, id => {
   hoverSegmentId.value = id
 })
 
@@ -1212,7 +1236,7 @@ function onRailHover(hovered: boolean) {
 const railLeaveEmptyActive = computed(() => {
   const id = magnetTargetId()
   if (!id || !record.value) return false
-  const seg = record.value.segments.find((s) => s.id === id)
+  const seg = record.value.segments.find(s => s.id === id)
   return Boolean(seg && isIntentionallyEmpty(seg))
 })
 
@@ -1237,7 +1261,7 @@ function onEditorPointerDown(e: PointerEvent) {
   // Keep the row active when using rail, headers, style toolbar, or TM controls.
   if (
     target.closest(
-      '.target-pane, .magnetic-rail, .magnetic-cluster, .source-header, .target-header, .tm-picker, .style-toolbar, .rail-gutter, .stacked-actions',
+      '.target-pane, .magnetic-rail, .magnetic-cluster, .source-header, .target-header, .tm-picker, .style-toolbar, .rail-gutter, .stacked-actions'
     )
   ) {
     return
@@ -1259,11 +1283,11 @@ function togglePreview() {
   if (previewEnabled.value) previewToken.value++
 }
 
-watch(allSaved, (saved) => {
+watch(allSaved, saved => {
   if (saved) schedulePreviewRefresh()
 })
 
-watch(previewEnabled, (on) => {
+watch(previewEnabled, on => {
   if (on) previewToken.value++
 })
 
@@ -1380,7 +1404,12 @@ async function goBack() {
               >
                 <EditorGlyph name="percent" />
               </IconButton>
-              <div v-if="thresholdOpen" class="threshold-slider" role="group" :aria-label="t('editor.thresholdLabel')">
+              <div
+                v-if="thresholdOpen"
+                class="threshold-slider"
+                role="group"
+                :aria-label="t('editor.thresholdLabel')"
+              >
                 <input
                   class="threshold-range"
                   type="range"
@@ -1418,7 +1447,11 @@ async function goBack() {
                   stroke-width="2.25"
                   aria-hidden="true"
                 >
-                  <path stroke-linecap="round" stroke-linejoin="round" d="m4.5 8.25 2.75 2.75L11.5 5.5" />
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    d="m4.5 8.25 2.75 2.75L11.5 5.5"
+                  />
                 </svg>
                 <span v-else key="pending" class="save-pending-wrap" aria-hidden="true">
                   <span class="save-pending-dot" />
@@ -1453,14 +1486,16 @@ async function goBack() {
           <IconButton :title="t('editor.exportTmxHint')" @click="exportTmxFile">
             <EditorGlyph name="export" />
           </IconButton>
-          <IconButton :title="t('glossary.openHint')" :active="glossaryOpen" @click="glossaryOpen = true">
+          <IconButton
+            :title="t('glossary.openHint')"
+            :active="glossaryOpen"
+            @click="glossaryOpen = true"
+          >
             <EditorGlyph name="glossary" />
           </IconButton>
           <IconButton
             :title="
-              tmSettings.autoSaveToTm
-                ? t('editor.tmAutoSaveOnHint')
-                : t('editor.tmAutoSaveOffHint')
+              tmSettings.autoSaveToTm ? t('editor.tmAutoSaveOnHint') : t('editor.tmAutoSaveOffHint')
             "
             :active="tmSettings.autoSaveToTm"
             @click="toggleAutoSaveToTm()"
@@ -1487,11 +1522,7 @@ async function goBack() {
     <p v-if="total === 0" class="notice">{{ t('projects.emptyDoc') }}</p>
 
     <p v-if="projectLease.blocked.value" class="lease-notice" role="status">
-      {{
-        !projectLease.tabLeader.value
-          ? t('editor.leaseBlocked')
-          : t('editor.cloudLockBlocked')
-      }}
+      {{ !projectLease.tabLeader.value ? t('editor.leaseBlocked') : t('editor.cloudLockBlocked') }}
     </p>
 
     <div
@@ -1562,7 +1593,7 @@ async function goBack() {
             @activate="activateSegment"
             @target-selection="onTargetSelection"
             @row-hover="onRowHover"
-            @apply-style="(patch) => applyStyleToSegment(seg.id, patch)"
+            @apply-style="patch => applyStyleToSegment(seg.id, patch)"
           />
         </div>
       </div>
@@ -1592,11 +1623,7 @@ async function goBack() {
       @close="closeProjectSettings"
       @save="saveProjectSettings"
     />
-    <ResegmentDialog
-      :open="resegmentOpen"
-      @later="deferResegment"
-      @confirm="confirmResegment"
-    />
+    <ResegmentDialog :open="resegmentOpen" @later="deferResegment" @confirm="confirmResegment" />
     <ShareProjectDialog
       :open="shareOpen"
       @close="closeShareDialog"

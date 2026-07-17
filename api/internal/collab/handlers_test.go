@@ -101,6 +101,69 @@ func TestProjectInviteMemberFlow(t *testing.T) {
 	}
 }
 
+func TestSharedProjectLockRequiresEditorAndExcludesOtherEditors(t *testing.T) {
+	dbURL := os.Getenv("DATABASE_URL")
+	if dbURL == "" {
+		t.Skip("DATABASE_URL not set")
+	}
+
+	ctx := context.Background()
+	pool, err := db.Connect(ctx, dbURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(pool.Close)
+	if err := db.Migrate(ctx, pool, filepath.Join("..", "..", "migrations")); err != nil {
+		t.Fatal(err)
+	}
+
+	authHandler := &auth.Handler{
+		Store:   auth.NewStore(pool),
+		Tokens:  auth.NewTokenIssuer([]byte("test-secret-key-32bytes-minimum!!"), time.Hour),
+		Limiter: auth.NewRateLimiter(100, time.Minute),
+	}
+	srv := httptest.NewServer(httpapi.NewRouter(
+		authHandler,
+		&tm.Handler{Store: tm.NewStore(pool)},
+		&glossary.Handler{Store: glossary.NewStore(pool)},
+		&projects.Handler{Store: projects.NewStore(pool), BackupDir: t.TempDir()},
+		&collab.Handler{Store: collab.NewStore(pool)},
+		"http://localhost",
+	))
+	t.Cleanup(srv.Close)
+
+	suffix := time.Now().Format("150405.000000000")
+	ownerToken := collabAuth(t, srv.URL, fmt.Sprintf("collablock_owner_%s@example.com", suffix))
+	editorOneToken := collabAuth(t, srv.URL, fmt.Sprintf("collablock_editor_one_%s@example.com", suffix))
+	editorTwoToken := collabAuth(t, srv.URL, fmt.Sprintf("collablock_editor_two_%s@example.com", suffix))
+	viewerToken := collabAuth(t, srv.URL, fmt.Sprintf("collablock_viewer_%s@example.com", suffix))
+	project := collabJSON(t, http.MethodPost, srv.URL+"/api/projects", ownerToken, map[string]any{
+		"name": "Shared project", "sourceLang": "en", "targetLang": "ru",
+	}, http.StatusCreated)
+	projectID := project["id"].(string)
+
+	for _, member := range []struct {
+		token string
+		role  string
+	}{
+		{editorOneToken, "editor"},
+		{editorTwoToken, "editor"},
+		{viewerToken, "viewer"},
+	} {
+		invite := collabJSON(t, http.MethodPost, srv.URL+"/api/projects/"+projectID+"/invites", ownerToken, map[string]any{
+			"role": member.role,
+		}, http.StatusCreated)
+		collabJSON(t, http.MethodPost, srv.URL+"/api/invites/accept", member.token, map[string]any{
+			"token": invite["token"],
+		}, http.StatusOK)
+	}
+
+	lockURL := srv.URL + "/api/projects/" + projectID + "/lock"
+	collabJSON(t, http.MethodPost, lockURL, viewerToken, map[string]any{"holderId": "viewer-tab"}, http.StatusForbidden)
+	collabJSON(t, http.MethodPost, lockURL, editorOneToken, map[string]any{"holderId": "editor-one-tab"}, http.StatusOK)
+	collabJSON(t, http.MethodPost, lockURL, editorTwoToken, map[string]any{"holderId": "editor-two-tab"}, http.StatusConflict)
+}
+
 func collabAuth(t *testing.T, baseURL, email string) string {
 	t.Helper()
 	response := collabJSON(t, http.MethodPost, baseURL+"/api/auth/register", "", map[string]string{

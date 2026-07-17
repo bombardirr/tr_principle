@@ -42,6 +42,7 @@ export function cloneProjectRecord(record: ProjectRecord): ProjectRecord {
     meta: {
       id: record.meta.id,
       name: record.meta.name,
+      cloudShared: record.meta.cloudShared,
       createdAt: record.meta.createdAt,
       updatedAt: record.meta.updatedAt,
       sourceLang: record.meta.sourceLang,
@@ -53,7 +54,7 @@ export function cloneProjectRecord(record: ProjectRecord): ProjectRecord {
       segmentCount: record.meta.segmentCount,
       doneCount: record.meta.doneCount,
     },
-    segments: record.segments.map((s) => ({
+    segments: record.segments.map(s => ({
       id: s.id,
       storyKey: s.storyKey,
       storyFile: s.storyFile,
@@ -62,7 +63,7 @@ export function cloneProjectRecord(record: ProjectRecord): ProjectRecord {
       sentenceIndex: s.sentenceIndex ?? 0,
       source: s.source,
       target: s.target,
-      targetStyles: s.targetStyles?.map((r) => ({ ...r })),
+      targetStyles: s.targetStyles?.map(r => ({ ...r })),
       status: s.status,
       inTable: s.inTable,
       inTextbox: s.inTextbox ?? false,
@@ -71,7 +72,7 @@ export function cloneProjectRecord(record: ProjectRecord): ProjectRecord {
       updatedAt: s.updatedAt,
       updatedBy: s.updatedBy,
       origin: s.origin,
-      audit: s.audit?.map((e) => ({
+      audit: s.audit?.map(e => ({
         at: e.at,
         action: e.action,
         by: e.by,
@@ -79,12 +80,12 @@ export function cloneProjectRecord(record: ProjectRecord): ProjectRecord {
         before: e.before,
         after: e.after,
       })),
-      spans: s.spans.map((sp) => ({
+      spans: s.spans.map(sp => ({
         runIndices: [...sp.runIndices],
         fingerprint: sp.fingerprint,
         text: sp.text,
       })),
-      paragraphSpans: s.paragraphSpans?.map((sp) => ({
+      paragraphSpans: s.paragraphSpans?.map(sp => ({
         runIndices: [...sp.runIndices],
         fingerprint: sp.fingerprint,
         text: sp.text,
@@ -97,7 +98,7 @@ export function cloneProjectRecord(record: ProjectRecord): ProjectRecord {
 export async function listProjects(): Promise<ProjectMeta[]> {
   const db = await getDb()
   const all = await db.getAllFromIndex('projects', 'by-updated')
-  return all.map((p) => ({ ...p.meta })).reverse()
+  return all.map(p => ({ ...p.meta })).reverse()
 }
 
 export async function getProject(id: string): Promise<ProjectRecord | undefined> {

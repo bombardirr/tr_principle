@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/bombardirr/tr_principle/api/internal/auth"
@@ -12,10 +13,13 @@ import (
 )
 
 type Handler struct {
-	Store *Store
+	Store      *Store
+	presenceMu sync.Mutex
+	presence   map[uuid.UUID]map[string]Presence
 }
 
 type createProjectRequest struct {
+	ID         *uuid.UUID      `json:"id"`
 	Name       string          `json:"name"`
 	SourceLang string          `json:"sourceLang"`
 	TargetLang string          `json:"targetLang"`
@@ -86,7 +90,11 @@ func (h *Handler) CreateProject(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid project")
 		return
 	}
-	project, err := h.Store.CreateProject(r.Context(), user.ID, uuid.New(), body.Name, [2]string{body.SourceLang, body.TargetLang}, body.Meta)
+	projectID := uuid.New()
+	if body.ID != nil {
+		projectID = *body.ID
+	}
+	project, err := h.Store.CreateProject(r.Context(), user.ID, projectID, body.Name, [2]string{body.SourceLang, body.TargetLang}, body.Meta)
 	if err != nil {
 		writeStoreError(w, err)
 		return

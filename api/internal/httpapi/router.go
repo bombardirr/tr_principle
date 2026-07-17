@@ -58,8 +58,12 @@ func NewRouter(
 
 	r.Route("/api/projects/{projectID}", func(r chi.Router) {
 		r.Use(authHandler.Middleware)
-		r.Post("/lock", projectsHandler.ClaimLock)
-		r.Delete("/lock", projectsHandler.ReleaseLock)
+		r.Post("/lock", collabHandler.ClaimSharedOrSoloLock(projectsHandler.ClaimLock))
+		r.Delete("/lock", collabHandler.ReleaseSharedOrSoloLock(projectsHandler.ReleaseLock))
+		r.Get("/sync", collabHandler.PullSync)
+		r.Post("/sync", collabHandler.PushSync)
+		r.Post("/presence", collabHandler.PostPresence)
+		r.Get("/presence", collabHandler.GetPresence)
 		r.Put("/backup", projectsHandler.PutBackup)
 		r.Get("/backup", projectsHandler.GetBackup)
 		r.Head("/backup", projectsHandler.GetBackup)

@@ -1,9 +1,6 @@
 import { computed, onUnmounted, ref, toValue, watch, type MaybeRefOrGetter } from 'vue'
 import { ApiError } from '@/auth/api'
-import {
-  claimProjectLock,
-  releaseProjectLock,
-} from '@/projects/api'
+import { claimProjectLock, releaseProjectLock } from '@/projects/api'
 import { useProjectLease } from '@/composables/useProjectLease'
 import { getTabId } from '@/storage/projectLease'
 
@@ -17,7 +14,7 @@ export function useProjectAccess(projectId: MaybeRefOrGetter<string>) {
   const tab = useProjectLease(projectId)
   const cloudOk = ref(true)
   const cloudBusy = ref(false)
-  let cloudToken = ''
+  const cloudToken = ref('')
   let cloudTimer: ReturnType<typeof setInterval> | null = null
   let startedFor: string | null = null
   const holderId = getTabId()
@@ -25,13 +22,13 @@ export function useProjectAccess(projectId: MaybeRefOrGetter<string>) {
   async function claimCloud(): Promise<void> {
     const id = toValue(projectId)
     try {
-      const res = await claimProjectLock(id, holderId, cloudToken || undefined)
-      cloudToken = res.token
+      const res = await claimProjectLock(id, holderId, cloudToken.value || undefined)
+      cloudToken.value = res.token
       cloudOk.value = true
     } catch (e) {
       if (e instanceof ApiError && e.status === 409) {
         cloudOk.value = false
-        cloudToken = ''
+        cloudToken.value = ''
         return
       }
       // Offline / server down: do not block editing.
@@ -40,13 +37,13 @@ export function useProjectAccess(projectId: MaybeRefOrGetter<string>) {
   }
 
   async function releaseCloud(): Promise<void> {
-    if (!startedFor || !cloudToken) return
+    if (!startedFor || !cloudToken.value) return
     try {
-      await releaseProjectLock(startedFor, holderId, cloudToken)
+      await releaseProjectLock(startedFor, holderId, cloudToken.value)
     } catch {
       /* ignore */
     }
-    cloudToken = ''
+    cloudToken.value = ''
   }
 
   function stopCloudHeartbeat() {
@@ -96,13 +93,14 @@ export function useProjectAccess(projectId: MaybeRefOrGetter<string>) {
 
   watch(
     () => tab.isLeader.value,
-    (leader) => {
+    leader => {
       if (!startedFor) return
       if (leader) void claimCloud()
-      else void releaseCloud().then(() => {
-        cloudOk.value = true
-      })
-    },
+      else
+        void releaseCloud().then(() => {
+          cloudOk.value = true
+        })
+    }
   )
 
   watch(
@@ -110,7 +108,7 @@ export function useProjectAccess(projectId: MaybeRefOrGetter<string>) {
     (id, prev) => {
       if (id === prev) return
       void stop().then(() => start())
-    },
+    }
   )
 
   onUnmounted(() => {
@@ -124,6 +122,8 @@ export function useProjectAccess(projectId: MaybeRefOrGetter<string>) {
     isLeader,
     blocked,
     cloudOk,
+    cloudToken,
+    holderId,
     tabLeader: tab.isLeader,
     start,
     stop,
