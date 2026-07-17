@@ -225,6 +225,7 @@ Outbox / очередь push — **не** в этом пункте («позже
 ### Фаза F: работа в группе ← **в MVP** (модель пересобрана)
 
 **Актуальная спека:** [`docs/superpowers/specs/2026-07-17-shared-work-jobs-design.md`](docs/superpowers/specs/2026-07-17-shared-work-jobs-design.md)  
+**План:** [`docs/superpowers/plans/2026-07-17-shared-work-jobs.md`](docs/superpowers/plans/2026-07-17-shared-work-jobs.md)  
 Устарело (co-edit bilingual + locks): [`docs/superpowers/specs/2026-07-17-group-collaboration-design.md`](docs/superpowers/specs/2026-07-17-group-collaboration-design.md)  
 Старый план co-edit: [`docs/superpowers/plans/2026-07-17-group-collaboration.md`](docs/superpowers/plans/2026-07-17-group-collaboration.md) — не исполнять дальше; адаптировать полезные куски (invite/TM ACL) под jobs.
 
