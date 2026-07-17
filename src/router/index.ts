@@ -1,8 +1,4 @@
-import {
-  createRouter,
-  createWebHistory,
-  type RouteLocationNormalized,
-} from 'vue-router'
+import { createRouter, createWebHistory, type RouteLocationNormalized } from 'vue-router'
 import { bootstrapAuth, useAuth } from '@/auth/session'
 
 declare module 'vue-router' {
@@ -38,6 +34,12 @@ const router = createRouter({
       path: '/job-invite/:token',
       name: 'job-invite',
       component: () => import('@/pages/JobInviteAcceptPage.vue'),
+      meta: { requiresAuth: true },
+    },
+    {
+      path: '/jobs/:id',
+      name: 'job-hub',
+      component: () => import('@/pages/JobHubPage.vue'),
       meta: { requiresAuth: true },
     },
   ],

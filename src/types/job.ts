@@ -20,6 +20,7 @@ export type JobMember = {
   progressDone: number
   progressTotal: number
   lastActiveAt?: string | null
+  localProjectId?: string | null
 }
 
 export type JobInvite = {

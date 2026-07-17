@@ -17,9 +17,8 @@ import { resegmentParagraphs } from '@/tm/resegment'
 import { SEGMENT_SCHEMA_DATE_SAFE } from '@/types/project'
 import IconButton from '@/components/IconButton.vue'
 import EditorGlyph from '@/components/EditorGlyph.vue'
-import SharedWorkPanel from '@/components/SharedWorkPanel.vue'
 import { useAuth } from '@/auth/session'
-import { listJobs, listMembers } from '@/jobs/api'
+import { listJobs } from '@/jobs/api'
 import { parseJobInviteToken } from '@/jobs/inviteToken'
 import type { Job } from '@/types/job'
 import type { ProjectMeta } from '@/types/project'
@@ -31,8 +30,7 @@ const router = useRouter()
 const { user } = useAuth()
 
 const projects = ref<ProjectMeta[]>([])
-const viewerJobs = ref<Job[]>([])
-const viewerJobPanelId = ref<string | null>(null)
+const sharedJobs = ref<Job[]>([])
 const error = ref('')
 const notice = ref('')
 const busy = ref(false)
@@ -44,18 +42,10 @@ const inviteError = ref('')
 
 async function refresh() {
   projects.value = await listProjects()
-  viewerJobs.value = []
-  const userId = user.value?.id
-  if (!userId) return
+  sharedJobs.value = []
+  if (!user.value?.id) return
   try {
-    const jobs = await listJobs()
-    const roles = await Promise.all(
-      jobs.map(async job => ({
-        job,
-        role: (await listMembers(job.id)).find(member => member.userId === userId)?.role,
-      }))
-    )
-    viewerJobs.value = roles.filter(item => item.role === 'viewer').map(item => item.job)
+    sharedJobs.value = await listJobs()
   } catch {
     // Local projects remain available while shared-work cards are offline.
   }
@@ -248,10 +238,11 @@ async function openInvite() {
     <p v-else-if="inviteError" class="error">{{ inviteError }}</p>
     <p v-else-if="notice" class="notice">{{ notice }}</p>
 
-    <p v-if="!projects.length && !viewerJobs.length && !busy" class="empty">
+    <p v-if="!projects.length && !sharedJobs.length && !busy" class="empty">
       {{ t('projects.empty') }}
     </p>
 
+    <h2 class="block-title">{{ t('projects.personalProjectsTitle') }}</h2>
     <ul class="list">
       <li v-for="p in projects" :key="p.id" class="item">
         <router-link class="item-link" :to="{ name: 'editor', params: { id: p.id } }">
@@ -322,31 +313,24 @@ async function openInvite() {
       </li>
     </ul>
 
-    <section v-if="viewerJobs.length" class="viewer-jobs">
-      <h2>{{ t('jobs.viewerJobsTitle') }}</h2>
-      <p class="viewer-hint">{{ t('jobs.viewerJobsHint') }}</p>
+    <section class="viewer-jobs">
+      <h2>{{ t('projects.sharedWorksTitle') }}</h2>
+      <p class="viewer-hint">{{ t('projects.sharedWorksHint') }}</p>
       <ul class="list">
-        <li v-for="job in viewerJobs" :key="job.id" class="item viewer-item">
-          <button type="button" class="viewer-card" @click="viewerJobPanelId = job.id">
+        <li v-for="job in sharedJobs" :key="job.id" class="item viewer-item">
+          <router-link class="viewer-card" :to="{ name: 'job-hub', params: { id: job.id } }">
             <span class="name">
               {{ job.title }}
-              <span class="shared-badge">{{ t('jobs.viewerBadge') }}</span>
             </span>
             <span class="sub">
               {{ job.sourceLang || '—' }} → {{ job.targetLang || '—' }} ·
               {{ t('projects.updated', { date: formatDate(job.updatedAt) }) }}
             </span>
-          </button>
+          </router-link>
         </li>
       </ul>
+      <p v-if="!sharedJobs.length && !busy" class="empty">{{ t('projects.noSharedWorks') }}</p>
     </section>
-
-    <SharedWorkPanel
-      v-if="viewerJobPanelId"
-      :open="true"
-      :job-id="viewerJobPanelId"
-      @close="viewerJobPanelId = null"
-    />
   </section>
 </template>
 
@@ -369,6 +353,12 @@ h1 {
   font-size: 1.6rem;
   font-weight: 700;
   color: var(--text);
+}
+
+.block-title {
+  margin: 1.2rem 0 0;
+  color: var(--text);
+  font-size: 1.15rem;
 }
 
 .actions {
@@ -488,6 +478,7 @@ button.primary {
   padding: 0.2rem 0.3rem;
   background: transparent;
   text-align: left;
+  text-decoration: none;
 }
 
 .name {
