@@ -52,6 +52,9 @@ export function cloneProjectRecord(record: ProjectRecord): ProjectRecord {
       segmentSchemaVersion: record.meta.segmentSchemaVersion,
       segmentCount: record.meta.segmentCount,
       doneCount: record.meta.doneCount,
+      jobId: record.meta.jobId,
+      sourceFilename: record.meta.sourceFilename,
+      sourceHash: record.meta.sourceHash,
     },
     segments: record.segments.map(s => ({
       id: s.id,

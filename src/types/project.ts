@@ -92,6 +92,9 @@ export interface ProjectMeta {
   segmentSchemaVersion?: number
   segmentCount: number
   doneCount: number
+  jobId?: string
+  sourceFilename?: string
+  sourceHash?: string
 }
 
 export interface ProjectRecord {
