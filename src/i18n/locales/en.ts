@@ -338,9 +338,14 @@ export default {
     },
     writePrivacy:
       'When Write is enabled, saved translations are shared with job members and attributed by display name or anonymous ID. Email is never shown.',
+    invitePastePlaceholder: 'Invite link or token',
+    invitePasteAction: 'Open invite',
+    invitePasteInvalid: 'Paste a /job-invite/… link or an invite token.',
     joinTitle: 'Join shared work',
-    joinHint:
-      'Import the .tcat.zip received from the owner, or choose an existing local copy, then join.',
+    joinHint: 'Join the work first. You can create or link a personal project later.',
+    joinMembership: 'Join shared work',
+    joinMembershipHint: 'No project is required. The shared work hub opens after you join.',
+    bindNow: 'or link a project now',
     importTitle: 'Import a project copy',
     importHint: 'Choose a .tcat.zip package. Its bilingual content remains local to this browser.',
     choosePackage: 'Choose .tcat.zip',
@@ -353,6 +358,7 @@ export default {
     imported: 'Imported “{name}”. You can join now.',
     localProjectMissing: 'Local project not found',
     join: 'Join shared work',
+    joinAndBind: 'Join and link',
     joining: 'Joining…',
     mismatchTitle: 'The source document may be different',
     mismatchHint:

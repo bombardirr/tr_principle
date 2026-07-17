@@ -66,7 +66,21 @@ async function resolveAcceptedJob(): Promise<Job> {
   return job
 }
 
-async function join() {
+async function joinWithoutProject() {
+  if (!token.value || busy.value) return
+  busy.value = true
+  error.value = ''
+  try {
+    const accepted = await acceptInvite({ token: token.value })
+    await router.push({ name: 'job-hub', params: { id: accepted.jobId } })
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : String(err)
+  } finally {
+    busy.value = false
+  }
+}
+
+async function joinWithProject() {
   if (!selectedId.value || !token.value || busy.value) return
   busy.value = true
   error.value = ''
@@ -97,7 +111,7 @@ async function finishBinding(record: ProjectRecord, job: Job) {
     await saveProject(linked)
     await patchJobMemberMe(job.id, { localProjectId: linked.meta.id })
     mismatchOpen.value = false
-    await router.push({ name: 'editor', params: { id: linked.meta.id } })
+    await router.push({ name: 'job-hub', params: { id: job.id } })
   } catch (err) {
     error.value = err instanceof Error ? err.message : String(err)
   } finally {
@@ -118,6 +132,20 @@ async function continueMismatch() {
       <h1>{{ t('jobs.joinTitle') }}</h1>
       <p class="lead">{{ t('jobs.joinHint') }}</p>
 
+      <button
+        type="button"
+        class="primary membership-join"
+        :disabled="busy || !token"
+        @click="joinWithoutProject"
+      >
+        {{ busy ? t('jobs.joining') : t('jobs.joinMembership') }}
+      </button>
+      <p class="selection">{{ t('jobs.joinMembershipHint') }}</p>
+
+      <div class="divider">
+        <span>{{ t('jobs.bindNow') }}</span>
+      </div>
+
       <div class="import-box">
         <h2>{{ t('jobs.importTitle') }}</h2>
         <p>{{ t('jobs.importHint') }}</p>
@@ -133,9 +161,7 @@ async function continueMismatch() {
         />
       </div>
 
-      <div class="divider">
-        <span>{{ t('jobs.or') }}</span>
-      </div>
+      <p class="or-label">{{ t('jobs.or') }}</p>
 
       <label class="field">
         <span>{{ t('jobs.localProjectLabel') }}</span>
@@ -160,9 +186,9 @@ async function continueMismatch() {
           type="button"
           class="primary"
           :disabled="busy || !selectedId || !token"
-          @click="join"
+          @click="joinWithProject"
         >
-          {{ busy ? t('jobs.joining') : t('jobs.join') }}
+          {{ busy ? t('jobs.joining') : t('jobs.joinAndBind') }}
         </button>
       </div>
     </div>
@@ -286,6 +312,18 @@ select {
 
 .selection {
   margin: 0.4rem 0 0;
+}
+
+.membership-join {
+  width: 100%;
+  margin-top: 1rem;
+}
+
+.or-label {
+  margin: 0.8rem 0;
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  text-align: center;
 }
 
 .actions {

@@ -20,6 +20,7 @@ import EditorGlyph from '@/components/EditorGlyph.vue'
 import SharedWorkPanel from '@/components/SharedWorkPanel.vue'
 import { useAuth } from '@/auth/session'
 import { listJobs, listMembers } from '@/jobs/api'
+import { parseJobInviteToken } from '@/jobs/inviteToken'
 import type { Job } from '@/types/job'
 import type { ProjectMeta } from '@/types/project'
 
@@ -38,6 +39,8 @@ const busy = ref(false)
 const docxInput = ref<HTMLInputElement | null>(null)
 const projectInput = ref<HTMLInputElement | null>(null)
 const pending = ref<PendingAction | null>(null)
+const inviteInput = ref('')
+const inviteError = ref('')
 
 async function refresh() {
   projects.value = await listProjects()
@@ -190,6 +193,16 @@ function formatDate(iso: string) {
     return iso
   }
 }
+
+async function openInvite() {
+  const token = parseJobInviteToken(inviteInput.value)
+  if (!token) {
+    inviteError.value = t('jobs.invitePasteInvalid')
+    return
+  }
+  inviteError.value = ''
+  await router.push({ name: 'job-invite', params: { token } })
+}
 </script>
 
 <template>
@@ -197,6 +210,17 @@ function formatDate(iso: string) {
     <div class="head">
       <h1>{{ t('projects.title') }}</h1>
       <div class="actions">
+        <form class="invite-paste" @submit.prevent="openInvite">
+          <input
+            v-model="inviteInput"
+            type="text"
+            :placeholder="t('jobs.invitePastePlaceholder')"
+            :aria-label="t('jobs.invitePasteAction')"
+          />
+          <button type="submit" :disabled="!inviteInput.trim()">
+            {{ t('jobs.invitePasteAction') }}
+          </button>
+        </form>
         <button type="button" class="primary" :disabled="busy" @click="docxInput?.click()">
           {{ t('projects.newFromDocx') }}
         </button>
@@ -221,6 +245,7 @@ function formatDate(iso: string) {
     </div>
 
     <p v-if="error" class="error">{{ t('projects.errorGeneric', { message: error }) }}</p>
+    <p v-else-if="inviteError" class="error">{{ inviteError }}</p>
     <p v-else-if="notice" class="notice">{{ notice }}</p>
 
     <p v-if="!projects.length && !viewerJobs.length && !busy" class="empty">
@@ -350,6 +375,22 @@ h1 {
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem;
+}
+
+.invite-paste {
+  display: flex;
+  gap: 0.35rem;
+}
+
+.invite-paste input {
+  width: min(17rem, 42vw);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.45rem 0.65rem;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.85rem;
 }
 
 button {
