@@ -7,6 +7,7 @@ import {
   listInvites,
   listJobResources,
   listMembers,
+  patchJobMemberMe,
   patchJobResourcePreset,
   patchMyJobResource,
   revokeInvite,
@@ -44,6 +45,8 @@ const busy = ref(false)
 const error = ref('')
 
 const isOwner = computed(() => job.value?.ownerUserId === user.value?.id)
+const myMember = computed(() => members.value.find(member => member.userId === user.value?.id))
+const canMarkPartDone = computed(() => myMember.value && myMember.value.role !== 'viewer')
 
 watch(
   () => [props.open, props.jobId] as const,
@@ -129,6 +132,26 @@ function formatDate(value?: string | null) {
   return new Date(value).toLocaleString()
 }
 
+function progressLabel(member: JobMember) {
+  return `${member.progressDone} / ${member.progressTotal}`
+}
+
+async function updatePartDone(value: boolean) {
+  if (busy.value || !myMember.value || !canMarkPartDone.value) return
+  busy.value = true
+  error.value = ''
+  try {
+    const updated = await patchJobMemberMe(props.jobId, { partDone: value })
+    members.value = members.value.map(member =>
+      member.userId === updated.userId ? updated : member
+    )
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : String(err)
+  } finally {
+    busy.value = false
+  }
+}
+
 async function makeInvite() {
   if (busy.value) return
   busy.value = true
@@ -195,6 +218,11 @@ async function revoke(invite: JobInvite) {
       <template v-if="!loading">
         <section>
           <h3>{{ t('jobs.membersTitle') }}</h3>
+          <div class="member-columns" aria-hidden="true">
+            <span>{{ t('jobs.memberColumn') }}</span>
+            <span>{{ t('jobs.progressColumn') }}</span>
+            <span>{{ t('jobs.partDoneColumn') }}</span>
+          </div>
           <ul class="members">
             <li v-for="member in members" :key="member.userId">
               <span class="avatar">{{ memberName(member).slice(0, 1).toUpperCase() }}</span>
@@ -202,8 +230,21 @@ async function revoke(invite: JobInvite) {
                 <strong>{{ memberName(member) }}</strong>
                 <small>{{ roleLabel(member.role) }}</small>
               </span>
+              <span class="member-progress">{{ progressLabel(member) }}</span>
+              <span class="member-done" :class="{ complete: member.partDone }">
+                {{ member.partDone ? t('jobs.partDoneYes') : t('jobs.partDoneNo') }}
+              </span>
             </li>
           </ul>
+          <label v-if="canMarkPartDone" class="check part-done-toggle">
+            <input
+              type="checkbox"
+              :checked="myMember?.partDone"
+              :disabled="busy"
+              @change="updatePartDone(checked($event))"
+            />
+            <span>{{ t('jobs.myPartDone') }}</span>
+          </label>
         </section>
 
         <section v-if="resource">
@@ -383,6 +424,21 @@ h3 {
   padding: 0.55rem 0;
 }
 
+.member-columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 0.75rem;
+  padding: 0 0 0.3rem 2.65rem;
+  color: var(--text-muted);
+  font-size: 0.68rem;
+  font-weight: 600;
+}
+
+.member-columns span:not(:first-child) {
+  min-width: 4.5rem;
+  text-align: right;
+}
+
 .avatar {
   display: grid;
   flex: 0 0 2rem;
@@ -399,6 +455,30 @@ h3 {
   display: flex;
   flex-direction: column;
   min-width: 0;
+}
+
+.member-main {
+  flex: 1 1 auto;
+}
+
+.member-progress,
+.member-done {
+  min-width: 4.5rem;
+  text-align: right;
+  color: var(--text-muted);
+  font-size: 0.78rem;
+}
+
+.member-done.complete {
+  color: var(--ok);
+  font-weight: 600;
+}
+
+.part-done-toggle {
+  margin-top: 0.7rem;
+  padding-top: 0.65rem;
+  border-top: 1px solid var(--border);
+  font-weight: 600;
 }
 
 small,

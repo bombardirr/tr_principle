@@ -64,9 +64,10 @@ import { pickMagnetRowId } from '@/editor/magnetGeometry'
 import MagneticSegmentRail from '@/components/MagneticSegmentRail.vue'
 import ParagraphBlock from '@/components/ParagraphBlock.vue'
 import { bindProjectToJob } from '@/jobs/localProject'
-import { listJobResources, pushJobTm } from '@/jobs/api'
+import { listJobResources, listMembers, patchJobMemberMe, pushJobTm } from '@/jobs/api'
 import { mergeTmSources, pullAllJobTm } from '@/jobs/tm'
-import type { Job, JobResource } from '@/types/job'
+import { computeProgress } from '@/jobs/progress'
+import type { Job, JobResource, JobRole } from '@/types/job'
 
 const props = defineProps<{ id: string }>()
 const { t } = useI18n()
@@ -97,6 +98,7 @@ const { bindings: shortcutBindings, reload: reloadShortcuts } = useShortcutBindi
 const tmUnits = shallowRef<TmUnit[]>([])
 const jobTmUnits = shallowRef<TmUnit[]>([])
 const jobTmResource = shallowRef<JobResource | null>(null)
+const jobRole = ref<JobRole | null>(null)
 const glossaryTerms = shallowRef<GlossaryTerm[]>([])
 const glossaryOpen = ref(false)
 const tmImportInput = ref<HTMLInputElement | null>(null)
@@ -119,6 +121,7 @@ function clearTmAutosave(segId: string) {
 
 const done = computed(() => (record.value ? countTranslatedSegments(record.value.segments) : 0))
 const total = computed(() => record.value?.segments.length ?? 0)
+const editorReadOnly = computed(() => projectLease.blocked.value || jobRole.value === 'viewer')
 const matchTmUnits = computed(() => mergeTmSources(tmUnits.value, jobTmUnits.value))
 
 const tmCoveragePct = computed(() => {
@@ -186,7 +189,7 @@ function toggleThresholdSlider() {
 }
 
 function setThresholdPct(pct: number) {
-  if (!record.value || projectLease.blocked.value) return
+  if (!record.value || editorReadOnly.value) return
   const clamped = Math.min(100, Math.max(50, pct))
   record.value = {
     ...record.value,
@@ -205,7 +208,7 @@ function onThresholdInput(event: Event) {
 /** Persist threshold quietly — not through text autosave UX. */
 async function onThresholdChange(event: Event) {
   onThresholdInput(event)
-  if (!record.value || projectLease.blocked.value) return
+  if (!record.value || editorReadOnly.value) return
   try {
     await saveProject(record.value)
   } catch (e) {
@@ -244,6 +247,7 @@ watch(
 )
 
 function openProjectSettings() {
+  if (editorReadOnly.value) return
   settingsMode.value = needsProjectSettings.value ? 'first' : 'edit'
   settingsOpen.value = true
 }
@@ -258,7 +262,7 @@ function saveProjectSettings(payload: {
   targetLang: string
   fuzzyMinScore: number
 }) {
-  if (!record.value || projectLease.blocked.value) return
+  if (!record.value || editorReadOnly.value) return
   record.value = {
     ...record.value,
     meta: {
@@ -279,7 +283,7 @@ function deferResegment() {
 }
 
 function confirmResegment() {
-  if (!record.value || projectLease.blocked.value) return
+  if (!record.value || editorReadOnly.value) return
   const { segments, ambiguousCount } = resegmentParagraphs(record.value.segments)
   record.value = {
     ...record.value,
@@ -364,6 +368,32 @@ async function reloadJobTm(jobId = record.value?.meta.jobId) {
   }
 }
 
+async function reloadJobMembership(jobId = record.value?.meta.jobId) {
+  jobRole.value = null
+  if (!jobId || !user.value) return
+  try {
+    const members = await listMembers(jobId)
+    jobRole.value = members.find(member => member.userId === user.value?.id)?.role ?? null
+  } catch {
+    // Keep the local project available if membership cannot be refreshed.
+  }
+}
+
+async function reportJobProgress() {
+  const jobId = record.value?.meta.jobId
+  if (!jobId || jobRole.value === 'viewer') return
+  const progress = computeProgress(record.value!.segments)
+  try {
+    await patchJobMemberMe(jobId, {
+      progressDone: progress.done,
+      progressTotal: progress.total,
+      localProjectId: record.value!.meta.id,
+    })
+  } catch {
+    // Progress reporting must not turn a successful local save into a failure.
+  }
+}
+
 async function pushUnitsToJob(ids: string[], units: TmUnit[]) {
   const jobId = record.value?.meta.jobId
   const resource = jobTmResource.value
@@ -376,7 +406,7 @@ async function pushUnitsToJob(ids: string[], units: TmUnit[]) {
 }
 
 async function persistNow(): Promise<void> {
-  if (!record.value || projectLease.blocked.value) return
+  if (!record.value || editorReadOnly.value) return
   clearSaveTimer()
 
   const segments = record.value.segments.map(s => ({
@@ -390,6 +420,7 @@ async function persistNow(): Promise<void> {
   }
 
   await saveProject(record.value)
+  await reportJobProgress()
   if (projectLease.isLeader.value) {
     scheduleProjectBackup(record.value)
   }
@@ -473,6 +504,8 @@ async function load() {
   let loaded = withNormalizedRecord(found)
   if (gen !== loadGen) return
   record.value = loaded
+  await reloadJobMembership(loaded.meta.jobId)
+  if (gen !== loadGen) return
   await reloadJobTm(loaded.meta.jobId)
   if (gen !== loadGen) return
   await restorePageScroll()
@@ -526,7 +559,7 @@ onUnmounted(() => {
 
 /** Replace a segment immutably so shallowRef children re-render. */
 function patchSegment(segId: string, patch: Partial<Segment>) {
-  if (!record.value) return
+  if (!record.value || editorReadOnly.value) return
   const segments = record.value.segments.map(s => (s.id === segId ? { ...s, ...patch } : s))
   record.value = {
     meta: record.value.meta,
@@ -536,7 +569,7 @@ function patchSegment(segId: string, patch: Partial<Segment>) {
 }
 
 function scheduleSave(idleMs = SAVE_IDLE_MS) {
-  if (!record.value || projectLease.blocked.value) return
+  if (!record.value || editorReadOnly.value) return
   allSaved.value = false
   notice.value = ''
   clearSaveTimer()
@@ -558,7 +591,7 @@ function editActor() {
 }
 
 function updateTarget(seg: Segment, value: string, styles?: Segment['targetStyles']) {
-  if (!record.value || projectLease.blocked.value) return
+  if (!record.value || editorReadOnly.value) return
   notice.value = ''
   segHistory.seed(seg)
   const by = editActor()
@@ -589,7 +622,7 @@ function updateTargetById(segId: string, value: string, styles?: Segment['target
 }
 
 function copySource(seg: Segment) {
-  if (!record.value || projectLease.blocked.value) return
+  if (!record.value || editorReadOnly.value) return
   notice.value = ''
   segHistory.seed(seg)
   const by = editActor()
@@ -623,7 +656,7 @@ function copySourceById(segId: string) {
 }
 
 function leaveEmpty(seg: Segment) {
-  if (!record.value || projectLease.blocked.value) return
+  if (!record.value || editorReadOnly.value) return
   notice.value = ''
   clearTmAutosave(seg.id)
   segHistory.seed(seg)
@@ -654,7 +687,7 @@ function leaveEmptyById(segId: string) {
 }
 
 function resetTarget(seg: Segment) {
-  if (!record.value || projectLease.blocked.value) return
+  if (!record.value || editorReadOnly.value) return
   notice.value = ''
   clearTmAutosave(seg.id)
   segHistory.seed(seg)
@@ -741,7 +774,7 @@ function needsTmSave(seg: Segment): boolean {
 }
 
 function insertConcordanceTarget(segId: string, target: string) {
-  if (!record.value || projectLease.blocked.value) return
+  if (!record.value || editorReadOnly.value) return
   const seg = record.value.segments.find(s => s.id === segId)
   if (!seg) return
   notice.value = ''
@@ -782,7 +815,7 @@ async function reloadGlossary() {
 }
 
 function insertGlossaryTarget(segId: string, targetTerm: string) {
-  if (!record.value || projectLease.blocked.value) return
+  if (!record.value || editorReadOnly.value) return
   const seg = record.value.segments.find(s => s.id === segId)
   if (!seg) return
   notice.value = ''
@@ -814,7 +847,7 @@ function insertGlossaryTarget(segId: string, targetTerm: string) {
 }
 
 function applyTmMatch(segId: string, match: TmMatch) {
-  if (!record.value || projectLease.blocked.value) return
+  if (!record.value || editorReadOnly.value) return
   const seg = record.value.segments.find(s => s.id === segId)
   if (!seg) return
   notice.value = ''
@@ -845,7 +878,7 @@ function restoreSegmentSnapshot(
   segId: string,
   snap: { target: string; status: Segment['status']; targetStyles?: TargetStyleRange[] }
 ) {
-  if (!record.value || projectLease.blocked.value) return
+  if (!record.value || editorReadOnly.value) return
   patchSegment(segId, {
     target: snap.target,
     targetStyles: snap.targetStyles ?? [],
@@ -1015,7 +1048,7 @@ function styleToolbarLive(segId: string) {
 }
 
 function applyStyleToSegment(segId: string, patch: StyleApplyPatch) {
-  if (!record.value || projectLease.blocked.value) return
+  if (!record.value || editorReadOnly.value) return
   const seg = record.value.segments.find(s => s.id === segId)
   if (!seg) return
   const sel = targetSelection.value?.segId === segId ? targetSelection.value : null
@@ -1029,7 +1062,7 @@ function applyStyleToSegment(segId: string, patch: StyleApplyPatch) {
 }
 
 function onEditorKeydown(e: KeyboardEvent) {
-  if (projectLease.blocked.value) return
+  if (editorReadOnly.value) return
   if (!(e.ctrlKey || e.metaKey) || e.altKey) return
   const k = e.key.toLowerCase()
   if (k !== 'b' && k !== 'i' && k !== 'u') return
@@ -1043,19 +1076,19 @@ function onEditorKeydown(e: KeyboardEvent) {
 }
 
 function undoSegment(segId: string) {
-  if (!record.value || projectLease.blocked.value) return
+  if (!record.value || editorReadOnly.value) return
   const snap = segHistory.undo(segId)
   if (snap) restoreSegmentSnapshot(segId, snap)
 }
 
 function redoSegment(segId: string) {
-  if (!record.value || projectLease.blocked.value) return
+  if (!record.value || editorReadOnly.value) return
   const snap = segHistory.redo(segId)
   if (snap) restoreSegmentSnapshot(segId, snap)
 }
 
 async function saveSegmentToTmById(segId: string) {
-  if (!record.value || projectLease.blocked.value) return
+  if (!record.value || editorReadOnly.value) return
   const seg = record.value.segments.find(s => s.id === segId)
   if (!seg || !seg.target.trim()) return
 
@@ -1299,7 +1332,7 @@ watch(previewEnabled, on => {
 })
 
 async function uploadCloudBackup() {
-  if (!record.value || projectLease.blocked.value) return
+  if (!record.value || editorReadOnly.value) return
   saving.value = true
   try {
     await persistNow()
@@ -1351,6 +1384,8 @@ async function onSharedWorkCreated(job: Job) {
   try {
     record.value = bindProjectToJob(record.value, job)
     await saveProject(record.value)
+    await reloadJobMembership(job.id)
+    await reportJobProgress()
     await reloadJobTm(job.id)
     sharedCreateOpen.value = false
     sharedPanelOpen.value = true
@@ -1448,7 +1483,7 @@ async function goBack() {
                   max="100"
                   step="1"
                   :value="thresholdPct"
-                  :disabled="projectLease.blocked.value"
+                  :disabled="editorReadOnly"
                   @input="onThresholdInput"
                   @change="onThresholdChange"
                 />
@@ -1507,14 +1542,14 @@ async function goBack() {
           <IconButton
             :title="record.meta.jobId ? t('jobs.openPanelHint') : t('jobs.createFromEditorHint')"
             :active="Boolean(record.meta.jobId)"
-            :disabled="!record.meta.jobId && projectLease.blocked.value"
+            :disabled="!record.meta.jobId && editorReadOnly"
             @click="openSharedWork"
           >
             <EditorGlyph name="send" />
           </IconButton>
           <IconButton
             :title="t('editor.cloudBackupHint')"
-            :disabled="!record || projectLease.blocked.value"
+            :disabled="!record || editorReadOnly"
             @click="uploadCloudBackup"
           >
             <EditorGlyph name="cloud-upload" />
@@ -1563,10 +1598,13 @@ async function goBack() {
     <p v-if="projectLease.blocked.value" class="lease-notice" role="status">
       {{ !projectLease.tabLeader.value ? t('editor.leaseBlocked') : t('editor.cloudLockBlocked') }}
     </p>
+    <p v-else-if="jobRole === 'viewer'" class="lease-notice" role="status">
+      {{ t('jobs.viewerReadOnly') }}
+    </p>
 
     <div
       class="editor-layout"
-      :class="{ 'with-preview': previewEnabled, 'editor-readonly': projectLease.blocked.value }"
+      :class="{ 'with-preview': previewEnabled, 'editor-readonly': editorReadOnly }"
     >
       <div class="editor-main" @keydown="onEditorKeydown">
         <div id="editor-concordance-root" class="editor-concordance-root" />
@@ -1602,7 +1640,7 @@ async function goBack() {
             :can-redo="segHistory.canRedo"
             :redo-count="segHistory.redoCount"
             :style-paint-nonce="stylePaintNonce"
-            :style-disabled="projectLease.blocked.value"
+            :style-disabled="editorReadOnly"
             :has-style-selection="styleToolbarLive(seg.id)"
             :bold-active="styleUiForSegment(seg).bold"
             :italic-active="styleUiForSegment(seg).italic"

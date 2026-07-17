@@ -5,7 +5,8 @@ export default {
     langHint: 'Язык интерфейса',
     themeDark: 'тёмная',
     themeLight: 'светлая',
-    offlineBanner: 'Нет сети. Локальная работа доступна; синхронизация ТМ и облако — после восстановления связи.',
+    offlineBanner:
+      'Нет сети. Локальная работа доступна; синхронизация ТМ и облако — после восстановления связи.',
   },
   auth: {
     logout: 'Выйти',
@@ -201,7 +202,8 @@ export default {
     resegmentConfirm: 'Пересегментировать',
     resegmentLater: 'Позже',
     resegmentDone: 'Проект разбит на предложения',
-    resegmentAmbiguous: 'Пересегментировано. Проверьте абзацы, где перевод не удалось разнести чисто ({n}).',
+    resegmentAmbiguous:
+      'Пересегментировано. Проверьте абзацы, где перевод не удалось разнести чисто ({n}).',
     copySource: 'Скопировать оригинал',
     copySourceHint: 'Скопировать текст и оформление оригинала в поле перевода',
     leaveEmpty: 'Оставить пустым',
@@ -222,7 +224,8 @@ export default {
     autosaved: 'Сохранено',
     unsavedPending: 'Изменения сохранятся автоматически',
     exported: 'Переведённый DOCX скачан',
-    projectSaved: 'Копия проекта скачана (.tcat.zip) — её можно открыть позже через «Открыть копию проекта»',
+    projectSaved:
+      'Копия проекта скачана (.tcat.zip) — её можно открыть позже через «Открыть копию проекта»',
     projectNotFound: 'Проект не найден',
     previewOn: 'Предпросмотр',
     previewOnHint: 'Открыть предпросмотр собранного DOCX',
@@ -295,6 +298,16 @@ export default {
     panelTitle: 'Общая работа',
     loading: 'Загрузка…',
     membersTitle: 'Участники',
+    memberColumn: 'Участник',
+    progressColumn: 'Сегменты',
+    partDoneColumn: 'Часть готова',
+    partDoneYes: 'Да',
+    partDoneNo: 'Нет',
+    myPartDone: 'Моя часть готова',
+    viewerBadge: 'наблюдатель',
+    viewerJobsTitle: 'Работы для наблюдения',
+    viewerJobsHint: 'Откройте карточку работы, чтобы видеть участников и их прогресс.',
+    viewerReadOnly: 'Роль наблюдателя: проект открыт только для чтения.',
     inviteTitle: 'Пригласить по ссылке',
     roleLabel: 'Роль',
     roles: {

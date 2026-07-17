@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { openDocx, DocxError } from '@/docx/openDocx'
@@ -17,14 +17,21 @@ import { resegmentParagraphs } from '@/tm/resegment'
 import { SEGMENT_SCHEMA_DATE_SAFE } from '@/types/project'
 import IconButton from '@/components/IconButton.vue'
 import EditorGlyph from '@/components/EditorGlyph.vue'
+import SharedWorkPanel from '@/components/SharedWorkPanel.vue'
+import { useAuth } from '@/auth/session'
+import { listJobs, listMembers } from '@/jobs/api'
+import type { Job } from '@/types/job'
 import type { ProjectMeta } from '@/types/project'
 
 type PendingAction = { type: 'delete' | 'resegment'; id: string }
 
 const { t } = useI18n()
 const router = useRouter()
+const { user } = useAuth()
 
 const projects = ref<ProjectMeta[]>([])
+const viewerJobs = ref<Job[]>([])
+const viewerJobPanelId = ref<string | null>(null)
 const error = ref('')
 const notice = ref('')
 const busy = ref(false)
@@ -34,9 +41,24 @@ const pending = ref<PendingAction | null>(null)
 
 async function refresh() {
   projects.value = await listProjects()
+  viewerJobs.value = []
+  const userId = user.value?.id
+  if (!userId) return
+  try {
+    const jobs = await listJobs()
+    const roles = await Promise.all(
+      jobs.map(async job => ({
+        job,
+        role: (await listMembers(job.id)).find(member => member.userId === userId)?.role,
+      }))
+    )
+    viewerJobs.value = roles.filter(item => item.role === 'viewer').map(item => item.job)
+  } catch {
+    // Local projects remain available while shared-work cards are offline.
+  }
 }
 
-onMounted(refresh)
+watch(() => user.value?.id, refresh, { immediate: true })
 
 async function onDocxSelected(e: Event) {
   const input = e.target as HTMLInputElement
@@ -67,10 +89,7 @@ async function onDocxSelected(e: Event) {
     })
     await router.push({ name: 'editor', params: { id } })
   } catch (err) {
-    error.value =
-      err instanceof DocxError || err instanceof Error
-        ? err.message
-        : String(err)
+    error.value = err instanceof DocxError || err instanceof Error ? err.message : String(err)
   } finally {
     busy.value = false
   }
@@ -204,7 +223,9 @@ function formatDate(iso: string) {
     <p v-if="error" class="error">{{ t('projects.errorGeneric', { message: error }) }}</p>
     <p v-else-if="notice" class="notice">{{ notice }}</p>
 
-    <p v-if="!projects.length && !busy" class="empty">{{ t('projects.empty') }}</p>
+    <p v-if="!projects.length && !viewerJobs.length && !busy" class="empty">
+      {{ t('projects.empty') }}
+    </p>
 
     <ul class="list">
       <li v-for="p in projects" :key="p.id" class="item">
@@ -275,6 +296,32 @@ function formatDate(iso: string) {
         </div>
       </li>
     </ul>
+
+    <section v-if="viewerJobs.length" class="viewer-jobs">
+      <h2>{{ t('jobs.viewerJobsTitle') }}</h2>
+      <p class="viewer-hint">{{ t('jobs.viewerJobsHint') }}</p>
+      <ul class="list">
+        <li v-for="job in viewerJobs" :key="job.id" class="item viewer-item">
+          <button type="button" class="viewer-card" @click="viewerJobPanelId = job.id">
+            <span class="name">
+              {{ job.title }}
+              <span class="shared-badge">{{ t('jobs.viewerBadge') }}</span>
+            </span>
+            <span class="sub">
+              {{ job.sourceLang || '—' }} → {{ job.targetLang || '—' }} ·
+              {{ t('projects.updated', { date: formatDate(job.updatedAt) }) }}
+            </span>
+          </button>
+        </li>
+      </ul>
+    </section>
+
+    <SharedWorkPanel
+      v-if="viewerJobPanelId"
+      :open="true"
+      :job-id="viewerJobPanelId"
+      @close="viewerJobPanelId = null"
+    />
   </section>
 </template>
 
@@ -338,6 +385,22 @@ button.primary {
   color: var(--text-muted);
 }
 
+.viewer-jobs {
+  margin-top: 1.6rem;
+}
+
+.viewer-jobs h2 {
+  margin: 0;
+  color: var(--text);
+  font-size: 1.15rem;
+}
+
+.viewer-hint {
+  margin: 0.3rem 0 0;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}
+
 .list {
   list-style: none;
   padding: 0;
@@ -353,7 +416,9 @@ button.primary {
   border-radius: 10px;
   padding: 0.5rem 0.35rem 0.5rem 0.65rem;
   margin-bottom: 0.45rem;
-  transition: background 0.15s ease, border-color 0.15s ease;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease;
 }
 
 .item:hover {
@@ -369,6 +434,19 @@ button.primary {
   gap: 0.15rem;
   text-decoration: none;
   color: inherit;
+}
+
+.viewer-card {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.15rem;
+  border: 0;
+  padding: 0.2rem 0.3rem;
+  background: transparent;
+  text-align: left;
 }
 
 .name {
