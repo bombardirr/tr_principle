@@ -1,7 +1,11 @@
 # Group collaboration (shared projects + TM attach) — design
 
 Date: 2026-07-17  
-Status: Approved for planning  
+Status: **Superseded**  
+Superseded by: [`2026-07-17-shared-work-jobs-design.md`](./2026-07-17-shared-work-jobs-design.md)  
+
+> Product direction changed: translators keep **personal bilingual copies**; live sharing is **TM/glossary resources** + a **job** card — not one shared segment grid with locks. Keep this file only as historical context for invites/TM ACL ideas.
+
 Slice: Phase F — F0 spec (F1 → F2.0 → F2.1); F3 / glossary C2 referenced, not fully specified here
 
 ## Goal
