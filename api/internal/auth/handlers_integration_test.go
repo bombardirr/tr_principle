@@ -17,6 +17,7 @@ import (
 	"github.com/bombardirr/tr_principle/api/internal/db"
 	"github.com/bombardirr/tr_principle/api/internal/glossary"
 	"github.com/bombardirr/tr_principle/api/internal/httpapi"
+	"github.com/bombardirr/tr_principle/api/internal/jobs"
 	"github.com/bombardirr/tr_principle/api/internal/projects"
 	"github.com/bombardirr/tr_principle/api/internal/tm"
 )
@@ -51,7 +52,7 @@ func TestAuthFlow(t *testing.T) {
 	srv := httptest.NewServer(httpapi.NewRouter(handler, tmHandler, glossaryHandler, &projects.Handler{
 		Store:     projects.NewStore(pool),
 		BackupDir: t.TempDir(),
-	}, "http://localhost"))
+	}, &jobs.Handler{Store: jobs.NewStore(pool)}, "http://localhost"))
 	t.Cleanup(srv.Close)
 
 	email := fmt.Sprintf("test_%s@example.com", time.Now().Format("150405.000000000"))

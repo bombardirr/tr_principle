@@ -9,6 +9,7 @@ import (
 	"github.com/bombardirr/tr_principle/api/internal/auth"
 	"github.com/bombardirr/tr_principle/api/internal/glossary"
 	"github.com/bombardirr/tr_principle/api/internal/httpapi"
+	"github.com/bombardirr/tr_principle/api/internal/jobs"
 	"github.com/bombardirr/tr_principle/api/internal/projects"
 	"github.com/bombardirr/tr_principle/api/internal/tm"
 )
@@ -22,6 +23,7 @@ func TestProjectRoutes_NoTrailingSlash(t *testing.T) {
 		&tm.Handler{},
 		&glossary.Handler{},
 		&projects.Handler{},
+		&jobs.Handler{},
 		"http://localhost",
 	)
 
@@ -47,5 +49,25 @@ func TestProjectRoutes_NoTrailingSlash(t *testing.T) {
 				t.Fatalf("expected 401 without auth, got %d", rec.Code)
 			}
 		})
+	}
+}
+
+func TestJobsRouteRequiresAuthentication(t *testing.T) {
+	authHandler := &auth.Handler{
+		Tokens: auth.NewTokenIssuer([]byte("test-secret-key-32bytes-minimum!!"), time.Hour),
+	}
+	handler := httpapi.NewRouter(
+		authHandler,
+		&tm.Handler{},
+		&glossary.Handler{},
+		&projects.Handler{},
+		&jobs.Handler{},
+		"http://localhost",
+	)
+
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/jobs", nil))
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("GET /api/jobs without auth = %d, want 401", rec.Code)
 	}
 }

@@ -6,6 +6,7 @@ import (
 
 	"github.com/bombardirr/tr_principle/api/internal/auth"
 	"github.com/bombardirr/tr_principle/api/internal/glossary"
+	"github.com/bombardirr/tr_principle/api/internal/jobs"
 	"github.com/bombardirr/tr_principle/api/internal/projects"
 	"github.com/bombardirr/tr_principle/api/internal/tm"
 	"github.com/go-chi/chi/v5"
@@ -17,6 +18,7 @@ func NewRouter(
 	tmHandler *tm.Handler,
 	glossaryHandler *glossary.Handler,
 	projectsHandler *projects.Handler,
+	jobsHandler *jobs.Handler,
 	allowedOrigin string,
 ) http.Handler {
 	r := chi.NewRouter()
@@ -61,6 +63,22 @@ func NewRouter(
 		r.Put("/backup", projectsHandler.PutBackup)
 		r.Get("/backup", projectsHandler.GetBackup)
 		r.Head("/backup", projectsHandler.GetBackup)
+	})
+
+	r.Group(func(r chi.Router) {
+		r.Use(authHandler.Middleware)
+		r.Post("/api/jobs", jobsHandler.Create)
+		r.Get("/api/jobs", jobsHandler.List)
+		r.Get("/api/jobs/{id}", jobsHandler.Get)
+		r.Patch("/api/jobs/{id}", jobsHandler.Patch)
+		r.Post("/api/jobs/{id}/transfer", jobsHandler.Transfer)
+		r.Get("/api/jobs/{id}/members", jobsHandler.Members)
+		r.Patch("/api/jobs/{id}/members/me", jobsHandler.PatchMe)
+		r.Delete("/api/jobs/{id}/members/{userId}", jobsHandler.RemoveMember)
+		r.Post("/api/jobs/{id}/invites", jobsHandler.CreateInvite)
+		r.Get("/api/jobs/{id}/invites", jobsHandler.Invites)
+		r.Post("/api/jobs/{id}/invites/{inviteId}/revoke", jobsHandler.RevokeInvite)
+		r.Post("/api/job-invites/accept", jobsHandler.AcceptInvite)
 	})
 
 	return r

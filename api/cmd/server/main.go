@@ -15,6 +15,7 @@ import (
 	"github.com/bombardirr/tr_principle/api/internal/db"
 	"github.com/bombardirr/tr_principle/api/internal/glossary"
 	"github.com/bombardirr/tr_principle/api/internal/httpapi"
+	"github.com/bombardirr/tr_principle/api/internal/jobs"
 	"github.com/bombardirr/tr_principle/api/internal/projects"
 	"github.com/bombardirr/tr_principle/api/internal/tm"
 )
@@ -53,7 +54,8 @@ func main() {
 		Store:     projects.NewStore(pool),
 		BackupDir: cfg.BackupDir,
 	}
-	api := httpapi.NewRouter(handler, tmHandler, glossaryHandler, projectsHandler, cfg.AllowedOrigin)
+	jobsHandler := &jobs.Handler{Store: jobs.NewStore(pool)}
+	api := httpapi.NewRouter(handler, tmHandler, glossaryHandler, projectsHandler, jobsHandler, cfg.AllowedOrigin)
 	handlerRoot := httpapi.MountSPA(api, cfg.PublicDir)
 
 	srv := &http.Server{

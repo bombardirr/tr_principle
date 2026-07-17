@@ -17,6 +17,7 @@ import (
 	"github.com/bombardirr/tr_principle/api/internal/db"
 	"github.com/bombardirr/tr_principle/api/internal/glossary"
 	"github.com/bombardirr/tr_principle/api/internal/httpapi"
+	"github.com/bombardirr/tr_principle/api/internal/jobs"
 	"github.com/bombardirr/tr_principle/api/internal/projects"
 	"github.com/bombardirr/tr_principle/api/internal/tm"
 	"github.com/google/uuid"
@@ -51,6 +52,7 @@ func TestProjectLockAndBackup(t *testing.T) {
 		&tm.Handler{Store: tm.NewStore(pool)},
 		&glossary.Handler{Store: glossary.NewStore(pool)},
 		&projects.Handler{Store: projects.NewStore(pool), BackupDir: backupDir},
+		&jobs.Handler{Store: jobs.NewStore(pool)},
 		"http://localhost",
 	))
 	t.Cleanup(srv.Close)
