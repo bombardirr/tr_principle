@@ -30,7 +30,7 @@ import { readPreviewEnabled, writePreviewEnabled } from '@/editor/previewPrefere
 import { findTmMatches } from '@/tm/match'
 import { findLangPairPreset, langPairLabel } from '@/tm/langPairs'
 import { tmLookupKey } from '@/tm/normalize'
-import { projectNeedsResegment, resegmentParagraphs } from '@/tm/resegment'
+import { projectNeedsResegment, resegmentProjectRecord } from '@/tm/resegment'
 import { exportTmx, parseTmx } from '@/tm/tmx'
 import {
   listTmUnits,
@@ -65,7 +65,7 @@ import { pickMagnetRowId } from '@/editor/magnetGeometry'
 import MagneticSegmentRail from '@/components/MagneticSegmentRail.vue'
 import ParagraphBlock from '@/components/ParagraphBlock.vue'
 import { bindProjectToJob } from '@/jobs/localProject'
-import { listMembers, patchJobMemberMe, getJob } from '@/jobs/api'
+import { listMembers, getJob } from '@/jobs/api'
 import {
   acknowledgeJobJoins,
   jobHasJoinUnread,
@@ -73,7 +73,7 @@ import {
   stopJoinActivityPolling,
 } from '@/jobs/joinActivity'
 import type { Job, JobRole } from '@/types/job'
-import { computeProgress, computeTmCoverage } from '@/jobs/progress'
+import { reportJobMemberProgress } from '@/jobs/reportProgress'
 import { fingerprintDocx, fingerprintMismatch } from '@/jobs/fingerprint'
 
 const props = defineProps<{ id: string }>()
@@ -97,6 +97,11 @@ const segHistory = useSegmentHistory()
 const previewEnabled = ref(readPreviewEnabled())
 const previewToken = ref(0)
 let previewTimer: ReturnType<typeof setTimeout> | null = null
+const PREVIEW_OVERLAY_MQ = '(max-width: 1280px)'
+const previewOverlayMode = ref(
+  typeof window !== 'undefined' ? window.matchMedia(PREVIEW_OVERLAY_MQ).matches : false,
+)
+const previewAsOverlay = computed(() => previewEnabled.value && previewOverlayMode.value)
 let pageScrollSaveTimer: ReturnType<typeof setTimeout> | null = null
 const activeSegmentId = ref<string | null>(null)
 const projectLease = useProjectAccess(() => props.id)
@@ -295,9 +300,9 @@ function deferResegment() {
   resegmentOpen.value = false
 }
 
-function confirmResegment() {
+async function confirmResegment() {
   if (!record.value || editorReadOnly.value) return
-  const { segments, ambiguousCount } = resegmentParagraphs(record.value.segments)
+  const { segments, ambiguousCount } = await resegmentProjectRecord(record.value)
   record.value = {
     ...record.value,
     meta: {
@@ -309,10 +314,9 @@ function confirmResegment() {
   }
   resegmentOpen.value = false
   resegmentDeferred.value = false
-  notice.value =
-    ambiguousCount > 0
-      ? t('editor.resegmentAmbiguous', { n: ambiguousCount })
-      : t('editor.resegmentDone')
+  if (ambiguousCount > 0) {
+    notice.value = t('editor.resegmentAmbiguous', { n: ambiguousCount })
+  }
   scheduleSave()
 }
 
@@ -378,30 +382,8 @@ async function reloadJobMembership(jobId = record.value?.meta.jobId) {
 
 async function reportJobProgress() {
   const jobId = record.value?.meta.jobId
-  if (!jobId || jobRole.value === 'viewer') return
-  const progress = computeProgress(record.value!.segments)
-  let progressTm = 0
-  try {
-    const units = await listTmUnits()
-    progressTm = computeTmCoverage(
-      record.value!.segments,
-      units,
-      record.value!.meta.sourceLang,
-      record.value!.meta.targetLang,
-    ).tmHits
-  } catch {
-    // TM coverage is best-effort.
-  }
-  try {
-    await patchJobMemberMe(jobId, {
-      progressDone: progress.done,
-      progressTotal: progress.total,
-      progressTm,
-      localProjectId: record.value!.meta.id,
-    })
-  } catch {
-    // Progress reporting must not turn a successful local save into a failure.
-  }
+  if (!jobId || jobRole.value === 'viewer' || !record.value) return
+  await reportJobMemberProgress(jobId, record.value)
 }
 
 async function persistNow(): Promise<void> {
@@ -532,6 +514,10 @@ onMounted(() => {
   chromeMq = window.matchMedia('(max-width: 800px)')
   onChromeMq()
   chromeMq.addEventListener('change', onChromeMq)
+  previewOverlayMq = window.matchMedia(PREVIEW_OVERLAY_MQ)
+  onPreviewOverlayMq()
+  previewOverlayMq.addEventListener('change', onPreviewOverlayMq)
+  window.addEventListener('keydown', onPreviewOverlayKey)
   reloadShortcuts()
 })
 
@@ -579,6 +565,10 @@ onUnmounted(() => {
   window.removeEventListener('keydown', onClearFocusKey)
   chromeMq?.removeEventListener('change', onChromeMq)
   chromeMq = null
+  previewOverlayMq?.removeEventListener('change', onPreviewOverlayMq)
+  previewOverlayMq = null
+  window.removeEventListener('keydown', onPreviewOverlayKey)
+  document.body.style.removeProperty('overflow')
   if (pageScrollSaveTimer) clearTimeout(pageScrollSaveTimer)
   void persistScroll()
   clearSaveTimer()
@@ -1269,6 +1259,7 @@ const idleViewportChrome = computed(
 const segmentListEl = ref<HTMLElement | null>(null)
 const chromeStacked = ref(false)
 let chromeMq: MediaQueryList | null = null
+let previewOverlayMq: MediaQueryList | null = null
 
 function onChromeMq() {
   chromeStacked.value = chromeMq?.matches ?? false
@@ -1352,12 +1343,34 @@ function togglePreview() {
   if (previewEnabled.value) previewToken.value++
 }
 
+function closePreview() {
+  if (!previewEnabled.value) return
+  previewEnabled.value = false
+  writePreviewEnabled(false)
+}
+
+function onPreviewOverlayMq() {
+  previewOverlayMode.value = previewOverlayMq?.matches ?? false
+}
+
+function onPreviewOverlayKey(e: KeyboardEvent) {
+  if (e.key === 'Escape' && previewAsOverlay.value) {
+    e.preventDefault()
+    closePreview()
+  }
+}
+
 watch(allSaved, saved => {
   if (saved) schedulePreviewRefresh()
 })
 
 watch(previewEnabled, on => {
   if (on) previewToken.value++
+})
+
+watch(previewAsOverlay, on => {
+  if (on) document.body.style.overflow = 'hidden'
+  else document.body.style.removeProperty('overflow')
 })
 
 async function uploadCloudBackup() {
@@ -1764,7 +1777,11 @@ async function goBack() {
     <div
       v-else
       class="editor-layout"
-      :class="{ 'with-preview': previewEnabled, 'editor-readonly': editorReadOnly }"
+      :class="{
+        'with-preview': previewEnabled && !previewAsOverlay,
+        'preview-overlay-open': previewAsOverlay,
+        'editor-readonly': editorReadOnly,
+      }"
     >
       <div class="editor-main" @keydown="onEditorKeydown">
         <div id="editor-concordance-root" class="editor-concordance-root" />
@@ -1834,8 +1851,25 @@ async function goBack() {
           />
         </div>
       </div>
+      <Teleport to="body">
+        <div
+          v-if="previewAsOverlay"
+          class="preview-overlay-root"
+          @click.self="closePreview"
+        >
+          <DocxPreviewPanel
+            :project-id="props.id"
+            :record="record"
+            :refresh-token="previewToken"
+            :active-segment-id="activeSegmentId"
+            overlay
+            @select-segment="onPreviewSelectSegment"
+            @close="closePreview"
+          />
+        </div>
+      </Teleport>
       <DocxPreviewPanel
-        v-if="previewEnabled"
+        v-if="previewEnabled && !previewAsOverlay"
         :project-id="props.id"
         :record="record"
         :refresh-token="previewToken"
@@ -2280,10 +2314,34 @@ h1.doc-title {
   .editor-layout.with-preview {
     grid-template-columns: 1fr;
   }
+}
 
-  .editor-layout.with-preview :deep(.preview-panel) {
-    justify-self: center;
-    max-width: 100%;
-  }
+.preview-overlay-root {
+  position: fixed;
+  top: 3.35rem;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 40;
+  display: flex;
+  align-items: stretch;
+  justify-content: center;
+  padding: 0.55rem 0.65rem 0.65rem;
+  background: color-mix(in srgb, var(--bg) 72%, transparent);
+  backdrop-filter: blur(2px);
+  pointer-events: auto;
+}
+
+.preview-overlay-root :deep(.preview-panel) {
+  flex: 1 1 auto;
+  min-height: 0;
+  width: fit-content;
+  max-width: 100%;
+  margin: 0 auto;
+  padding: 0.45rem 0.55rem 0.55rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.28);
 }
 </style>

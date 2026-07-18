@@ -158,6 +158,70 @@ describe('docx round-trip', () => {
     expect(segments[0]!.spans.some((s) => s.fingerprint.startsWith('u:'))).toBe(true)
   })
 
+  it('preserves w:tab gaps between signature labels on identity export', () => {
+    const xml = minimalDocumentXml(
+      `<w:p>
+        <w:r><w:tab/><w:tab/><w:tab/></w:r>
+        <w:r><w:t>подпись</w:t></w:r>
+        <w:r><w:tab/><w:tab/><w:tab/><w:tab/></w:r>
+        <w:r><w:t>ФИО работника</w:t></w:r>
+      </w:p>`,
+    )
+    const stories = [{ key: 'document', path: 'word/document.xml', xml }]
+    const segments = extractSegmentsFromStories(stories)
+    expect(segments.length).toBe(2)
+    expect(segments[0]!.source).toMatch(/подпись\t+$/)
+    expect(segments[1]!.source.replace(/\s+$/, '')).toBe('ФИО работника')
+
+    const updated = applyTranslationsToStories({ 'word/document.xml': xml }, segments)
+    const out = updated['word/document.xml']!
+    expect(out.match(/<w:tab\b/g)?.length ?? 0).toBeGreaterThanOrEqual(7)
+    expect(out).toMatch(/подпись[\s\S]*?<w:tab[\s\S]*?ФИО работника/)
+  })
+
+  it('keeps tab gaps on vacation notification fixture when present', async () => {
+    const { readFileSync, existsSync } = await import('node:fs')
+    const { resolve } = await import('node:path')
+    const fixture = resolve('tmp-vacation.docx')
+    if (!existsSync(fixture)) return
+
+    const zip = await JSZip.loadAsync(readFileSync(fixture))
+    const xml = await zip.file('word/document.xml')!.async('string')
+    const segments = extractSegmentsFromStories([
+      { key: 'document', path: 'word/document.xml', xml },
+    ])
+    const sig = segments.filter(s => /подпись/i.test(s.source))
+    const fio = segments.filter(s => /ФИО работника/i.test(s.source))
+    expect(sig.length).toBeGreaterThanOrEqual(1)
+    expect(fio.length).toBeGreaterThanOrEqual(1)
+    // Layout fields are separate editor units, not one merged source.
+    expect(sig.every(s => !/ФИО работника/i.test(s.source))).toBe(true)
+    expect(fio.every(s => !/подпись/i.test(s.source))).toBe(true)
+    expect(sig.some(s => /\t{2,}/.test(s.source))).toBe(true)
+
+    const updated = applyTranslationsToStories({ 'word/document.xml': xml }, segments)
+    const out = updated['word/document.xml']!
+    expect(out).toMatch(/подпись[\s\S]*?<w:tab[\s\S]*?ФИО работника/)
+    expect((out.match(/<w:tab\b/g) ?? []).length).toBeGreaterThanOrEqual(20)
+  })
+
+  it('keeps original XML untouched when nothing is translated (faithful preview)', async () => {
+    const xml = minimalDocumentXml(
+      `<w:p>
+        <w:r><w:tab/><w:tab/><w:tab/></w:r>
+        <w:r><w:t>подпись</w:t></w:r>
+        <w:r><w:tab/><w:tab/><w:tab/><w:tab/></w:r>
+        <w:r><w:t>ФИО работника</w:t></w:r>
+      </w:p>`,
+    )
+    const bytes = await makeDocx({ 'word/document.xml': xml })
+    const opened = await openDocx(bytes)
+    const blob = await buildTranslatedDocx(bytes, opened.segments)
+    const outZip = await JSZip.loadAsync(blob)
+    const outXml = await outZip.file('word/document.xml')!.async('string')
+    expect(outXml).toBe(xml)
+  })
+
   it('opens sample vacation schedule fixture when present', async () => {
     const { readFileSync, existsSync } = await import('node:fs')
     const { resolve } = await import('node:path')

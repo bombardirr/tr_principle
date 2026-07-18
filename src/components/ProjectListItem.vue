@@ -8,7 +8,7 @@ import { getProjectBackup } from '@/projects/api'
 import { deleteProject, getProject, saveProject } from '@/storage/idb'
 import { unpackProjectFile } from '@/storage/projectFile'
 import { langPairLabel } from '@/tm/langPairs'
-import { resegmentParagraphs } from '@/tm/resegment'
+import { resegmentProjectRecord } from '@/tm/resegment'
 import { SEGMENT_SCHEMA_DATE_SAFE, type ProjectMeta } from '@/types/project'
 
 const props = defineProps<{
@@ -28,6 +28,8 @@ const emit = defineEmits<{
 const { t } = useI18n()
 const busy = ref(false)
 const pending = ref<'delete' | 'resegment' | null>(null)
+/** Inline resegment button feedback: spinner → check → idle. */
+const resegmentFlash = ref<'spin' | 'ok' | null>(null)
 
 const langPairText = computed(() => {
   const source = props.project.sourceLang || props.sourceLang
@@ -54,29 +56,39 @@ async function confirmRemove() {
   emit('changed')
 }
 
+function sleep(ms: number) {
+  return new Promise<void>(resolve => {
+    setTimeout(resolve, ms)
+  })
+}
+
 async function confirmResegment() {
   busy.value = true
+  pending.value = null
+  resegmentFlash.value = 'spin'
   emit('error', '')
   emit('notice', '')
+  const started = Date.now()
   try {
     const record = await getProject(props.project.id)
     if (!record) throw new Error('Project not found')
-    const { segments, ambiguousCount } = resegmentParagraphs(record.segments)
+    const { segments, ambiguousCount } = await resegmentProjectRecord(record)
     record.segments = segments
     record.meta.segmentSchemaVersion = SEGMENT_SCHEMA_DATE_SAFE
     record.meta.segmentCount = segments.length
     await saveProject(record)
-    pending.value = null
     emit('changed')
-    emit(
-      'notice',
-      ambiguousCount > 0
-        ? t('projects.resegmentAmbiguous', { name: props.project.name, n: ambiguousCount })
-        : t('projects.resegmentDone', { name: props.project.name }),
-    )
+    if (ambiguousCount > 0) {
+      emit('notice', t('projects.resegmentAmbiguous', { name: props.project.name, n: ambiguousCount }))
+    }
+    const elapsed = Date.now() - started
+    if (elapsed < 1000) await sleep(1000 - elapsed)
+    resegmentFlash.value = 'ok'
+    await sleep(500)
   } catch (err) {
     emit('error', err instanceof Error ? err.message : String(err))
   } finally {
+    resegmentFlash.value = null
     busy.value = false
   }
 }
@@ -156,11 +168,22 @@ async function restoreFromCloud() {
           <EditorGlyph name="cloud-download" />
         </IconButton>
         <IconButton
+          class="resegment-btn"
+          :class="{
+            'resegment-btn--spin': resegmentFlash === 'spin',
+            'resegment-btn--ok': resegmentFlash === 'ok',
+          }"
           :title="t('projects.resegment')"
           :disabled="busy"
           @click="pending = 'resegment'"
         >
-          <EditorGlyph name="resegment" />
+          <EditorGlyph
+            v-if="resegmentFlash === 'spin'"
+            class="glyph-spin"
+            name="spinner"
+          />
+          <EditorGlyph v-else-if="resegmentFlash === 'ok'" name="check" />
+          <EditorGlyph v-else name="resegment" />
         </IconButton>
         <IconButton
           danger
@@ -237,5 +260,27 @@ async function restoreFromCloud() {
   display: inline-flex;
   align-items: center;
   gap: 0.05rem;
+}
+
+:deep(.glyph-spin) {
+  animation: resegment-spin 0.7s linear infinite;
+}
+
+:deep(.resegment-btn.resegment-btn--spin),
+:deep(.resegment-btn.resegment-btn--spin:disabled) {
+  color: #4db8ff !important;
+  opacity: 1;
+}
+
+:deep(.resegment-btn.resegment-btn--ok),
+:deep(.resegment-btn.resegment-btn--ok:disabled) {
+  color: #3dd68c !important;
+  opacity: 1;
+}
+
+@keyframes resegment-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 </style>

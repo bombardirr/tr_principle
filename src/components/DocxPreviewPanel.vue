@@ -21,10 +21,13 @@ const props = defineProps<{
   record: ProjectRecord
   refreshToken: number
   activeSegmentId?: string | null
+  /** Full-screen peek overlay (narrow editor). */
+  overlay?: boolean
 }>()
 
 const emit = defineEmits<{
   selectSegment: [segmentId: string]
+  close: []
 }>()
 
 const { t } = useI18n()
@@ -157,7 +160,9 @@ function fitPreviewSheet() {
   if (naturalWidth <= 0) return
 
   const layout = scroller.value.closest('.editor-layout') as HTMLElement | null
-  const maxAvailable = layout?.clientWidth ?? naturalWidth
+  const panel = scroller.value.closest('.preview-panel') as HTMLElement | null
+  const maxAvailable =
+    (props.overlay ? panel?.clientWidth : layout?.clientWidth) ?? naturalWidth
   const scale = Math.min(1, maxAvailable / naturalWidth)
   lastPreviewScale = scale
 
@@ -188,10 +193,12 @@ function bindFitObserver(el: HTMLElement | null) {
   fitObserver?.disconnect()
   fitObserver = null
   if (!el) return
-  const layout = el.closest('.editor-layout')
-  if (!layout) return
+  const target = props.overlay
+    ? el.closest('.preview-panel')
+    : el.closest('.editor-layout')
+  if (!target) return
   fitObserver = new ResizeObserver(() => fitPreviewSheet())
-  fitObserver.observe(layout)
+  fitObserver.observe(target)
 }
 
 function bindScrollerScroll(el: HTMLElement | null) {
@@ -213,6 +220,15 @@ async function previewBlob(): Promise<Blob> {
   return buildTranslatedDocx(props.record.docx, props.record.segments)
 }
 
+/** docx-preview applies experimental tab stops on a 500ms timer — swap only after that. */
+const TAB_STOP_SETTLE_MS = 520
+
+function sleep(ms: number) {
+  return new Promise<void>(resolve => {
+    setTimeout(resolve, ms)
+  })
+}
+
 async function renderPreview(options?: { forcePendingScroll?: boolean }) {
   if (!host.value || !scroller.value) return
   const run = ++gen
@@ -221,17 +237,27 @@ async function renderPreview(options?: { forcePendingScroll?: boolean }) {
   else beginLoading()
   error.value = ''
 
+  const staging = document.createElement('div')
+  staging.className = 'preview-staging'
+  staging.setAttribute('aria-hidden', 'true')
+  scroller.value.appendChild(staging)
+
   try {
     const blob = await previewBlob()
     if (run !== gen || !host.value || !scroller.value) return
 
-    const staging = document.createElement('div')
     await renderAsync(blob, staging, undefined, {
       className: 'docx',
       inWrapper: true,
       breakPages: true,
       ignoreLastRenderedPageBreak: true,
+      // Real tab-stop positions (подпись / ФИО); without this tabs become a single em-space.
+      experimental: true,
     })
+    if (run !== gen || !host.value || !scroller.value) return
+
+    // Keep the previous sheet visible until tab stops finish — avoids a style/margin jump.
+    await sleep(TAB_STOP_SETTLE_MS)
     if (run !== gen || !host.value || !scroller.value) return
 
     let scrollTop = scroller.value.scrollTop
@@ -249,7 +275,8 @@ async function renderPreview(options?: { forcePendingScroll?: boolean }) {
       }
     }
     const pageScrollY = window.scrollY
-    host.value.replaceChildren(...staging.childNodes)
+    const nextNodes = [...staging.childNodes]
+    host.value.replaceChildren(...nextNodes)
     hasContent.value = true
     await nextTick()
     fitPreviewSheet()
@@ -268,6 +295,7 @@ async function renderPreview(options?: { forcePendingScroll?: boolean }) {
       segmentIndex = new Map()
     }
   } finally {
+    staging.remove()
     if (run === gen) {
       endLoading()
       refreshing.value = false
@@ -307,6 +335,16 @@ watch(scroller, (el) => {
 }, { immediate: true })
 
 watch(
+  () => props.overlay,
+  () => {
+    nextTick(() => {
+      bindFitObserver(scroller.value)
+      fitPreviewSheet()
+    })
+  },
+)
+
+watch(
   () => props.refreshToken,
   () => {
     // Translation edits only affect result preview.
@@ -337,8 +375,13 @@ onBeforeUnmount(() => {
 <template>
   <aside
     class="preview-panel"
-    :class="mode === 'source' ? 'is-source' : 'is-target'"
+    :class="[
+      mode === 'source' ? 'is-source' : 'is-target',
+      { 'is-overlay': overlay },
+    ]"
     :aria-label="modeLabel"
+    :aria-modal="overlay || undefined"
+    :role="overlay ? 'dialog' : undefined"
   >
     <div class="preview-chrome">
       <IconButton
@@ -367,6 +410,15 @@ onBeforeUnmount(() => {
           @click="scrollPreviewTo('bottom')"
         >
           <EditorGlyph name="scroll-bottom" />
+        </IconButton>
+        <IconButton
+          v-if="overlay"
+          :title="t('editor.previewOffHint')"
+          ghost
+          @mousedown.prevent
+          @click="emit('close')"
+        >
+          <EditorGlyph name="close" />
         </IconButton>
       </div>
     </div>
@@ -403,6 +455,17 @@ onBeforeUnmount(() => {
   max-height: calc(100vh - 5.5rem);
   display: flex;
   flex-direction: column;
+  min-height: 0;
+}
+
+.preview-panel.is-overlay {
+  position: relative;
+  top: auto;
+  align-self: stretch;
+  width: fit-content;
+  max-width: 100%;
+  max-height: none;
+  height: 100%;
   min-height: 0;
 }
 
@@ -472,6 +535,27 @@ onBeforeUnmount(() => {
   isolation: isolate;
   box-shadow: inset 0 0 0 1px transparent;
   transition: box-shadow 0.18s ease;
+}
+
+.preview-staging {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: max(100%, 36rem);
+  visibility: hidden;
+  pointer-events: none;
+  z-index: -1;
+  overflow: hidden;
+}
+
+.preview-panel.is-overlay .preview-body {
+  flex: 1 1 auto;
+  width: fit-content;
+  max-width: 100%;
+  max-height: none;
+  min-height: 0;
+  margin: 0 auto;
+  overflow-y: auto;
 }
 
 .preview-panel.is-source .preview-body {

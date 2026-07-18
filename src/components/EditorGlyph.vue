@@ -26,6 +26,7 @@ import {
   FileDown,
   History,
   ListRestart,
+  LoaderCircle,
   Pencil,
   Percent,
   Plus,
@@ -69,6 +70,7 @@ export type GlyphName =
   | 'send'
   | 'user-plus'
   | 'resegment'
+  | 'spinner'
   | 'check'
   | 'close'
   | 'cloud-upload'
@@ -114,6 +116,7 @@ const icons: Record<GlyphName, Component> = {
   send: SendHorizontal,
   'user-plus': UserPlus,
   resegment: ListRestart,
+  spinner: LoaderCircle,
   check: Check,
   close: X,
   'cloud-upload': CloudUpload,

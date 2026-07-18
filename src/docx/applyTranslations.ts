@@ -96,6 +96,15 @@ function translationParts(segment: Segment): string[] | null {
   return parts
 }
 
+/** No user translation yet — keep original Word XML (tabs, runs, layout). */
+function isPassthroughGroup(group: Segment[]): boolean {
+  if (hasNonEmptyTargetStyles(group)) return false
+  return group.every((s) => {
+    if (isIntentionallyEmpty(s)) return false
+    return s.target.trim() === '' || s.target === s.source
+  })
+}
+
 /** Merge sentence siblings that share a Word paragraph into one apply unit. */
 export function mergeParagraphGroup(segments: Segment[]): Segment | null {
   if (!segments.length) return null
@@ -170,6 +179,8 @@ export function applyTranslationsToStories(
     }
 
     for (const group of groups.values()) {
+      if (isPassthroughGroup(group)) continue
+
       const merged = mergeParagraphGroup(group)
       if (!merged) continue
       const para = paragraphs[merged.paraIndex]
@@ -212,7 +223,8 @@ export function applyTranslationsToStories(
       })
     }
 
-    out[path] = serializeXml(doc, original)
+    const touched = [...groups.values()].some((group) => !isPassthroughGroup(group))
+    out[path] = touched ? serializeXml(doc, original) : original
   }
 
   return out

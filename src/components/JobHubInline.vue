@@ -11,12 +11,16 @@ import { openDocx } from '@/docx/openDocx'
 import { createEmptyJobProject } from '@/jobs/createProject'
 import { fingerprintMismatch } from '@/jobs/fingerprint'
 import { bindProjectToJob, projectFingerprint } from '@/jobs/localProject'
-import { getJob, listMembers, patchJobMemberMe } from '@/jobs/api'
+import { getJob, listMembers } from '@/jobs/api'
 import { createProjectId, getProject, listProjects, saveProject } from '@/storage/idb'
 import { unpackProjectFile } from '@/storage/projectFile'
 import { SEGMENT_SCHEMA_DATE_SAFE, type ProjectMeta, type ProjectRecord } from '@/types/project'
 import { acknowledgeJobJoins } from '@/jobs/joinActivity'
 import { progressPercent } from '@/jobs/progress'
+import {
+  computeLocalJobProgress,
+  reportJobMemberProgress,
+} from '@/jobs/reportProgress'
 import type { Job, JobMember } from '@/types/job'
 
 const props = defineProps<{
@@ -44,6 +48,12 @@ const busy = ref(false)
 const error = ref('')
 const pendingProject = ref<ProjectRecord | null>(null)
 const mismatchOpen = ref(false)
+/** Live local progress for current user (overrides stale server roster). */
+const myLiveProgress = ref<{
+  progressDone: number
+  progressTotal: number
+  progressTm: number
+} | null>(null)
 
 const myMember = computed(() => members.value.find(member => member.userId === user.value?.id))
 const canHaveProject = computed(
@@ -53,6 +63,13 @@ const linkedProject = computed(() => {
   const localId = myMember.value?.localProjectId
   return projects.value.find(project => project.id === localId || project.jobId === props.jobId)
 })
+
+const displayMembers = computed(() =>
+  members.value.map(member => {
+    if (!myLiveProgress.value || member.userId !== user.value?.id) return member
+    return { ...member, ...myLiveProgress.value }
+  }),
+)
 
 watch(
   () => props.jobId,
@@ -80,6 +97,7 @@ async function load() {
   busy.value = true
   error.value = ''
   job.value = null
+  myLiveProgress.value = null
   try {
     const [nextJob, nextMembers, nextProjects] = await Promise.all([
       getJob(props.jobId),
@@ -92,10 +110,36 @@ async function load() {
     if (user.value?.id && nextJob.ownerUserId === user.value.id) {
       acknowledgeJobJoins(user.value.id, nextJob.id, nextMembers)
     }
+    await syncMyProgressFromLocal()
   } catch (err) {
     error.value = err instanceof Error ? err.message : String(err)
   } finally {
     busy.value = false
+  }
+}
+
+async function syncMyProgressFromLocal() {
+  if (!job.value || !canHaveProject.value) return
+  const localId =
+    myMember.value?.localProjectId ||
+    projects.value.find(project => project.jobId === props.jobId)?.id
+  if (!localId) return
+  const record = await getProject(localId)
+  if (!record) return
+
+  const progress = await computeLocalJobProgress(record)
+  myLiveProgress.value = progress
+
+  const updated = await reportJobMemberProgress(job.value.id, record)
+  if (updated) {
+    members.value = members.value.map(member =>
+      member.userId === updated.userId ? updated : member,
+    )
+    myLiveProgress.value = {
+      progressDone: updated.progressDone,
+      progressTotal: updated.progressTotal,
+      progressTm: updated.progressTm ?? progress.progressTm,
+    }
   }
 }
 
@@ -133,7 +177,7 @@ async function bind(record: ProjectRecord) {
   if (!job.value) return
   const linked = bindProjectToJob(record, job.value)
   await saveProject(linked)
-  await patchJobMemberMe(job.value.id, { localProjectId: linked.meta.id })
+  await reportJobMemberProgress(job.value.id, linked)
   mismatchOpen.value = false
   pendingProject.value = null
   await load()
@@ -258,7 +302,7 @@ async function onProjectFileSelected(event: Event) {
     <p v-if="busy && !job" class="muted">{{ t('jobs.loading') }}</p>
 
     <ul v-if="job" class="members">
-      <li v-for="member in members" :key="member.userId" class="member-row">
+      <li v-for="member in displayMembers" :key="member.userId" class="member-row">
         <MarqueeText class="member-name" :text="memberName(member)" max-width="100%" />
         <div class="role-cell">
           <span class="role-chip" :data-role="member.role">{{ roleLabel(member.role) }}</span>

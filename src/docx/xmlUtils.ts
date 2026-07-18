@@ -88,9 +88,22 @@ export function getTextNodes(run: Element): Element[] {
 }
 
 export function runText(run: Element): string {
-  return getTextNodes(run)
-    .map((t) => t.textContent ?? '')
-    .join('')
+  let out = ''
+  for (const c of childrenElements(run)) {
+    const name = localName(c)
+    if (name === 't') out += c.textContent ?? ''
+    else if (name === 'tab') out += '\t'
+  }
+  return out
+}
+
+function runHasTab(run: Element): boolean {
+  return childrenElements(run).some(c => localName(c) === 'tab')
+}
+
+/** True when the run carries text and/or tab stops (layout-significant). */
+export function runHasContent(run: Element): boolean {
+  return getTextNodes(run).length > 0 || runHasTab(run)
 }
 
 const W_NS = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'
@@ -224,28 +237,44 @@ export function insertRunAfter(refRun: Element, newRun: Element): void {
 }
 
 export function setRunText(run: Element, text: string): void {
-  const nodes = getTextNodes(run)
-  if (nodes.length === 0) return
-  nodes[0]!.textContent = text
-  if (
-    text.length > 0 &&
-    (/\s/.test(text[0]!) || /\s/.test(text[text.length - 1] ?? ''))
-  ) {
-    nodes[0]!.setAttribute('xml:space', 'preserve')
+  const doc = run.ownerDocument
+  if (!doc) return
+
+  for (const c of [...childrenElements(run)]) {
+    const name = localName(c)
+    if (name === 't' || name === 'tab') run.removeChild(c)
   }
-  for (let i = 1; i < nodes.length; i++) {
-    nodes[i]!.textContent = ''
+
+  if (text === '') {
+    const empty = createWElement(doc, 't')
+    empty.textContent = ''
+    run.appendChild(empty)
+    return
+  }
+
+  const parts = text.split('\t')
+  for (let i = 0; i < parts.length; i++) {
+    if (i > 0) run.appendChild(createWElement(doc, 'tab'))
+    const part = parts[i]!
+    if (part === '') continue
+    const t = createWElement(doc, 't')
+    t.textContent = part
+    if (/\s/.test(part[0]!) || /\s/.test(part[part.length - 1]!)) {
+      t.setAttributeNS('http://www.w3.org/XML/1998/namespace', 'xml:space', 'preserve')
+      t.setAttribute('xml:space', 'preserve')
+    }
+    run.appendChild(t)
   }
 }
 
-/** Collect runs that currently have w:t (for write-back indexing). */
+/** Collect runs with w:t and/or w:tab (for extract + write-back indexing). */
 export function collectRunsWithT(para: Element): Element[] {
   const runs: Element[] = []
   const walk = (el: Element) => {
     for (const c of childrenElements(el)) {
       const name = localName(c)
       if (name === 'r') {
-        if (getTextNodes(c).length > 0) runs.push(c)
+        if (runHasContent(c)) runs.push(c)
       } else if (name === 'hyperlink' || name === 'sdt' || name === 'sdtContent') {
         walk(c)
       }

@@ -1,6 +1,6 @@
 import type { RunSpan, Segment } from '@/types/project'
 import { buildTaggedText } from './tags'
-import { paragraphKeyOf, splitTaggedSentences } from '@/tm/sentences'
+import { paragraphKeyOf, splitParagraphUnits } from '@/tm/sentences'
 import {
   allParagraphsLoose,
   collectRunsWithT,
@@ -89,7 +89,7 @@ export function extractSegmentsFromStories(stories: StoryFile[]): Segment[] {
       if (!plain.trim()) return
 
       const fullSource = buildTaggedText(spans.map((s) => s.text))
-      const sentences = splitTaggedSentences(fullSource)
+      const units = splitParagraphUnits(fullSource)
       const pKey = paragraphKeyOf(story.key, paraIndex)
       const paragraphSpans = spans.map((sp) => ({
         runIndices: [...sp.runIndices],
@@ -97,7 +97,7 @@ export function extractSegmentsFromStories(stories: StoryFile[]): Segment[] {
         text: sp.text,
       }))
 
-      sentences.forEach((sentenceSource, sentenceIndex) => {
+      units.forEach((sentenceSource, sentenceIndex) => {
         segments.push({
           id: String(seq++),
           storyKey: story.key,
