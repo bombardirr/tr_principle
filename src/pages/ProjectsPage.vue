@@ -13,6 +13,7 @@ import { SEGMENT_SCHEMA_DATE_SAFE } from '@/types/project'
 import JobHubInline from '@/components/JobHubInline.vue'
 import ProjectListItem from '@/components/ProjectListItem.vue'
 import CreateSharedWorkDialog from '@/components/CreateSharedWorkDialog.vue'
+import TmCollectionDialog from '@/components/TmCollectionDialog.vue'
 import IconButton from '@/components/IconButton.vue'
 import EditorGlyph from '@/components/EditorGlyph.vue'
 import { useAuth } from '@/auth/session'
@@ -51,6 +52,7 @@ const pendingJobAction = ref<{
 } | null>(null)
 const actionBusy = ref(false)
 const createSharedOpen = ref(false)
+const collectionOpen = ref(false)
 
 const sectionUnread = computed(() => joinUnreadCount.value)
 const relatedJobId = computed(() => hoverJobId.value || openJobId.value)
@@ -244,7 +246,12 @@ async function openInvite() {
 <template>
   <section class="projects-page">
     <div class="head">
-      <h1>{{ t('projects.title') }}</h1>
+      <div class="title-row">
+        <h1>{{ t('projects.title') }}</h1>
+        <IconButton :title="t('tmCollection.openFromProjects')" @click="collectionOpen = true">
+          <EditorGlyph name="tm" />
+        </IconButton>
+      </div>
       <div class="actions">
         <form class="invite-paste" @submit.prevent="openInvite">
           <input
@@ -427,6 +434,14 @@ async function openInvite() {
       @close="createSharedOpen = false"
       @created="onSharedWorkCreated"
     />
+    <TmCollectionDialog
+      :open="collectionOpen"
+      mode="browse"
+      :attached-ids="[]"
+      @close="collectionOpen = false"
+      @deleted="refresh"
+      @error="error = $event"
+    />
   </section>
 </template>
 
@@ -442,6 +457,12 @@ async function openInvite() {
   justify-content: space-between;
   gap: 1rem;
   margin-bottom: 1.25rem;
+}
+
+.title-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
 }
 
 h1 {
