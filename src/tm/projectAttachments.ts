@@ -2,6 +2,18 @@ import type { ProjectMeta, ProjectTmAttachment, ProjectTmAttachmentId } from '@/
 
 export const PERSONAL_TM_ATTACHMENT_ID: ProjectTmAttachmentId = 'personal-tm'
 
+/** Stable unique palette for TM bases (icon + accents). */
+export const TM_BASE_COLORS = [
+  '#5b9fd4',
+  '#3dd68c',
+  '#e8a838',
+  '#c77dff',
+  '#ff7a59',
+  '#4db8ff',
+  '#2dd4bf',
+  '#f472b6',
+] as const
+
 export type TmAttachmentCatalogItem = {
   id: ProjectTmAttachmentId
   label: string
@@ -13,10 +25,16 @@ export const TM_ATTACHMENT_CATALOG: TmAttachmentCatalogItem[] = [
   {
     id: PERSONAL_TM_ATTACHMENT_ID,
     label: 'Personal TM',
-    color: '#5ea8ff',
+    color: TM_BASE_COLORS[0],
     glyph: 'tm',
   },
 ]
+
+export function colorForTmBase(id: ProjectTmAttachmentId, fallbackIndex = 0): string {
+  const hit = TM_ATTACHMENT_CATALOG.findIndex(item => item.id === id)
+  const index = hit >= 0 ? hit : fallbackIndex
+  return TM_ATTACHMENT_CATALOG[hit]?.color ?? TM_BASE_COLORS[index % TM_BASE_COLORS.length]!
+}
 
 type LegacyAttachment = ProjectTmAttachment & { connected?: boolean }
 

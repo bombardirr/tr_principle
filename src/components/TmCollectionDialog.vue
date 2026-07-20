@@ -3,7 +3,7 @@ import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import EditorGlyph from '@/components/EditorGlyph.vue'
 import { listProjects } from '@/storage/idb'
-import { listTmUnits } from '@/storage/tmIdb'
+import { getPersonalTmStats } from '@/storage/tmIdb'
 import { PERSONAL_TM_ATTACHMENT_ID, type TmAttachmentCatalogItem } from '@/tm/projectAttachments'
 import { deleteOwnPersonalTm, ensureDefaultTmInCatalog } from '@/tm/tmCollection'
 import type { ProjectTmAttachment, ProjectTmAttachmentId } from '@/types/project'
@@ -26,9 +26,10 @@ const emit = defineEmits<{
   error: [message: string]
 }>()
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
 const busy = ref(false)
 const unitCount = ref(0)
+const lastUpdatedAt = ref<string | null>(null)
 const projectCount = ref(0)
 const jobCount = ref(0)
 const confirmDelete = ref(false)
@@ -41,6 +42,17 @@ const hint = computed(() =>
   props.mode === 'pick' ? t('tmCollection.pickHint') : t('tmCollection.hint')
 )
 
+async function refreshStats() {
+  try {
+    const stats = await getPersonalTmStats()
+    unitCount.value = stats.count
+    lastUpdatedAt.value = stats.lastUpdatedAt
+  } catch {
+    unitCount.value = 0
+    lastUpdatedAt.value = null
+  }
+}
+
 watch(
   () => props.open,
   async open => {
@@ -48,17 +60,37 @@ watch(
       confirmDelete.value = false
       return
     }
-    try {
-      unitCount.value = (await listTmUnits()).length
-    } catch {
-      unitCount.value = 0
-    }
+    await refreshStats()
   },
   { immediate: true }
 )
 
 function itemLabel(item: TmAttachmentCatalogItem) {
   return item.id === PERSONAL_TM_ATTACHMENT_ID ? t('projects.tmPersonalBase') : item.label
+}
+
+function formatTmDate(iso: string, short = false) {
+  try {
+    const d = new Date(iso)
+    if (short) {
+      return d.toLocaleDateString(locale.value, { day: 'numeric', month: 'short' })
+    }
+    return d.toLocaleString(locale.value, {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    })
+  } catch {
+    return iso
+  }
+}
+
+function lastUpdatedLabel(short = false) {
+  if (!lastUpdatedAt.value) return t('projects.tmLastUpdatedNever')
+  const date = formatTmDate(lastUpdatedAt.value, short)
+  return short ? t('projects.tmLastUpdatedShort', { date }) : t('projects.tmLastUpdated', { date })
 }
 
 function isAttached(id: ProjectTmAttachmentId) {
@@ -89,8 +121,9 @@ async function openDeleteConfirm() {
   busy.value = true
   emit('error', '')
   try {
-    const [units, projects] = await Promise.all([listTmUnits(), listProjects()])
-    unitCount.value = units.length
+    const [stats, projects] = await Promise.all([getPersonalTmStats(), listProjects()])
+    unitCount.value = stats.count
+    lastUpdatedAt.value = stats.lastUpdatedAt
     projectCount.value = projects.filter(project =>
       project.tmAttachments?.some(item => item.id === PERSONAL_TM_ATTACHMENT_ID)
     ).length
@@ -110,6 +143,7 @@ async function onConfirmDelete() {
   try {
     await deleteOwnPersonalTm()
     unitCount.value = 0
+    lastUpdatedAt.value = null
     projectCount.value = 0
     jobCount.value = 0
     confirmDelete.value = false
@@ -169,8 +203,21 @@ async function onConfirmDelete() {
           </span>
           <div class="card-copy">
             <strong>{{ itemLabel(item) }}</strong>
-            <span v-if="mode === 'browse'" class="stat">
+            <span
+              v-if="mode === 'browse' && item.id === PERSONAL_TM_ATTACHMENT_ID"
+              class="stat"
+              :title="t('projects.tmUnitsStatHint')"
+            >
               {{ t('projects.tmUnitsStat', { n: unitCount }) }}
+            </span>
+            <span
+              v-if="mode === 'browse' && item.id === PERSONAL_TM_ATTACHMENT_ID"
+              class="stat"
+              :title="
+                lastUpdatedAt ? t('projects.tmLastUpdatedHint') : t('projects.tmLastUpdatedNeverHint')
+              "
+            >
+              {{ lastUpdatedLabel(true) }}
             </span>
           </div>
           <span v-if="isAttached(item.id)" class="attached-mark">
@@ -323,9 +370,11 @@ async function onConfirmDelete() {
 
 .catalog-pick .tm-card {
   flex-direction: column;
-  justify-content: center;
-  min-height: 8.5rem;
+  justify-content: space-between;
+  aspect-ratio: 1;
+  min-height: 0;
   text-align: center;
+  padding: 0.65rem 0.55rem;
 }
 
 .glyph {

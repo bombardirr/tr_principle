@@ -118,8 +118,8 @@ function togglePermission(
             <EditorGlyph :name="catalogItem(attachment.id)?.glyph ?? 'tm'" />
           </span>
           <strong class="base-name">{{ itemLabel(attachment.id) }}</strong>
-          <label class="permission">
-            <span>R</span>
+          <label class="permission" :title="t('projects.tmPermRead')">
+            <span>{{ t('projects.tmPermReadShort') }}</span>
             <input
               type="checkbox"
               :checked="attachment.canRead"
@@ -132,8 +132,8 @@ function togglePermission(
               "
             />
           </label>
-          <label class="permission">
-            <span>W</span>
+          <label class="permission" :title="t('projects.tmPermWrite')">
+            <span>{{ t('projects.tmPermWriteShort') }}</span>
             <input
               type="checkbox"
               :checked="attachment.canWrite"

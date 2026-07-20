@@ -154,3 +154,20 @@ export async function clearTmUnits(): Promise<void> {
   const db = await getDb()
   await db.clear('units')
 }
+
+export type PersonalTmStats = {
+  count: number
+  lastUpdatedAt: string | null
+}
+
+/** Active unit count + newest updatedAt (ISO), for TM base chips/cards. */
+export async function getPersonalTmStats(): Promise<PersonalTmStats> {
+  const units = await listTmUnits()
+  let lastUpdatedAt: string | null = null
+  for (const unit of units) {
+    if (!lastUpdatedAt || unit.updatedAt > lastUpdatedAt) {
+      lastUpdatedAt = unit.updatedAt
+    }
+  }
+  return { count: units.length, lastUpdatedAt }
+}

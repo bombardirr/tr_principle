@@ -17,6 +17,8 @@ const messages = {
     projects: {
       tmPersonalBase: 'Personal TM',
       tmUnitsStat: '{n} units',
+      tmPermReadShort: 'R',
+      tmPermWriteShort: 'W',
     },
     tmCollection: {
       pickTitle: 'Choose a TM',

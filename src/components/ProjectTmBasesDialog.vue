@@ -2,8 +2,9 @@
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import EditorGlyph from '@/components/EditorGlyph.vue'
+import IconButton from '@/components/IconButton.vue'
 import { getProject, saveProject } from '@/storage/idb'
-import { listTmUnits } from '@/storage/tmIdb'
+import { getPersonalTmStats } from '@/storage/tmIdb'
 import {
   detachProjectTm,
   normalizeProjectTmAttachments,
@@ -25,22 +26,30 @@ const emit = defineEmits<{
   'open-pick': []
 }>()
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
 const busy = ref(false)
 const unitCount = ref(0)
+const lastUpdatedAt = ref<string | null>(null)
 const attachments = computed(() => normalizeProjectTmAttachments(props.project))
+
+async function refreshStats() {
+  try {
+    const stats = await getPersonalTmStats()
+    unitCount.value = stats.count
+    lastUpdatedAt.value = stats.lastUpdatedAt
+  } catch {
+    unitCount.value = 0
+    lastUpdatedAt.value = null
+  }
+}
 
 watch(
   () => props.open,
   async open => {
     if (!open) return
-    try {
-      unitCount.value = (await listTmUnits()).length
-    } catch {
-      unitCount.value = 0
-    }
+    await refreshStats()
   },
-  { immediate: true }
+  { immediate: true },
 )
 
 function catalogItem(id: ProjectTmAttachmentId) {
@@ -50,6 +59,32 @@ function catalogItem(id: ProjectTmAttachmentId) {
 function itemLabel(id: ProjectTmAttachmentId) {
   const item = catalogItem(id)
   return id === PERSONAL_TM_ATTACHMENT_ID ? t('projects.tmPersonalBase') : (item?.label ?? id)
+}
+
+function formatTmDate(iso: string, short = false) {
+  try {
+    const d = new Date(iso)
+    if (short) {
+      return d.toLocaleDateString(locale.value, { day: 'numeric', month: 'short' })
+    }
+    return d.toLocaleString(locale.value, {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    })
+  } catch {
+    return iso
+  }
+}
+
+function lastUpdatedLabel(short = false) {
+  if (!lastUpdatedAt.value) {
+    return short ? t('projects.tmLastUpdatedNever') : t('projects.tmLastUpdatedNever')
+  }
+  const date = formatTmDate(lastUpdatedAt.value, short)
+  return short ? t('projects.tmLastUpdatedShort', { date }) : t('projects.tmLastUpdated', { date })
 }
 
 async function updateAttachments(change: (meta: ProjectMeta) => ProjectMeta['tmAttachments']) {
@@ -62,6 +97,7 @@ async function updateAttachments(change: (meta: ProjectMeta) => ProjectMeta['tmA
     record.meta.tmAttachments = change(record.meta)
     await saveProject(record)
     emit('changed')
+    await refreshStats()
   } catch (err) {
     emit('error', err instanceof Error ? err.message : String(err))
   } finally {
@@ -76,7 +112,7 @@ async function detach(id: ProjectTmAttachmentId) {
 async function togglePermission(
   id: ProjectTmAttachmentId,
   permission: 'canRead' | 'canWrite',
-  value: boolean
+  value: boolean,
 ) {
   await updateAttachments(meta => updateProjectTmAttachment(meta, id, { [permission]: value }))
 }
@@ -93,96 +129,93 @@ async function togglePermission(
       <header class="header">
         <div>
           <h2>{{ t('projects.tmBasesTitle') }}</h2>
-          <p>{{ t('projects.tmBasesHint') }}</p>
         </div>
         <div class="header-actions">
-          <button
-            type="button"
-            class="icon-button add"
-            :aria-label="t('projects.tmOpenPicker')"
-            :disabled="busy"
-            @click="emit('open-pick')"
-          >
+          <IconButton :title="t('projects.tmBasesAdd')" :disabled="busy" @click="emit('open-pick')">
             <EditorGlyph name="plus" />
-          </button>
-          <button
-            type="button"
-            class="icon-button"
-            :aria-label="t('projects.tmBasesClose')"
-            :disabled="busy"
-            @click="emit('close')"
-          >
+          </IconButton>
+          <IconButton :title="t('tmCollection.openFromProjects')" :disabled="busy" @click="emit('close')">
             <EditorGlyph name="close" />
-          </button>
+          </IconButton>
         </div>
       </header>
 
-      <p v-if="attachments.length === 0" class="empty">
-        {{ t('projects.tmBasesEmpty') }}
-      </p>
+      <div v-if="attachments.length === 0" class="empty">
+        <p>{{ t('projects.tmBasesEmpty') }}</p>
+        <IconButton :title="t('projects.tmBasesAdd')" :disabled="busy" @click="emit('open-pick')">
+          <EditorGlyph name="plus" />
+        </IconButton>
+      </div>
 
-      <div v-else class="bases">
-        <article v-for="attachment in attachments" :key="attachment.id" class="base-card">
-          <span
-            class="glyph"
-            :style="{ '--tm-color': catalogItem(attachment.id)?.color ?? 'var(--accent)' }"
-          >
-            <EditorGlyph :name="catalogItem(attachment.id)?.glyph ?? 'tm'" />
-          </span>
-          <div class="base-copy">
-            <strong>{{ itemLabel(attachment.id) }}</strong>
-            <span v-if="attachment.id === PERSONAL_TM_ATTACHMENT_ID" class="stat">
-              {{ t('projects.tmUnitsStat', { n: unitCount }) }}
-            </span>
-          </div>
-          <label class="permission">
-            <span>R</span>
-            <input
-              type="checkbox"
-              :checked="attachment.canRead"
-              :disabled="busy"
-              @change="
-                togglePermission(
-                  attachment.id,
-                  'canRead',
-                  ($event.target as HTMLInputElement).checked
-                )
-              "
-            />
-          </label>
-          <label class="permission">
-            <span>W</span>
-            <input
-              type="checkbox"
-              :checked="attachment.canWrite"
-              :disabled="busy"
-              @change="
-                togglePermission(
-                  attachment.id,
-                  'canWrite',
-                  ($event.target as HTMLInputElement).checked
-                )
-              "
-            />
-          </label>
-          <button
-            type="button"
+      <div v-else class="grid">
+        <article
+          v-for="attachment in attachments"
+          :key="attachment.id"
+          class="card"
+          :style="{ '--tm-color': catalogItem(attachment.id)?.color || '#5ea8ff' }"
+        >
+          <IconButton
             class="detach"
-            :aria-label="t('projects.tmDetach')"
             :title="t('projects.tmDetach')"
             :disabled="busy"
             @click="detach(attachment.id)"
           >
-            −
-          </button>
+            <span aria-hidden="true">−</span>
+          </IconButton>
+
+          <div class="card-top">
+            <span class="card-icon">
+              <EditorGlyph :name="catalogItem(attachment.id)?.glyph || 'tm'" />
+            </span>
+            <span class="card-name">{{ itemLabel(attachment.id) }}</span>
+            <span
+              v-if="attachment.id === PERSONAL_TM_ATTACHMENT_ID"
+              class="card-stat"
+              :title="t('projects.tmUnitsStatHint')"
+            >
+              {{ t('projects.tmUnitsStat', { n: unitCount }) }}
+            </span>
+            <span
+              v-if="attachment.id === PERSONAL_TM_ATTACHMENT_ID"
+              class="card-stat"
+              :title="
+                lastUpdatedAt ? t('projects.tmLastUpdatedHint') : t('projects.tmLastUpdatedNeverHint')
+              "
+            >
+              {{ lastUpdatedLabel(true) }}
+            </span>
+          </div>
+
+          <div class="card-toggles">
+            <div class="perm-row">
+              <button
+                type="button"
+                class="perm"
+                :class="{ on: attachment.canRead }"
+                :disabled="busy"
+                :aria-pressed="attachment.canRead"
+                :title="t('projects.tmPermRead')"
+                :aria-label="t('projects.tmPermRead')"
+                @click="togglePermission(attachment.id, 'canRead', !attachment.canRead)"
+              >
+                {{ t('projects.tmPermReadShort') }}
+              </button>
+              <button
+                type="button"
+                class="perm"
+                :class="{ on: attachment.canWrite }"
+                :disabled="busy"
+                :aria-pressed="attachment.canWrite"
+                :title="t('projects.tmPermWrite')"
+                :aria-label="t('projects.tmPermWrite')"
+                @click="togglePermission(attachment.id, 'canWrite', !attachment.canWrite)"
+              >
+                {{ t('projects.tmPermWriteShort') }}
+              </button>
+            </div>
+          </div>
         </article>
       </div>
-
-      <footer>
-        <button type="button" class="primary" :disabled="busy" @click="emit('close')">
-          {{ t('projects.tmBasesClose') }}
-        </button>
-      </footer>
     </section>
   </div>
 </template>
@@ -199,154 +232,157 @@ async function togglePermission(
 }
 
 .dialog {
-  width: min(38rem, 100%);
+  width: min(32rem, 100%);
   max-height: calc(100vh - 2rem);
   overflow: auto;
-  padding: 1.25rem 1.35rem 1.1rem;
+  padding: 1.1rem 1.2rem 1.15rem;
   border-radius: 12px;
   background: var(--surface);
   color: var(--text);
   box-shadow: 0 16px 48px rgba(0, 0, 0, 0.28);
 }
 
-.header,
-.header-actions,
-footer,
-.base-card {
+.header {
   display: flex;
   align-items: center;
-}
-
-.header {
   justify-content: space-between;
   gap: 0.75rem;
 
   h2 {
     margin: 0;
-    font-size: 1.15rem;
-  }
-
-  p {
-    margin: 0.35rem 0 0;
-    color: var(--text-muted);
-    font-size: 0.85rem;
+    font-size: 1.1rem;
+    font-weight: 700;
   }
 }
 
 .header-actions {
-  gap: 0.25rem;
-}
-
-button {
-  display: inline-flex;
+  display: flex;
   align-items: center;
-  justify-content: center;
-  border: 0;
-  border-radius: 8px;
-  font: inherit;
-  font-weight: 600;
-  cursor: pointer;
-
-  &:disabled {
-    cursor: default;
-    opacity: 0.55;
-  }
-}
-
-.icon-button {
-  width: 2rem;
-  height: 2rem;
-  padding: 0;
-  background: transparent;
-  color: var(--text-muted);
-
-  &.add {
-    color: var(--accent);
-  }
+  gap: 0.35rem;
 }
 
 .empty {
-  margin: 1.25rem 0;
-  padding: 1rem;
+  margin: 1rem 0 0;
+  padding: 1.1rem;
   border: 1px dashed var(--border);
   border-radius: 10px;
   color: var(--text-muted);
   text-align: center;
-}
-
-.bases {
+  font-size: 0.85rem;
   display: grid;
   gap: 0.75rem;
-  margin-top: 1rem;
+  justify-items: center;
+
+  p {
+    margin: 0;
+  }
 }
 
-.base-card {
-  gap: 0.75rem;
-  min-height: 4.5rem;
-  padding: 0.75rem;
-  border: 1px solid var(--border);
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(7.25rem, 1fr));
+  gap: 0.65rem;
+  margin-top: 0.85rem;
+}
+
+.card {
+  position: relative;
+  aspect-ratio: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 0.35rem;
+  padding: 0.55rem;
   border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--tm-color) 45%, var(--border));
   background: var(--surface-2);
-}
-
-.glyph {
-  display: grid;
-  flex: 0 0 auto;
-  place-items: center;
-  width: 2.5rem;
-  height: 2.5rem;
-  border-radius: 10px;
-  background: color-mix(in srgb, var(--tm-color) 18%, transparent);
-  color: var(--tm-color);
-}
-
-.base-copy {
-  display: grid;
-  flex: 1 1 auto;
-  min-width: 0;
-  gap: 0.2rem;
-}
-
-.stat {
-  color: var(--text-muted);
-  font-size: 0.78rem;
-}
-
-.permission {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.3rem;
-  color: var(--text-muted);
-  font-size: 0.78rem;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tm-color) 12%, transparent);
 }
 
 .detach {
+  position: absolute !important;
+  top: 0.15rem;
+  right: 0.15rem;
+  z-index: 1;
+  width: 1.5rem !important;
+  height: 1.5rem !important;
+  color: var(--danger) !important;
+  font-size: 1.15rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.card-top {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 0.25rem;
+  padding-top: 0.15rem;
+  min-height: 0;
+}
+
+.card-icon {
+  display: inline-grid;
+  place-items: center;
   width: 2rem;
   height: 2rem;
-  padding: 0;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--tm-color) 18%, var(--surface));
+  color: var(--tm-color);
+}
+
+.card-name {
+  font-size: 0.72rem;
+  font-weight: 600;
+  line-height: 1.25;
+  padding-inline: 0.15rem;
+}
+
+.card-stat {
+  font-size: 0.66rem;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.card-toggles {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.perm-row {
+  display: flex;
+  justify-content: center;
+  gap: 0.25rem;
+}
+
+.perm {
+  min-width: 1.65rem;
+  border: 0;
+  border-radius: 6px;
+  padding: 0.12rem 0.35rem;
   background: transparent;
-  color: var(--danger);
-  font-size: 1.35rem;
-}
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 0.68rem;
+  font-weight: 700;
+  cursor: pointer;
+  opacity: 0.38;
+  filter: grayscale(0.35);
 
-footer {
-  justify-content: flex-end;
-  margin-top: 1rem;
-}
-
-.primary {
-  padding: 0.5rem 0.9rem;
-  background: var(--accent);
-  color: #fff;
-}
-
-@media (max-width: 30rem) {
-  .base-card {
-    flex-wrap: wrap;
+  &.on {
+    color: var(--accent);
+    opacity: 1;
+    filter: none;
+    text-shadow:
+      0 0 6px color-mix(in srgb, var(--accent) 70%, transparent),
+      0 0 12px color-mix(in srgb, var(--accent) 35%, transparent);
   }
 
-  .base-copy {
-    flex-basis: calc(100% - 3.25rem);
+  &:disabled {
+    cursor: default;
+    opacity: 0.3;
   }
 }
 </style>
