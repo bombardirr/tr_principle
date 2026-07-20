@@ -1,4 +1,4 @@
-import { createApp, h, nextTick } from 'vue'
+import { createApp, h, nextTick, reactive } from 'vue'
 import { createI18n } from 'vue-i18n'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -95,6 +95,16 @@ function mountPanel(props = { jobId: 'job-1', isOwner: false, myRole: 'translato
 async function settle() {
   await nextTick()
   await nextTick()
+}
+
+function deferred<T>() {
+  let resolve!: (value: T) => void
+  let reject!: (reason?: unknown) => void
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise
+    reject = rejectPromise
+  })
+  return { promise, resolve, reject }
 }
 
 beforeEach(() => {
@@ -205,5 +215,94 @@ describe('JobMemoriesPanel', () => {
     expect(host.querySelector('[data-testid="job-tm-local-read"]')).not.toBeNull()
     expect(host.querySelector('[data-testid="job-tm-local-write"]')).not.toBeNull()
     expect(createJobTmAttachment).not.toHaveBeenCalled()
+  })
+
+  it('ignores a stale shared load after the job changes', async () => {
+    const oldLoad = deferred<Awaited<ReturnType<typeof listJobTmAttachmentsApi>>>()
+    const attachment = {
+      id: 'att-old',
+      jobId: 'job-1',
+      tmBaseId: 'old-base',
+      canRead: true,
+      canWrite: true,
+      canExport: false,
+      canClone: false,
+      createdBy: 'u1',
+      createdAt: '2026-01-01T00:00:00Z',
+      updatedAt: '2026-01-01T00:00:00Z',
+    }
+    vi.mocked(listJobTmAttachmentsApi)
+      .mockImplementationOnce(() => oldLoad.promise)
+      .mockResolvedValueOnce([
+        { ...attachment, id: 'att-new', jobId: 'job-2', tmBaseId: 'new-base' },
+      ])
+    const props = reactive({ jobId: 'job-1', isOwner: true, myRole: 'owner' as const })
+    const host = mountPanel(props)
+
+    props.jobId = 'job-2'
+    await settle()
+    expect(host.textContent).toContain('new-base')
+
+    oldLoad.resolve([attachment])
+    await settle()
+    expect(host.textContent).toContain('new-base')
+    expect(host.textContent).not.toContain('old-base')
+  })
+
+  it('ignores a stale mutation response after the job changes', async () => {
+    const oldPatch = deferred<Awaited<ReturnType<typeof patchJobTmAttachment>>>()
+    const attachment = {
+      id: 'att-old',
+      jobId: 'job-1',
+      tmBaseId: 'old-base',
+      canRead: true,
+      canWrite: true,
+      canExport: false,
+      canClone: false,
+      createdBy: 'u1',
+      createdAt: '2026-01-01T00:00:00Z',
+      updatedAt: '2026-01-01T00:00:00Z',
+    }
+    vi.mocked(listJobTmAttachmentsApi)
+      .mockResolvedValueOnce([attachment])
+      .mockResolvedValueOnce([{ ...attachment, jobId: 'job-2', tmBaseId: 'new-base' }])
+    vi.mocked(patchJobTmAttachment).mockImplementationOnce(() => oldPatch.promise)
+    const props = reactive({ jobId: 'job-1', isOwner: true, myRole: 'owner' as const })
+    const host = mountPanel(props)
+    await settle()
+
+    host.querySelector<HTMLInputElement>('[data-testid="job-tm-shared-read"]')!.click()
+    props.jobId = 'job-2'
+    await settle()
+    oldPatch.resolve({ ...attachment, canRead: false })
+    await settle()
+
+    expect(host.textContent).toContain('new-base')
+    expect(host.textContent).not.toContain('old-base')
+  })
+
+  it('keeps a mutation error visible after refreshing shared attachments', async () => {
+    const attachment = {
+      id: 'att-server',
+      jobId: 'job-1',
+      tmBaseId: 'personal-tm',
+      canRead: true,
+      canWrite: true,
+      canExport: false,
+      canClone: false,
+      createdBy: 'u1',
+      createdAt: '2026-01-01T00:00:00Z',
+      updatedAt: '2026-01-01T00:00:00Z',
+    }
+    vi.mocked(listJobTmAttachmentsApi).mockResolvedValue([attachment])
+    vi.mocked(patchJobTmAttachment).mockRejectedValueOnce(new Error('Permission update failed'))
+    const host = mountPanel({ jobId: 'job-1', isOwner: true, myRole: 'owner' })
+    await settle()
+
+    host.querySelector<HTMLInputElement>('[data-testid="job-tm-shared-read"]')!.click()
+    await settle()
+    await settle()
+
+    expect(host.textContent).toContain('Permission update failed')
   })
 })

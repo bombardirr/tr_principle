@@ -33,6 +33,8 @@ const collectionOpen = ref(false)
 const collectionMode = ref<'pick' | 'browse'>('pick')
 const collectionReturnTo = ref<'job' | null>(null)
 const pickerTarget = ref<'shared' | 'local'>('local')
+let jobGeneration = 0
+let sharedRequestGeneration = 0
 const attachedIds = computed<ProjectTmAttachmentId[]>(() =>
   pickerTarget.value === 'shared'
     ? shared.value
@@ -46,6 +48,7 @@ const attachedIds = computed<ProjectTmAttachmentId[]>(() =>
 watch(
   () => props.jobId,
   jobId => {
+    jobGeneration += 1
     localOverlay.value = listJobTmAttachments(jobId)
     void refreshShared()
   }
@@ -55,14 +58,28 @@ onMounted(() => {
   void refreshShared()
 })
 
-async function refreshShared() {
-  loadError.value = null
+async function refreshShared(options: { keepError?: boolean } = {}) {
+  const jobId = props.jobId
+  const generation = jobGeneration
+  const requestGeneration = ++sharedRequestGeneration
+  if (!options.keepError) loadError.value = null
   try {
-    shared.value = await listJobTmAttachmentsApi(props.jobId)
+    const attachments = await listJobTmAttachmentsApi(jobId)
+    if (!isCurrentRequest(jobId, generation, requestGeneration)) return
+    shared.value = attachments
   } catch (error) {
+    if (!isCurrentRequest(jobId, generation, requestGeneration)) return
     loadError.value = error instanceof Error ? error.message : String(error)
     shared.value = []
   }
+}
+
+function isCurrentJob(jobId: string, generation: number) {
+  return props.jobId === jobId && jobGeneration === generation
+}
+
+function isCurrentRequest(jobId: string, generation: number, requestGeneration: number) {
+  return isCurrentJob(jobId, generation) && sharedRequestGeneration === requestGeneration
 }
 
 function catalogItem(id: string) {
@@ -102,30 +119,38 @@ async function attach(id: ProjectTmAttachmentId) {
 
 async function attachShared(tmBaseId: ProjectTmAttachmentId) {
   if (!props.isOwner) return
+  const jobId = props.jobId
+  const generation = jobGeneration
   loadError.value = null
   try {
-    const created = await createJobTmAttachment(props.jobId, {
+    const created = await createJobTmAttachment(jobId, {
       tmBaseId,
       canRead: true,
       canWrite: true,
     })
+    if (!isCurrentJob(jobId, generation)) return
     shared.value = [...shared.value, created]
     closeCollection()
   } catch (error) {
+    if (!isCurrentJob(jobId, generation)) return
     loadError.value = error instanceof Error ? error.message : String(error)
-    await refreshShared()
+    await refreshShared({ keepError: true })
   }
 }
 
 async function detachShared(attachmentId: string) {
   if (!props.isOwner) return
+  const jobId = props.jobId
+  const generation = jobGeneration
   loadError.value = null
   try {
-    await deleteJobTmAttachment(props.jobId, attachmentId)
+    await deleteJobTmAttachment(jobId, attachmentId)
+    if (!isCurrentJob(jobId, generation)) return
     shared.value = shared.value.filter(item => item.id !== attachmentId)
   } catch (error) {
+    if (!isCurrentJob(jobId, generation)) return
     loadError.value = error instanceof Error ? error.message : String(error)
-    await refreshShared()
+    await refreshShared({ keepError: true })
   }
 }
 
@@ -135,15 +160,19 @@ async function toggleShared(
   value: boolean
 ) {
   if (!props.isOwner) return
+  const jobId = props.jobId
+  const generation = jobGeneration
   loadError.value = null
   try {
-    const updated = await patchJobTmAttachment(props.jobId, attachmentId, {
+    const updated = await patchJobTmAttachment(jobId, attachmentId, {
       [permission]: value,
     })
+    if (!isCurrentJob(jobId, generation)) return
     shared.value = shared.value.map(item => (item.id === updated.id ? updated : item))
   } catch (error) {
+    if (!isCurrentJob(jobId, generation)) return
     loadError.value = error instanceof Error ? error.message : String(error)
-    await refreshShared()
+    await refreshShared({ keepError: true })
   }
 }
 

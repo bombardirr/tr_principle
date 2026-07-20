@@ -1,43 +1,79 @@
-# Task 6 Report
+# Task 6 Report: JobMemoriesPanel — two layers + owner ACL
 
 ## Status
 
-Implemented `ProjectTmBasesDialog` and the project-list TM dialog stack.
+Complete.
 
-## Changes
+## Commit
 
-- Added an attached-only project TM dialog with:
-  - normalized attached base cards;
-  - personal TM unit statistics;
-  - read/write permission toggles;
-  - detach action;
-  - empty state and collection-picker handoff.
-- Added attached TM chips to `ProjectListItem`; clicking a chip detaches it and `+` opens the project bases dialog.
-- Wired `TmCollectionDialog` pick/browse transitions, return-to-project behavior, attach/save, deletion refresh, and error forwarding.
+- `28d7e9f` — `feat: wire Job memories to server TM attachments`
+
+## Implementation
+
+- Split `JobMemoriesPanel` into server-backed **Job bases** and browser-local **My extras** sections.
+- Kept the personal TM row unchanged.
+- Shared attachments load through `listJobTmAttachmentsApi`.
+- Shared create, permission patch, and delete operations use the server API.
+- Shared rows use attachment UUIDs for Vue keys and mutation calls; labels and catalog styling use `tmBaseId`.
+- Only owners see the shared add and detach controls or can change shared Read/Write flags.
+- Translators/viewers receive disabled shared Read/Write controls.
+- Every role can add, detach, and change Read/Write flags in the local overlay.
+- The collection picker tracks whether an attachment is being added to the shared or local layer.
+- No local-to-server migration was added.
+- Export and Clone controls were not added.
+- Added the five requested RU/EN translation keys.
+
+## TDD
+
+The rewritten component suite was run before production changes and failed all five tests for the expected missing behavior:
+
+- missing two-layer headings and empty states;
+- shared add visible to non-owner;
+- shared add did not call the server;
+- shared ACL controls absent;
+- local add control absent.
+
+After implementation, the focused suites passed:
+
+```text
+tests/components/JobMemoriesPanel.test.ts  5 passed
+tests/tm/jobAttachments.test.ts            3 passed
+```
+
+Coverage includes initial shared loading, owner-only shared add, server create/patch/delete calls, UUID-based shared mutations, disabled member controls, and member-local attachment behavior.
 
 ## Verification
 
-- `npx vue-tsc --noEmit` — passed.
-- `npx vitest run tests/tm/projectAttachments.test.ts` — passed (7 tests).
-- IDE lints for both changed components — clean.
+- `npm test` — 50 files passed, 212 tests passed.
+- `npm run build` — `vue-tsc` and Vite production build passed.
+- Focused Prettier check — passed.
+- `git diff --check` — passed (Git only reported the repository's LF-to-CRLF checkout warning).
+- IDE diagnostics for all four edited implementation/test files — no errors.
 
-## Concern
+## Self-review
 
-~~`cloneProjectRecord` in `src/storage/idb.ts` does not currently copy `meta.tmAttachments`. As a result, existing `saveProject` calls can discard attachment changes when cloning records for IndexedDB. This is outside the two-file Task 6 scope but should be corrected before relying on attachment persistence.~~
+Reviewed commit `28d7e9f` against the Task 6 brief.
 
-## Review fix: persist tmAttachments through clone/save
+- Owner ACL is enforced both in rendering and handler guards.
+- Shared mutation identifiers are attachment UUIDs, not TM base IDs.
+- Shared display data comes from `tmBaseId`.
+- Local and shared picker attachment sets remain independent.
+- Only Read/Write permissions are rendered.
+- No blocking or important findings found.
 
-**Finding:** `cloneProjectRecord()` omitted `meta.tmAttachments`, so attach/detach/R/W changes were dropped on `saveProject()` / `getProject()`.
+## Concerns
 
-**Fix:** Copy `tmAttachments` in `cloneProjectRecord` (deep-clone each attachment entry alongside existing meta fields).
+- The picker catalog currently contains only `personal-tm`; unknown server `tmBaseId` values still render safely as their raw ID, but cannot be newly selected until the catalog exposes them.
+- Pre-existing `.superpowers/sdd` files and the modified Task 5 report were intentionally excluded from the implementation commit.
 
-**Test:** Added `tests/storage/cloneProjectRecord.test.ts` — verifies `tmAttachments` round-trips through clone and stays undefined when absent.
+## Important review fixes
 
-```text
-$ npm test -- tests/storage/cloneProjectRecord.test.ts
- ✓ tests/storage/cloneProjectRecord.test.ts (2 tests)
- Test Files  1 passed (1)
-      Tests  2 passed (2)
-```
+- Added job and request generation guards so stale shared-list responses cannot replace the current job's attachments.
+- Shared create, patch, and delete handlers now capture the active job generation and ignore responses or errors after navigation to another job.
+- Failed mutations still reconcile the shared list, but the reconciliation preserves the mutation error so inline feedback remains visible.
+- Added regressions for cross-job list races, stale mutation responses, and mutation-error persistence.
 
-**Commit:** `fix: persist tmAttachments through project clone/save`
+## Review-fix verification
+
+- RED: focused suite failed the three new regressions against the reviewed implementation.
+- GREEN: `npx vitest run tests/components/JobMemoriesPanel.test.ts` — 1 file passed, 8 tests passed.
