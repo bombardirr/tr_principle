@@ -4,7 +4,8 @@ import type { TmPullResponse, TmPushResponse } from '@/tm/api'
 import type { TmUnit } from '@/types/tm'
 
 export async function listJobResources(jobId: string) {
-  return apiFetch<JobResource[]>(`/api/jobs/${jobId}/resources`)
+  const res = await apiFetch<{ resources: JobResource[] }>(`/api/jobs/${jobId}/resources`)
+  return res.resources ?? []
 }
 
 export async function patchJobResourcePreset(jobId: string, input: PatchJobResourceInput) {
