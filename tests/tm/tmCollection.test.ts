@@ -12,11 +12,15 @@ vi.mock('../../src/storage/idb', () => ({
 vi.mock('../../src/tm/jobAttachments', () => ({
   detachJobTmEverywhere: vi.fn(() => 1),
 }))
+vi.mock('../../src/tm/tmCollectionEvents', () => ({
+  notifyTmCollectionChanged: vi.fn(),
+}))
 
 import { listTmUnits, clearTmUnits } from '../../src/storage/tmIdb'
 import { listProjects, getProject, saveProject } from '../../src/storage/idb'
 import { detachJobTmEverywhere } from '../../src/tm/jobAttachments'
 import { PERSONAL_TM_ATTACHMENT_ID } from '../../src/tm/projectAttachments'
+import { notifyTmCollectionChanged } from '../../src/tm/tmCollectionEvents'
 import { deleteOwnPersonalTm, ensureDefaultTmInCatalog } from '../../src/tm/tmCollection'
 
 describe('tmCollection', () => {
@@ -58,6 +62,7 @@ describe('tmCollection', () => {
     expect(clearTmUnits).toHaveBeenCalled()
     expect(saveProject).toHaveBeenCalled()
     expect(detachJobTmEverywhere).toHaveBeenCalledWith(PERSONAL_TM_ATTACHMENT_ID)
+    expect(notifyTmCollectionChanged).toHaveBeenCalledOnce()
     expect(result).toEqual({ unitCountCleared: 2, projectsDetached: 1, jobsDetached: 1 })
   })
 })

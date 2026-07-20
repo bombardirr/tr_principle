@@ -7,6 +7,7 @@ import {
   detachProjectTm,
   type TmAttachmentCatalogItem,
 } from '@/tm/projectAttachments'
+import { notifyTmCollectionChanged } from '@/tm/tmCollectionEvents'
 
 export function ensureDefaultTmInCatalog(): TmAttachmentCatalogItem[] {
   return [...TM_ATTACHMENT_CATALOG]
@@ -34,5 +35,6 @@ export async function deleteOwnPersonalTm(): Promise<{
   }
 
   const jobsDetached = detachJobTmEverywhere(PERSONAL_TM_ATTACHMENT_ID)
+  notifyTmCollectionChanged()
   return { unitCountCleared: units.length, projectsDetached, jobsDetached }
 }

@@ -31,6 +31,7 @@ import { findTmMatches } from '@/tm/match'
 import { findLangPairPreset, langPairLabel } from '@/tm/langPairs'
 import { tmLookupKey } from '@/tm/normalize'
 import { canReadPersonalTm, canWritePersonalTm } from '@/tm/projectAttachments'
+import { TM_COLLECTION_CHANGED_EVENT } from '@/tm/tmCollectionEvents'
 import { projectNeedsResegment, resegmentProjectRecord } from '@/tm/resegment'
 import { exportTmx, parseTmx } from '@/tm/tmx'
 import {
@@ -506,6 +507,23 @@ async function load() {
   await nextTick()
 }
 
+async function onTmCollectionChanged() {
+  const projectId = props.id
+  const found = await getProject(projectId)
+  if (!found || !record.value || record.value.meta.id !== projectId) return
+
+  record.value = {
+    ...record.value,
+    meta: found.meta,
+  }
+  if (!canReadPersonalTm(found.meta)) {
+    tmUnits.value = []
+    tmAutosaveIds.value = new Set()
+    return
+  }
+  tmUnits.value = await listTmUnits()
+}
+
 function onBeforeUnload(e: BeforeUnloadEvent) {
   void persistScroll()
   if (!allSaved.value) e.preventDefault()
@@ -520,6 +538,7 @@ onMounted(() => {
   window.addEventListener('scroll', onPageScroll, PAGE_SCROLL_OPTS)
   window.addEventListener('beforeunload', onBeforeUnload)
   window.addEventListener('keydown', onClearFocusKey)
+  window.addEventListener(TM_COLLECTION_CHANGED_EVENT, onTmCollectionChanged)
   chromeMq = window.matchMedia('(max-width: 800px)')
   onChromeMq()
   chromeMq.addEventListener('change', onChromeMq)
@@ -572,6 +591,7 @@ onUnmounted(() => {
   window.removeEventListener('scroll', onPageScroll, PAGE_SCROLL_OPTS)
   window.removeEventListener('beforeunload', onBeforeUnload)
   window.removeEventListener('keydown', onClearFocusKey)
+  window.removeEventListener(TM_COLLECTION_CHANGED_EVENT, onTmCollectionChanged)
   chromeMq?.removeEventListener('change', onChromeMq)
   chromeMq = null
   previewOverlayMq?.removeEventListener('change', onPreviewOverlayMq)
