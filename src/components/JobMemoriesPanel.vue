@@ -49,6 +49,7 @@ watch(
   () => props.jobId,
   jobId => {
     jobGeneration += 1
+    shared.value = []
     localOverlay.value = listJobTmAttachments(jobId)
     void refreshShared()
   }

@@ -249,6 +249,39 @@ describe('JobMemoriesPanel', () => {
     expect(host.textContent).not.toContain('old-base')
   })
 
+  it('clears previous shared rows while the new job load is pending', async () => {
+    const newLoad = deferred<Awaited<ReturnType<typeof listJobTmAttachmentsApi>>>()
+    const attachment = {
+      id: 'att-old',
+      jobId: 'job-1',
+      tmBaseId: 'old-base',
+      canRead: true,
+      canWrite: true,
+      canExport: false,
+      canClone: false,
+      createdBy: 'u1',
+      createdAt: '2026-01-01T00:00:00Z',
+      updatedAt: '2026-01-01T00:00:00Z',
+    }
+    vi.mocked(listJobTmAttachmentsApi)
+      .mockResolvedValueOnce([attachment])
+      .mockImplementationOnce(() => newLoad.promise)
+    const props = reactive({ jobId: 'job-1', isOwner: true, myRole: 'owner' as const })
+    const host = mountPanel(props)
+    await settle()
+
+    expect(host.textContent).toContain('old-base')
+    props.jobId = 'job-2'
+    await nextTick()
+
+    expect(listJobTmAttachmentsApi).toHaveBeenLastCalledWith('job-2')
+    expect(host.textContent).not.toContain('old-base')
+    expect(host.querySelector('[data-testid="job-tm-shared-read"]')).toBeNull()
+    expect(host.querySelector('[data-testid="job-tm-shared-detach"]')).toBeNull()
+    expect(patchJobTmAttachment).not.toHaveBeenCalled()
+    expect(deleteJobTmAttachment).not.toHaveBeenCalled()
+  })
+
   it('ignores a stale mutation response after the job changes', async () => {
     const oldPatch = deferred<Awaited<ReturnType<typeof patchJobTmAttachment>>>()
     const attachment = {
