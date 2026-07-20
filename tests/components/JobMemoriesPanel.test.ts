@@ -11,6 +11,21 @@ const messages = {
       memoriesPersonalHint: 'always · only you',
       memoriesAttachedTitle: 'Attached TMs',
       memoriesAttachedEmpty: 'No TMs attached yet. Attach bases to use them on this work.',
+      memoriesAttach: 'Attach base',
+      memoriesDetach: 'Detach base',
+    },
+    projects: {
+      tmPersonalBase: 'Personal TM',
+      tmUnitsStat: '{n} units',
+    },
+    tmCollection: {
+      pickTitle: 'Choose a TM',
+      title: 'TM collection',
+      pickHint: 'Choose a base to attach.',
+      hint: 'Manage your translation memories.',
+      close: 'Close',
+      attached: 'Attached',
+      openFull: 'Open collection',
     },
   },
 }
@@ -34,6 +49,7 @@ function mountPanel(props = { jobId: 'job-1', isOwner: false, myRole: 'translato
 
 afterEach(() => {
   while (mounted.length) mounted.pop()!.unmount()
+  localStorage.clear()
 })
 
 describe('JobMemoriesPanel', () => {
@@ -44,6 +60,29 @@ describe('JobMemoriesPanel', () => {
     expect(host.textContent).toContain('Personal TM')
     expect(host.textContent).toContain('Attached TMs')
     expect(host.textContent).toContain('No TMs attached yet')
+    expect(host.querySelector('[data-testid="job-tm-read"]')).toBeNull()
+    expect(host.querySelector('[data-testid="job-tm-write"]')).toBeNull()
+  })
+
+  it('can attach personal TM via pick flow and see R/W controls', async () => {
+    const host = mountPanel()
+    await nextTick()
+
+    const add = host.querySelector<HTMLButtonElement>('[data-testid="job-tm-add"]')
+    expect(add).not.toBeNull()
+    add!.click()
+    await nextTick()
+
+    const personalCard = [...host.querySelectorAll<HTMLElement>('[role="button"]')].find(card =>
+      card.textContent?.includes('Personal TM')
+    )
+    expect(personalCard).toBeDefined()
+    personalCard!.click()
+    await nextTick()
+
+    expect(host.textContent).toContain('Personal TM')
+    expect(host.textContent).toContain('R')
+    expect(host.textContent).toContain('W')
     expect(host.querySelector('[data-testid="job-tm-read"]')).toBeNull()
     expect(host.querySelector('[data-testid="job-tm-write"]')).toBeNull()
   })
