@@ -105,3 +105,31 @@ export type PatchJobResourceInput = {
   canExport?: boolean
   canClone?: boolean
 }
+
+export type JobTmAttachment = {
+  id: string
+  jobId: string
+  tmBaseId: string
+  canRead: boolean
+  canWrite: boolean
+  canExport: boolean
+  canClone: boolean
+  createdBy: string
+  createdAt: string
+  updatedAt: string
+}
+
+export type CreateJobTmAttachmentInput = {
+  tmBaseId: string
+  canRead?: boolean
+  canWrite?: boolean
+  canExport?: boolean
+  canClone?: boolean
+}
+
+export type PatchJobTmAttachmentInput = {
+  canRead?: boolean
+  canWrite?: boolean
+  canExport?: boolean
+  canClone?: boolean
+}
