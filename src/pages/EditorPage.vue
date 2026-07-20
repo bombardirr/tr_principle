@@ -19,6 +19,7 @@ import IconButton from '@/components/IconButton.vue'
 import EditorGlyph from '@/components/EditorGlyph.vue'
 import TooltipWrap from '@/components/TooltipWrap.vue'
 import { publicActorLabel, useAuth } from '@/auth/session'
+import { useOnlineStatus } from '@/composables/useOnlineStatus'
 import { useProjectAccess } from '@/composables/useProjectAccess'
 import { withSegmentAudit } from '@/utils/segmentAudit'
 import { scheduleProjectBackup, pushProjectBackup } from '@/projects/backup'
@@ -88,6 +89,7 @@ const props = defineProps<{ id: string }>()
 const { t } = useI18n()
 const router = useRouter()
 const { user } = useAuth()
+const { online } = useOnlineStatus()
 
 /** shallowRef: deep ref() proxies break IndexedDB structured clone */
 const record = shallowRef<ProjectRecord | null>(null)
@@ -574,6 +576,12 @@ watch(
   },
   { immediate: true },
 )
+
+watch(online, (isOnline, wasOnline) => {
+  if (!isOnline || wasOnline !== false) return
+  const jobId = record.value?.meta.jobId
+  if (jobId) void reloadJobTm(jobId)
+})
 
 watch(
   () => [record.value?.meta.jobId, user.value?.id] as const,

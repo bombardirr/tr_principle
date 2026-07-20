@@ -36,6 +36,7 @@ async function load() {
   error.value = ''
   try {
     resource.value = await loadJobResource(props.jobId)
+    if (jobTmReadable(resource.value)) void syncJobTm(props.jobId, { resource: resource.value })
   } finally {
     loading.value = false
   }

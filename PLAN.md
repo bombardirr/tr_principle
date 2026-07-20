@@ -257,8 +257,8 @@ Outbox / очередь push — **не** в этом пункте («позже
 
 **J2 — живые базы**
 
-- [ ] Пресет ресурсов на job + override у участника (Read/Write) — **отложено:** авто-`job_tm` убран; следующий шаг — attach выбранных баз
-- [ ] Live shared TM через attach (не временная job TM)
+- [x] Пресет ресурсов на job + override у участника (Read/Write) — job TM attach UI
+- [x] Live shared TM через attach (job_tm pool + client sync)
 
 **J3 — прогресс для PM**
 

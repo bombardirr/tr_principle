@@ -381,9 +381,11 @@ After attach-bases exists (Task 14+), TM writes that target **writable shared ba
 
 **Files:** reuse dormant `job_resource_*` / sync ideas; new attach UI; no auto ephemeral job TM.
 
-- [ ] **Step 1: Attach personal / cloud TM refs to job** with preset + member overrides
-- [ ] **Step 2: Editor match/write** only via attached bases + privacy copy on Write
-- [ ] **Step 3: Commit** `Attach selectable TM bases to shared work.`
+> **Done (2026-07-20):** Model A — one `job_tm` pool per job via [`2026-07-20-job-tm-attach.md`](2026-07-20-job-tm-attach.md). Personal/cloud ref attach (Model B) remains future.
+
+- [x] **Step 1: Attach personal / cloud TM refs to job** with preset + member overrides — *job_tm pool + preset/override (Model A)*
+- [x] **Step 2: Editor match/write** only via attached bases + privacy copy on Write
+- [x] **Step 3: Commit** `Attach selectable TM bases to shared work.`
 
 ### Task 15: Dual progress metrics + finalize for boss
 
@@ -427,4 +429,4 @@ See Tasks 11–12 below (paste link, join without project, IA A, job hub). Soft-
 
 ## Execution note
 
-**Next:** Tasks **11–12** (paste invite, join without project, job hub IA A), then **14** attach bases, **13** deferred TM stack, **15** dual progress + boss result. Do not revive auto `job_tm`. Do not start F2.1 segment locks.
+**Next:** Task **13** deferred TM write stack, then soft-warn (Task 9 re-wire), then **15** dual progress + boss result. Model B (attach extra personal/cloud bases) after stack. Tasks **11–12** (IA / job hub) may proceed in parallel. Do not revive auto `job_tm`. Do not start F2.1 segment locks.
