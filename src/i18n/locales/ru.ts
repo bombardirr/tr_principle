@@ -403,7 +403,8 @@ export default {
     deleteForever: 'Удалить навсегда',
     deleteCancel: 'Отмена',
     confirmLeave: 'Покинуть работу «{name}»? Личный проект останется.',
-    confirmArchive: 'Закрыть работу «{name}»? Участники останутся, новые приглашения и запись в ТМ работы будут недоступны.',
+    confirmArchive:
+      'Закрыть работу «{name}»? Участники останутся, новые приглашения и запись в ТМ работы будут недоступны.',
     confirmDeleteForever:
       'Удалить работу «{name}» навсегда? Карточка и ТМ работы исчезнут у всех. Личные проекты у участников сохранятся.',
     leftNotice: 'Вы покинули «{name}».',
@@ -436,6 +437,11 @@ export default {
     memoriesAttachedTitle: 'Прикреплённые ТМ',
     memoriesAttachedEmpty:
       'Пока нет прикреплённых ТМ. Подключите базы, чтобы использовать их в этой работе.',
+    memoriesJobBasesTitle: 'Базы работы',
+    memoriesJobBasesEmpty: 'Owner ещё не прикрепил общие базы.',
+    memoriesLocalOverlayTitle: 'Мои доп.',
+    memoriesLocalOverlayEmpty: 'Нет локальных доп. баз.',
+    memoriesLocalOverlayHint: 'Только у вас на этом устройстве',
     memoriesRead: 'Читать',
     memoriesWrite: 'Писать',
     memoriesWritePrivacy: 'Запись попадает в облако и видна участникам с доступом на чтение.',

@@ -1,19 +1,22 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import EditorGlyph from '@/components/EditorGlyph.vue'
 import TmCollectionDialog from '@/components/TmCollectionDialog.vue'
+import {
+  createJobTmAttachment,
+  deleteJobTmAttachment,
+  listJobTmAttachmentsApi,
+  patchJobTmAttachment,
+} from '@/jobs/tmAttachmentsApi'
 import {
   attachJobTm,
   detachJobTm,
   listJobTmAttachments,
   updateJobTmAttachment,
 } from '@/tm/jobAttachments'
-import {
-  PERSONAL_TM_ATTACHMENT_ID,
-  TM_ATTACHMENT_CATALOG,
-} from '@/tm/projectAttachments'
-import type { JobRole } from '@/types/job'
+import { PERSONAL_TM_ATTACHMENT_ID, TM_ATTACHMENT_CATALOG } from '@/tm/projectAttachments'
+import type { JobRole, JobTmAttachment } from '@/types/job'
 import type { ProjectTmAttachmentId } from '@/types/project'
 
 const props = defineProps<{
@@ -23,29 +26,56 @@ const props = defineProps<{
 }>()
 
 const { t } = useI18n()
-const attachments = ref(listJobTmAttachments(props.jobId))
+const shared = ref<JobTmAttachment[]>([])
+const localOverlay = ref(listJobTmAttachments(props.jobId))
+const loadError = ref<string | null>(null)
 const collectionOpen = ref(false)
 const collectionMode = ref<'pick' | 'browse'>('pick')
 const collectionReturnTo = ref<'job' | null>(null)
-const attachedIds = computed(() => attachments.value.map(item => item.id))
+const pickerTarget = ref<'shared' | 'local'>('local')
+const attachedIds = computed<ProjectTmAttachmentId[]>(() =>
+  pickerTarget.value === 'shared'
+    ? shared.value
+        .map(item => item.tmBaseId)
+        .filter((id): id is ProjectTmAttachmentId =>
+          TM_ATTACHMENT_CATALOG.some(item => item.id === id)
+        )
+    : localOverlay.value.map(item => item.id)
+)
 
 watch(
   () => props.jobId,
   jobId => {
-    attachments.value = listJobTmAttachments(jobId)
+    localOverlay.value = listJobTmAttachments(jobId)
+    void refreshShared()
   }
 )
 
-function catalogItem(id: ProjectTmAttachmentId) {
+onMounted(() => {
+  void refreshShared()
+})
+
+async function refreshShared() {
+  loadError.value = null
+  try {
+    shared.value = await listJobTmAttachmentsApi(props.jobId)
+  } catch (error) {
+    loadError.value = error instanceof Error ? error.message : String(error)
+    shared.value = []
+  }
+}
+
+function catalogItem(id: string) {
   return TM_ATTACHMENT_CATALOG.find(item => item.id === id)
 }
 
-function itemLabel(id: ProjectTmAttachmentId) {
+function itemLabel(id: string) {
   const item = catalogItem(id)
   return id === PERSONAL_TM_ATTACHMENT_ID ? t('projects.tmPersonalBase') : (item?.label ?? id)
 }
 
-function openPick() {
+function openPick(target: 'shared' | 'local') {
+  pickerTarget.value = target
   collectionMode.value = 'pick'
   collectionReturnTo.value = 'job'
   collectionOpen.value = true
@@ -61,21 +91,72 @@ function closeCollection() {
   collectionReturnTo.value = null
 }
 
-function attach(id: ProjectTmAttachmentId) {
-  attachments.value = attachJobTm(props.jobId, id)
+async function attach(id: ProjectTmAttachmentId) {
+  if (pickerTarget.value === 'shared') {
+    await attachShared(id)
+    return
+  }
+  localOverlay.value = attachJobTm(props.jobId, id)
   closeCollection()
 }
 
-function detach(id: ProjectTmAttachmentId) {
-  attachments.value = detachJobTm(props.jobId, id)
+async function attachShared(tmBaseId: ProjectTmAttachmentId) {
+  if (!props.isOwner) return
+  loadError.value = null
+  try {
+    const created = await createJobTmAttachment(props.jobId, {
+      tmBaseId,
+      canRead: true,
+      canWrite: true,
+    })
+    shared.value = [...shared.value, created]
+    closeCollection()
+  } catch (error) {
+    loadError.value = error instanceof Error ? error.message : String(error)
+    await refreshShared()
+  }
 }
 
-function togglePermission(
+async function detachShared(attachmentId: string) {
+  if (!props.isOwner) return
+  loadError.value = null
+  try {
+    await deleteJobTmAttachment(props.jobId, attachmentId)
+    shared.value = shared.value.filter(item => item.id !== attachmentId)
+  } catch (error) {
+    loadError.value = error instanceof Error ? error.message : String(error)
+    await refreshShared()
+  }
+}
+
+async function toggleShared(
+  attachmentId: string,
+  permission: 'canRead' | 'canWrite',
+  value: boolean
+) {
+  if (!props.isOwner) return
+  loadError.value = null
+  try {
+    const updated = await patchJobTmAttachment(props.jobId, attachmentId, {
+      [permission]: value,
+    })
+    shared.value = shared.value.map(item => (item.id === updated.id ? updated : item))
+  } catch (error) {
+    loadError.value = error instanceof Error ? error.message : String(error)
+    await refreshShared()
+  }
+}
+
+function detachLocal(id: ProjectTmAttachmentId) {
+  localOverlay.value = detachJobTm(props.jobId, id)
+}
+
+function toggleLocal(
   id: ProjectTmAttachmentId,
   permission: 'canRead' | 'canWrite',
   value: boolean
 ) {
-  attachments.value = updateJobTmAttachment(props.jobId, id, { [permission]: value })
+  localOverlay.value = updateJobTmAttachment(props.jobId, id, { [permission]: value })
 }
 </script>
 
@@ -90,27 +171,99 @@ function togglePermission(
       </span>
     </div>
 
-    <div class="attachments">
+    <div class="attachments shared-attachments">
       <div class="attachments-header">
-        <strong class="attachments-title">{{ t('jobs.memoriesAttachedTitle') }}</strong>
+        <strong class="attachments-title">{{ t('jobs.memoriesJobBasesTitle') }}</strong>
         <button
+          v-if="isOwner"
           type="button"
           class="add"
           data-testid="job-tm-add"
           :aria-label="t('jobs.memoriesAttach')"
           :title="t('jobs.memoriesAttach')"
-          @click="openPick"
+          @click="openPick('shared')"
         >
           <EditorGlyph name="plus" />
         </button>
       </div>
 
-      <p v-if="attachments.length === 0" class="muted">
-        {{ t('jobs.memoriesAttachedEmpty') }}
+      <p v-if="loadError" class="error">{{ loadError }}</p>
+      <p v-if="shared.length === 0" class="muted">
+        {{ t('jobs.memoriesJobBasesEmpty') }}
       </p>
 
       <div v-else class="bases">
-        <article v-for="attachment in attachments" :key="attachment.id" class="base-card">
+        <article v-for="attachment in shared" :key="attachment.id" class="base-card">
+          <span
+            class="glyph"
+            :style="{ '--tm-color': catalogItem(attachment.tmBaseId)?.color ?? 'var(--accent)' }"
+          >
+            <EditorGlyph :name="catalogItem(attachment.tmBaseId)?.glyph ?? 'tm'" />
+          </span>
+          <strong class="base-name">{{ itemLabel(attachment.tmBaseId) }}</strong>
+          <label class="permission" :title="t('projects.tmPermRead')">
+            <span>{{ t('projects.tmPermReadShort') }}</span>
+            <input
+              data-testid="job-tm-shared-read"
+              type="checkbox"
+              :checked="attachment.canRead"
+              :disabled="!isOwner"
+              @change="
+                toggleShared(attachment.id, 'canRead', ($event.target as HTMLInputElement).checked)
+              "
+            />
+          </label>
+          <label class="permission" :title="t('projects.tmPermWrite')">
+            <span>{{ t('projects.tmPermWriteShort') }}</span>
+            <input
+              data-testid="job-tm-shared-write"
+              type="checkbox"
+              :checked="attachment.canWrite"
+              :disabled="!isOwner"
+              @change="
+                toggleShared(attachment.id, 'canWrite', ($event.target as HTMLInputElement).checked)
+              "
+            />
+          </label>
+          <button
+            v-if="isOwner"
+            type="button"
+            class="detach"
+            data-testid="job-tm-shared-detach"
+            :aria-label="t('jobs.memoriesDetach')"
+            :title="t('jobs.memoriesDetach')"
+            @click="detachShared(attachment.id)"
+          >
+            −
+          </button>
+        </article>
+      </div>
+    </div>
+
+    <div class="attachments local-attachments">
+      <div class="attachments-header">
+        <span>
+          <strong class="attachments-title">{{ t('jobs.memoriesLocalOverlayTitle') }}</strong>
+          <small class="overlay-hint">{{ t('jobs.memoriesLocalOverlayHint') }}</small>
+        </span>
+        <button
+          type="button"
+          class="add"
+          data-testid="job-tm-local-add"
+          :aria-label="t('jobs.memoriesAttach')"
+          :title="t('jobs.memoriesAttach')"
+          @click="openPick('local')"
+        >
+          <EditorGlyph name="plus" />
+        </button>
+      </div>
+
+      <p v-if="localOverlay.length === 0" class="muted">
+        {{ t('jobs.memoriesLocalOverlayEmpty') }}
+      </p>
+
+      <div v-else class="bases">
+        <article v-for="attachment in localOverlay" :key="attachment.id" class="base-card">
           <span
             class="glyph"
             :style="{ '--tm-color': catalogItem(attachment.id)?.color ?? 'var(--accent)' }"
@@ -121,37 +274,32 @@ function togglePermission(
           <label class="permission" :title="t('projects.tmPermRead')">
             <span>{{ t('projects.tmPermReadShort') }}</span>
             <input
+              data-testid="job-tm-local-read"
               type="checkbox"
               :checked="attachment.canRead"
               @change="
-                togglePermission(
-                  attachment.id,
-                  'canRead',
-                  ($event.target as HTMLInputElement).checked
-                )
+                toggleLocal(attachment.id, 'canRead', ($event.target as HTMLInputElement).checked)
               "
             />
           </label>
           <label class="permission" :title="t('projects.tmPermWrite')">
             <span>{{ t('projects.tmPermWriteShort') }}</span>
             <input
+              data-testid="job-tm-local-write"
               type="checkbox"
               :checked="attachment.canWrite"
               @change="
-                togglePermission(
-                  attachment.id,
-                  'canWrite',
-                  ($event.target as HTMLInputElement).checked
-                )
+                toggleLocal(attachment.id, 'canWrite', ($event.target as HTMLInputElement).checked)
               "
             />
           </label>
           <button
             type="button"
             class="detach"
+            data-testid="job-tm-local-detach"
             :aria-label="t('jobs.memoriesDetach')"
             :title="t('jobs.memoriesDetach')"
-            @click="detach(attachment.id)"
+            @click="detachLocal(attachment.id)"
           >
             −
           </button>
@@ -219,6 +367,12 @@ h3 {
 .attachments-header {
   justify-content: space-between;
   gap: 0.5rem;
+}
+
+.attachments-header > span {
+  display: flex;
+  flex-direction: column;
+  gap: 0.05rem;
 }
 
 .attachments-title {
@@ -292,9 +446,19 @@ small,
   font-size: 0.72rem;
 }
 
+.overlay-hint {
+  display: block;
+}
+
 .muted {
   margin: 0.2rem 0 0;
   line-height: 1.4;
+}
+
+.error {
+  margin: 0.2rem 0 0;
+  color: var(--danger);
+  font-size: 0.72rem;
 }
 
 @media (max-width: 30rem) {

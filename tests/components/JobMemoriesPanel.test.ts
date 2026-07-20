@@ -1,7 +1,45 @@
 import { createApp, h, nextTick } from 'vue'
 import { createI18n } from 'vue-i18n'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+
+vi.mock('../../src/jobs/tmAttachmentsApi', () => ({
+  listJobTmAttachmentsApi: vi.fn(async () => []),
+  createJobTmAttachment: vi.fn(
+    async (_jobId: string, input: { tmBaseId: string; canRead?: boolean; canWrite?: boolean }) => ({
+      id: 'att-created',
+      jobId: 'job-1',
+      tmBaseId: input.tmBaseId,
+      canRead: input.canRead ?? true,
+      canWrite: input.canWrite ?? true,
+      canExport: false,
+      canClone: false,
+      createdBy: 'u1',
+      createdAt: '2026-01-01T00:00:00Z',
+      updatedAt: '2026-01-01T00:00:00Z',
+    })
+  ),
+  patchJobTmAttachment: vi.fn(async () => ({
+    id: 'att-server',
+    jobId: 'job-1',
+    tmBaseId: 'personal-tm',
+    canRead: false,
+    canWrite: true,
+    canExport: false,
+    canClone: false,
+    createdBy: 'u1',
+    createdAt: '2026-01-01T00:00:00Z',
+    updatedAt: '2026-01-02T00:00:00Z',
+  })),
+  deleteJobTmAttachment: vi.fn(async () => undefined),
+}))
+
 import JobMemoriesPanel from '../../src/components/JobMemoriesPanel.vue'
+import {
+  createJobTmAttachment,
+  deleteJobTmAttachment,
+  listJobTmAttachmentsApi,
+  patchJobTmAttachment,
+} from '../../src/jobs/tmAttachmentsApi'
 
 const messages = {
   en: {
@@ -9,14 +47,19 @@ const messages = {
       memoriesTitle: 'Memories',
       memoriesPersonal: 'Personal TM',
       memoriesPersonalHint: 'always · only you',
-      memoriesAttachedTitle: 'Attached TMs',
-      memoriesAttachedEmpty: 'No TMs attached yet. Attach bases to use them on this work.',
+      memoriesJobBasesTitle: 'Job bases',
+      memoriesJobBasesEmpty: 'No shared bases attached yet.',
+      memoriesLocalOverlayTitle: 'My extras',
+      memoriesLocalOverlayEmpty: 'No local extra bases.',
+      memoriesLocalOverlayHint: 'Only on this device for you',
       memoriesAttach: 'Attach base',
       memoriesDetach: 'Detach base',
     },
     projects: {
       tmPersonalBase: 'Personal TM',
       tmUnitsStat: '{n} units',
+      tmPermRead: 'Read',
+      tmPermWrite: 'Write',
       tmPermReadShort: 'R',
       tmPermWriteShort: 'W',
     },
@@ -49,43 +92,118 @@ function mountPanel(props = { jobId: 'job-1', isOwner: false, myRole: 'translato
   return host
 }
 
-afterEach(() => {
-  while (mounted.length) mounted.pop()!.unmount()
+async function settle() {
+  await nextTick()
+  await nextTick()
+}
+
+beforeEach(() => {
+  vi.clearAllMocks()
+  vi.mocked(listJobTmAttachmentsApi).mockResolvedValue([])
   localStorage.clear()
 })
 
+afterEach(() => {
+  while (mounted.length) mounted.pop()!.unmount()
+})
+
 describe('JobMemoriesPanel', () => {
-  it('shows personal TM and empty attached list without job TM toggles', async () => {
+  it('shows personal, shared, and local layers', async () => {
     const host = mountPanel()
-    await nextTick()
+    await settle()
 
     expect(host.textContent).toContain('Personal TM')
-    expect(host.textContent).toContain('Attached TMs')
-    expect(host.textContent).toContain('No TMs attached yet')
-    expect(host.querySelector('[data-testid="job-tm-read"]')).toBeNull()
-    expect(host.querySelector('[data-testid="job-tm-write"]')).toBeNull()
+    expect(host.textContent).toContain('Job bases')
+    expect(host.textContent).toContain('No shared bases attached yet.')
+    expect(host.textContent).toContain('My extras')
+    expect(host.textContent).toContain('Only on this device for you')
+    expect(host.textContent).toContain('No local extra bases.')
+    expect(listJobTmAttachmentsApi).toHaveBeenCalledWith('job-1')
   })
 
-  it('can attach personal TM via pick flow and see R/W controls', async () => {
-    const host = mountPanel()
-    await nextTick()
+  it('only shows the shared add control to the owner', async () => {
+    const ownerHost = mountPanel({ jobId: 'job-1', isOwner: true, myRole: 'owner' })
+    const memberHost = mountPanel({ jobId: 'job-1', isOwner: false, myRole: 'translator' })
+    await settle()
 
-    const add = host.querySelector<HTMLButtonElement>('[data-testid="job-tm-add"]')
-    expect(add).not.toBeNull()
-    add!.click()
-    await nextTick()
+    expect(ownerHost.querySelector('[data-testid="job-tm-add"]')).not.toBeNull()
+    expect(memberHost.querySelector('[data-testid="job-tm-add"]')).toBeNull()
+    expect(memberHost.querySelector('[data-testid="job-tm-local-add"]')).not.toBeNull()
+  })
 
+  it('owner attaches a shared base through the server API', async () => {
+    const host = mountPanel({ jobId: 'job-1', isOwner: true, myRole: 'owner' })
+    await settle()
+
+    host.querySelector<HTMLButtonElement>('[data-testid="job-tm-add"]')!.click()
+    await nextTick()
     const personalCard = [...host.querySelectorAll<HTMLElement>('[role="button"]')].find(card =>
       card.textContent?.includes('Personal TM')
     )
-    expect(personalCard).toBeDefined()
+    personalCard!.click()
+    await settle()
+
+    expect(createJobTmAttachment).toHaveBeenCalledWith('job-1', {
+      tmBaseId: 'personal-tm',
+      canRead: true,
+      canWrite: true,
+    })
+  })
+
+  it('uses attachment UUID for shared mutations and disables member controls', async () => {
+    vi.mocked(listJobTmAttachmentsApi).mockResolvedValue([
+      {
+        id: 'att-server',
+        jobId: 'job-1',
+        tmBaseId: 'personal-tm',
+        canRead: true,
+        canWrite: true,
+        canExport: false,
+        canClone: false,
+        createdBy: 'u1',
+        createdAt: '2026-01-01T00:00:00Z',
+        updatedAt: '2026-01-01T00:00:00Z',
+      },
+    ])
+
+    const memberHost = mountPanel()
+    await settle()
+    const memberCheckboxes = memberHost.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')
+    expect(memberHost.textContent).toContain('Personal TM')
+    expect(memberCheckboxes).toHaveLength(2)
+    expect([...memberCheckboxes].every(input => input.disabled)).toBe(true)
+    expect(memberHost.querySelector('[data-testid="job-tm-shared-detach"]')).toBeNull()
+
+    const ownerHost = mountPanel({ jobId: 'job-1', isOwner: true, myRole: 'owner' })
+    await settle()
+    const ownerRead = ownerHost.querySelector<HTMLInputElement>(
+      '[data-testid="job-tm-shared-read"]'
+    )!
+    ownerRead.click()
+    await settle()
+    expect(patchJobTmAttachment).toHaveBeenCalledWith('job-1', 'att-server', {
+      canRead: false,
+    })
+
+    ownerHost.querySelector<HTMLButtonElement>('[data-testid="job-tm-shared-detach"]')!.click()
+    await settle()
+    expect(deleteJobTmAttachment).toHaveBeenCalledWith('job-1', 'att-server')
+  })
+
+  it('lets a member attach and mutate a local extra without server writes', async () => {
+    const host = mountPanel()
+    await settle()
+
+    host.querySelector<HTMLButtonElement>('[data-testid="job-tm-local-add"]')!.click()
+    await nextTick()
+    const personalCard = [...host.querySelectorAll<HTMLElement>('[role="button"]')].find(card =>
+      card.textContent?.includes('Personal TM')
+    )
     personalCard!.click()
     await nextTick()
 
-    expect(host.textContent).toContain('Personal TM')
-    expect(host.textContent).toContain('R')
-    expect(host.textContent).toContain('W')
-    expect(host.querySelector('[data-testid="job-tm-read"]')).toBeNull()
-    expect(host.querySelector('[data-testid="job-tm-write"]')).toBeNull()
+    expect(host.querySelector('[data-testid="job-tm-local-read"]')).not.toBeNull()
+    expect(host.querySelector('[data-testid="job-tm-local-write"]')).not.toBeNull()
+    expect(createJobTmAttachment).not.toHaveBeenCalled()
   })
 })

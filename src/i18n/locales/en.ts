@@ -402,8 +402,7 @@ export default {
     deleteForever: 'Delete forever',
     deleteCancel: 'Cancel',
     confirmLeave: 'Leave “{name}”? Your personal project stays.',
-    confirmArchive:
-      'Close “{name}”? Members stay, but new invites and Job TM writes stop.',
+    confirmArchive: 'Close “{name}”? Members stay, but new invites and Job TM writes stop.',
     confirmDeleteForever:
       'Delete “{name}” forever? The card and Job TM disappear for everyone. Members keep their personal projects.',
     leftNotice: 'You left “{name}”.',
@@ -435,6 +434,11 @@ export default {
     memoriesPersonalHint: 'always · only you',
     memoriesAttachedTitle: 'Attached TMs',
     memoriesAttachedEmpty: 'No TMs attached yet. Attach bases to use them on this work.',
+    memoriesJobBasesTitle: 'Job bases',
+    memoriesJobBasesEmpty: 'No shared bases attached yet.',
+    memoriesLocalOverlayTitle: 'My extras',
+    memoriesLocalOverlayEmpty: 'No local extra bases.',
+    memoriesLocalOverlayHint: 'Only on this device for you',
     memoriesRead: 'Read',
     memoriesWrite: 'Write',
     memoriesWritePrivacy: 'Entries go to the cloud and are visible to members with read access.',
