@@ -25,3 +25,9 @@
 
 `npm run format:check` currently fails across 64 existing source files, including files unrelated
 to this task. No bulk formatting was applied so existing uncommitted work was not altered.
+
+## Final review fixes
+
+- Capped translator overrides by the job TM preset and prevented viewers from gaining write access.
+- Made owner effective permissions honor the preset, including write access.
+- Cleared the in-memory job-resource cache when the storage account changes.

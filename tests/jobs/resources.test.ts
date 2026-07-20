@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { jobTmReadable, jobTmWritable } from '@/jobs/resources'
+import {
+  cacheJobResource,
+  jobTmReadable,
+  jobTmWritable,
+  readCachedJobResource,
+} from '@/jobs/resources'
+import { setStorageAccountId } from '@/storage/scope'
 import type { JobResource } from '@/types/job'
 
 const base: JobResource = {
@@ -21,5 +27,15 @@ describe('jobTmReadable/jobTmWritable', () => {
   it('respects read and write permissions independently', () => {
     expect(jobTmReadable({ ...base, canRead: false })).toBe(false)
     expect(jobTmWritable({ ...base, canWrite: false })).toBe(false)
+  })
+
+  it('does not reuse in-memory resources after an account change', () => {
+    setStorageAccountId('account-a')
+    cacheJobResource('job-1', base)
+
+    setStorageAccountId('account-b')
+    expect(readCachedJobResource('job-1')).toBeNull()
+
+    setStorageAccountId(null)
   })
 })

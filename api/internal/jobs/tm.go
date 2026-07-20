@@ -89,15 +89,25 @@ func (s *Store) EffectiveResource(ctx context.Context, jobID, userID uuid.UUID, 
 
 const effectiveResourcesQuery = `
 	SELECT p.kind,
-	       (p.enabled AND COALESCE(o.enabled, true)) AS enabled,
-	       COALESCE(o.can_read, CASE m.role
-	         WHEN 'owner' THEN true WHEN 'translator' THEN p.can_read ELSE false END),
-	       COALESCE(o.can_write, CASE m.role
-	         WHEN 'owner' THEN true WHEN 'translator' THEN p.can_write ELSE false END),
-	       COALESCE(o.can_export, CASE m.role
-	         WHEN 'owner' THEN true WHEN 'translator' THEN p.can_export ELSE false END),
-	       COALESCE(o.can_clone, CASE m.role
-	         WHEN 'owner' THEN true WHEN 'translator' THEN p.can_clone ELSE false END),
+	       CASE m.role
+	         WHEN 'owner' THEN p.enabled
+	         ELSE p.enabled AND COALESCE(o.enabled, true) END AS enabled,
+	       CASE m.role
+	         WHEN 'owner' THEN p.can_read
+	         WHEN 'translator' THEN p.can_read AND COALESCE(o.can_read, true)
+	         ELSE p.can_read AND COALESCE(o.can_read, true) END AS can_read,
+	       CASE m.role
+	         WHEN 'owner' THEN p.can_write
+	         WHEN 'translator' THEN p.can_write AND COALESCE(o.can_write, true)
+	         ELSE false END AS can_write,
+	       CASE m.role
+	         WHEN 'owner' THEN p.can_export
+	         WHEN 'translator' THEN p.can_export AND COALESCE(o.can_export, true)
+	         ELSE false END AS can_export,
+	       CASE m.role
+	         WHEN 'owner' THEN p.can_clone
+	         WHEN 'translator' THEN p.can_clone AND COALESCE(o.can_clone, true)
+	         ELSE false END AS can_clone,
 	       p.can_read, p.can_write, p.can_export, p.can_clone
 	FROM job_resource_presets p
 	JOIN job_members m ON m.job_id = p.job_id AND m.user_id = $2

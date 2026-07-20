@@ -23,6 +23,7 @@ vi.mock('@/storage/jobTmIdb', () => ({
 
 vi.mock('@/storage/scope', () => ({
   getStorageAccountId: () => 'account-1',
+  onStorageAccountChange: () => () => {},
 }))
 
 const resource: JobResource = {

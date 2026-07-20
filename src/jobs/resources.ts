@@ -1,10 +1,12 @@
 import type { JobResource } from '@/types/job'
 import type { TmUnit } from '@/types/tm'
 import { listJobResources } from '@/jobs/tmApi'
-import { getStorageAccountId } from '@/storage/scope'
+import { getStorageAccountId, onStorageAccountChange } from '@/storage/scope'
 
 const RESOURCE_CACHE_BASE = 'appzac-job-resource'
 const resourceCache = new Map<string, JobResource | null>()
+
+onStorageAccountChange(() => resourceCache.clear())
 
 function resourceCacheKey(jobId: string): string {
   return `${RESOURCE_CACHE_BASE}:${getStorageAccountId() ?? 'anonymous'}:${jobId}`

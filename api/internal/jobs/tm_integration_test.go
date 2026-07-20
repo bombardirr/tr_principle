@@ -156,6 +156,31 @@ func TestHTTPJobTMSyncACLAndAttribution(t *testing.T) {
 		"canRead":  true,
 		"canWrite": true,
 	}, http.StatusOK)
+	requestRaw(t, http.MethodPost, srv.URL+"/api/jobs/"+jobID.String()+"/tm/sync", memberToken, map[string]any{
+		"units": []map[string]any{unit},
+	}, http.StatusForbidden)
+	requestJSON(t, http.MethodPatch, srv.URL+"/api/jobs/"+jobID.String()+"/resources/me", viewerToken, map[string]any{
+		"kind":     "job_tm",
+		"canRead":  true,
+		"canWrite": true,
+	}, http.StatusOK)
+	requestRaw(t, http.MethodPost, srv.URL+"/api/jobs/"+jobID.String()+"/tm/sync", viewerToken, map[string]any{
+		"units": []map[string]any{unit},
+	}, http.StatusForbidden)
+	ownerResources := requestJSON(t, http.MethodGet, srv.URL+"/api/jobs/"+jobID.String()+"/resources", ownerToken, nil, http.StatusOK)
+	ownerResource := ownerResources["resources"].([]any)[0].(map[string]any)
+	if ownerResource["canWrite"] != false {
+		t.Fatalf("owner should respect preset write ACL: %v", ownerResource)
+	}
+	requestRaw(t, http.MethodPost, srv.URL+"/api/jobs/"+jobID.String()+"/tm/sync", ownerToken, map[string]any{
+		"units": []map[string]any{unit},
+	}, http.StatusForbidden)
+
+	requestJSON(t, http.MethodPatch, srv.URL+"/api/jobs/"+jobID.String()+"/resources/preset", ownerToken, map[string]any{
+		"kind":     "job_tm",
+		"canRead":  true,
+		"canWrite": true,
+	}, http.StatusOK)
 	requestJSON(t, http.MethodPost, srv.URL+"/api/jobs/"+jobID.String()+"/tm/sync", memberToken, map[string]any{
 		"units": []map[string]any{unit},
 	}, http.StatusOK)
