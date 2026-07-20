@@ -3,6 +3,10 @@ import type { Segment } from '@/types/project'
 import type { TmUnit } from '@/types/tm'
 import { isSegmentDone } from '@/utils/segmentStatus'
 import { tmLookupKey } from '@/tm/normalize'
+import {
+  buildTmUnitFromSegment,
+  type TmUnitFromSegmentOptions,
+} from '@/tm/unitFromSegment'
 import { onStorageAccountChange, scopedDbName } from '@/storage/scope'
 
 interface TmDb extends DBSchema {
@@ -85,50 +89,21 @@ export async function deleteTmForSegmentSource(
 
 export async function upsertTmFromSegment(
   segment: Segment,
-  options?: {
-    sourceLang?: string
-    targetLang?: string
-    projectId?: string
-    actor?: string
-    contextBefore?: string
-    contextAfter?: string
-  },
+  options?: TmUnitFromSegmentOptions,
 ): Promise<string | null> {
-  if (!isSegmentDone(segment)) return null
-  // Empty confirmed segments are local-only; never write or erase TM for them.
-  if (!segment.target.trim()) return null
   const sourceKey = tmLookupKey(
     segment.source,
     options?.sourceLang,
     options?.targetLang,
   )
-  const normalized = sourceKey.split('::')[0]
-  if (!normalized) return null
-
   const db = await getDb()
-  const existing = (await db.getAllFromIndex('units', 'by-source-key', sourceKey)).filter(
-    isActive,
-  )
-  const sameTarget = existing.find((u) => u.target === segment.target)
-  const now = new Date().toISOString()
-  const actor = options?.actor ?? 'local'
-  const prev = sameTarget
-  const row: TmUnit = {
-    id: prev?.id ?? crypto.randomUUID(),
-    source: segment.source,
-    target: segment.target,
+  const existing = await db.getAllFromIndex(
+    'units',
+    'by-source-key',
     sourceKey,
-    sourceLang: options?.sourceLang,
-    targetLang: options?.targetLang,
-    createdAt: prev?.createdAt ?? now,
-    updatedAt: now,
-    deletedAt: null,
-    projectId: options?.projectId,
-    createdBy: prev?.createdBy ?? actor,
-    updatedBy: actor,
-    contextBefore: options?.contextBefore ?? prev?.contextBefore,
-    contextAfter: options?.contextAfter ?? prev?.contextAfter,
-  }
+  )
+  const row = await buildTmUnitFromSegment(segment, options, existing)
+  if (!row) return null
   await db.put('units', row)
   return row.id
 }
