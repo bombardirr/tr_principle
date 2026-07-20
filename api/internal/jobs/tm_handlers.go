@@ -138,16 +138,14 @@ func (h *Handler) PatchResourcePreset(w http.ResponseWriter, r *http.Request) {
 	if body.Kind == "" {
 		body.Kind = JobTMResourceKind
 	}
-	preset, err := h.Store.PatchResourcePreset(r.Context(), jobID, body.Kind, body.patch())
+	resource, err := h.Store.PatchResourcePreset(r.Context(), jobID, user.ID, body.Kind, body.patch())
 	switch {
 	case errors.Is(err, ErrInvalidResource):
 		writeError(w, http.StatusBadRequest, err.Error())
-	case errors.Is(err, ErrResourceMissing):
-		writeError(w, http.StatusNotFound, err.Error())
 	case err != nil:
 		writeError(w, http.StatusInternalServerError, "server error")
 	default:
-		writeJSON(w, http.StatusOK, map[string]any{"kind": body.Kind, "preset": preset})
+		writeJSON(w, http.StatusOK, resource)
 	}
 }
 

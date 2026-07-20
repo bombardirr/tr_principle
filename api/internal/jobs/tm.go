@@ -89,7 +89,7 @@ func (s *Store) EffectiveResource(ctx context.Context, jobID, userID uuid.UUID, 
 
 const effectiveResourcesQuery = `
 	SELECT p.kind,
-	       COALESCE(o.enabled, true),
+	       (p.enabled AND COALESCE(o.enabled, true)) AS enabled,
 	       COALESCE(o.can_read, CASE m.role
 	         WHEN 'owner' THEN true WHEN 'translator' THEN p.can_read ELSE false END),
 	       COALESCE(o.can_write, CASE m.role
@@ -118,30 +118,36 @@ func scanResource(row interface{ Scan(dest ...any) error }) (Resource, error) {
 
 func (s *Store) PatchResourcePreset(
 	ctx context.Context,
-	jobID uuid.UUID,
+	jobID, userID uuid.UUID,
 	kind string,
 	patch ResourcePatch,
-) (ResourceACL, error) {
+) (Resource, error) {
 	if kind != JobTMResourceKind || patch.empty() {
-		return ResourceACL{}, ErrInvalidResource
+		return Resource{}, ErrInvalidResource
 	}
 	var preset ResourceACL
 	err := s.pool.QueryRow(ctx, `
-		UPDATE job_resource_presets
-		SET can_read = COALESCE($3, can_read),
-		    can_write = COALESCE($4, can_write),
-		    can_export = COALESCE($5, can_export),
-		    can_clone = COALESCE($6, can_clone),
-		    updated_at = now()
-		WHERE job_id = $1 AND kind = $2
+		INSERT INTO job_resource_presets (
+			job_id, kind, enabled, can_read, can_write, can_export, can_clone
+		) VALUES (
+			$1, $2, COALESCE($3, false), COALESCE($4, true), COALESCE($5, true),
+			COALESCE($6, false), COALESCE($7, false)
+		)
+		ON CONFLICT (job_id, kind) DO UPDATE SET
+			enabled = COALESCE($3, job_resource_presets.enabled),
+			can_read = COALESCE($4, job_resource_presets.can_read),
+			can_write = COALESCE($5, job_resource_presets.can_write),
+			can_export = COALESCE($6, job_resource_presets.can_export),
+			can_clone = COALESCE($7, job_resource_presets.can_clone),
+			updated_at = now()
 		RETURNING can_read, can_write, can_export, can_clone
-	`, jobID, kind, patch.CanRead, patch.CanWrite, patch.CanExport, patch.CanClone).Scan(
+	`, jobID, kind, patch.Enabled, patch.CanRead, patch.CanWrite, patch.CanExport, patch.CanClone).Scan(
 		&preset.CanRead, &preset.CanWrite, &preset.CanExport, &preset.CanClone,
 	)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return ResourceACL{}, ErrResourceMissing
+	if err != nil {
+		return Resource{}, err
 	}
-	return preset, err
+	return s.EffectiveResource(ctx, jobID, userID, kind)
 }
 
 func (s *Store) PatchMemberResource(

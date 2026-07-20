@@ -56,6 +56,7 @@ func TestHTTPJobTMSyncACLAndAttribution(t *testing.T) {
 
 	ownerToken := registerHTTPUser(t, srv.URL, "Owner")
 	memberToken, memberEmail := registerHTTPUserWithoutName(t, srv.URL)
+	viewerToken, _ := registerHTTPUserWithoutName(t, srv.URL)
 	jobID := uuid.New()
 	requestJSON(t, http.MethodPost, srv.URL+"/api/jobs", ownerToken, map[string]any{
 		"id":             jobID,
@@ -72,26 +73,57 @@ func TestHTTPJobTMSyncACLAndAttribution(t *testing.T) {
 	requestJSON(t, http.MethodPost, srv.URL+"/api/job-invites/accept", memberToken, map[string]any{
 		"token": invite["token"],
 	}, http.StatusOK)
+	viewerInvite := requestJSON(t, http.MethodPost, srv.URL+"/api/jobs/"+jobID.String()+"/invites", ownerToken, map[string]any{
+		"role": "viewer",
+	}, http.StatusCreated)
+	requestJSON(t, http.MethodPost, srv.URL+"/api/job-invites/accept", viewerToken, map[string]any{
+		"token": viewerInvite["token"],
+	}, http.StatusOK)
 
-	// job_tm is not auto-seeded; insert preset so ACL/sync paths can be exercised.
-	if _, err := pool.Exec(ctx, `
-		INSERT INTO job_resource_presets (job_id, kind, can_read, can_write, can_export, can_clone)
-		VALUES ($1, 'job_tm', true, true, false, false)
-	`, jobID); err != nil {
-		t.Fatal(err)
+	resources := requestJSON(t, http.MethodGet, srv.URL+"/api/jobs/"+jobID.String()+"/resources", ownerToken, nil, http.StatusOK)
+	if len(resources["resources"].([]any)) != 0 {
+		t.Fatalf("job TM should not be auto-seeded: %v", resources)
+	}
+	resource := requestJSON(t, http.MethodPatch, srv.URL+"/api/jobs/"+jobID.String()+"/resources/preset", ownerToken, map[string]any{
+		"kind":     "job_tm",
+		"enabled":  true,
+		"canRead":  true,
+		"canWrite": true,
+	}, http.StatusOK)
+	if resource["kind"] != "job_tm" || resource["enabled"] != true {
+		t.Fatalf("owner preset response = %v", resource)
 	}
 
-	resources := requestJSON(t, http.MethodGet, srv.URL+"/api/jobs/"+jobID.String()+"/resources", memberToken, nil, http.StatusOK)
-	resource := resources["resources"].([]any)[0].(map[string]any)
+	resources = requestJSON(t, http.MethodGet, srv.URL+"/api/jobs/"+jobID.String()+"/resources", memberToken, nil, http.StatusOK)
+	resource = resources["resources"].([]any)[0].(map[string]any)
 	if resource["kind"] != "job_tm" || resource["canRead"] != true || resource["canWrite"] != true {
 		t.Fatalf("default translator resource = %v", resource)
 	}
 	if resource["canExport"] != false || resource["canClone"] != false {
 		t.Fatalf("translator export/clone defaults = %v", resource)
 	}
+	resources = requestJSON(t, http.MethodGet, srv.URL+"/api/jobs/"+jobID.String()+"/resources", viewerToken, nil, http.StatusOK)
+	resource = resources["resources"].([]any)[0].(map[string]any)
+	if resource["canWrite"] != false {
+		t.Fatalf("viewer should not be able to write: %v", resource)
+	}
+
+	requestJSON(t, http.MethodPatch, srv.URL+"/api/jobs/"+jobID.String()+"/resources/preset", ownerToken, map[string]any{
+		"kind": "job_tm", "enabled": false,
+	}, http.StatusOK)
+	requestRaw(t, http.MethodGet, srv.URL+"/api/jobs/"+jobID.String()+"/tm/sync?since=1970-01-01T00:00:00Z", memberToken, nil, http.StatusForbidden)
+	requestJSON(t, http.MethodPatch, srv.URL+"/api/jobs/"+jobID.String()+"/resources/preset", ownerToken, map[string]any{
+		"kind": "job_tm", "enabled": true,
+	}, http.StatusOK)
+	requestJSON(t, http.MethodPatch, srv.URL+"/api/jobs/"+jobID.String()+"/resources/me", memberToken, map[string]any{
+		"kind": "job_tm", "enabled": false,
+	}, http.StatusOK)
+	requestRaw(t, http.MethodGet, srv.URL+"/api/jobs/"+jobID.String()+"/tm/sync?since=1970-01-01T00:00:00Z", memberToken, nil, http.StatusForbidden)
+	requestRaw(t, http.MethodGet, srv.URL+"/api/jobs/"+jobID.String()+"/tm/sync?since=1970-01-01T00:00:00Z", ownerToken, nil, http.StatusOK)
 
 	requestJSON(t, http.MethodPatch, srv.URL+"/api/jobs/"+jobID.String()+"/resources/me", memberToken, map[string]any{
 		"kind":     "job_tm",
+		"enabled":  true,
 		"canRead":  false,
 		"canWrite": false,
 	}, http.StatusOK)
