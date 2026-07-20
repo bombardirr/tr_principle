@@ -39,6 +39,14 @@ import {
   deleteTmForSegmentSource,
 } from '@/storage/tmIdb'
 import { markTmDirty } from '@/tm/sync'
+import { listJobTmUnits, recordDoneSegmentsInJobTm } from '@/storage/jobTmIdb'
+import { markJobTmDirty, syncJobTm } from '@/jobs/tmSync'
+import {
+  jobTmReadable,
+  jobTmWritable,
+  loadJobResource,
+  mergeTmUnitsForMatch,
+} from '@/jobs/resources'
 import { listGlossaryTerms } from '@/storage/glossaryIdb'
 import type { GlossaryTerm } from '@/types/glossary'
 import {
@@ -72,7 +80,7 @@ import {
   startJoinActivityPolling,
   stopJoinActivityPolling,
 } from '@/jobs/joinActivity'
-import type { Job, JobRole } from '@/types/job'
+import type { Job, JobResource, JobRole } from '@/types/job'
 import { reportJobMemberProgress } from '@/jobs/reportProgress'
 import { fingerprintDocx, fingerprintMismatch } from '@/jobs/fingerprint'
 
@@ -108,6 +116,8 @@ const projectLease = useProjectAccess(() => props.id)
 const { settings: tmSettings, toggleAutoSaveToTm } = useTmSettings()
 const { bindings: shortcutBindings, reload: reloadShortcuts } = useShortcutBindings()
 const tmUnits = shallowRef<TmUnit[]>([])
+const jobTmUnits = shallowRef<TmUnit[]>([])
+const jobResource = shallowRef<JobResource | null>(null)
 const jobRole = ref<JobRole | null>(null)
 const glossaryTerms = shallowRef<GlossaryTerm[]>([])
 const glossaryOpen = ref(false)
@@ -132,7 +142,12 @@ function clearTmAutosave(segId: string) {
 const done = computed(() => (record.value ? countTranslatedSegments(record.value.segments) : 0))
 const total = computed(() => record.value?.segments.length ?? 0)
 const editorReadOnly = computed(() => projectLease.blocked.value || jobRole.value === 'viewer')
-const matchTmUnits = computed(() => tmUnits.value)
+const matchTmUnits = computed(() =>
+  mergeTmUnitsForMatch(
+    tmUnits.value,
+    jobTmReadable(jobResource.value) ? jobTmUnits.value : [],
+  )
+)
 
 const tmCoveragePct = computed(() => {
   if (!record.value?.segments.length) return 0
@@ -380,6 +395,19 @@ async function reloadJobMembership(jobId = record.value?.meta.jobId) {
   }
 }
 
+async function reloadJobTm(jobId?: string) {
+  jobResource.value = null
+  jobTmUnits.value = []
+  if (!jobId) return
+
+  const resource = await loadJobResource(jobId)
+  if (record.value?.meta.jobId !== jobId) return
+  jobResource.value = resource
+  if (jobTmReadable(resource)) await syncJobTm(jobId)
+  if (record.value?.meta.jobId !== jobId) return
+  jobTmUnits.value = await listJobTmUnits(jobId)
+}
+
 async function reportJobProgress() {
   const jobId = record.value?.meta.jobId
   if (!jobId || jobRole.value === 'viewer' || !record.value) return
@@ -407,15 +435,26 @@ async function persistNow(): Promise<void> {
   }
   if (tmSettings.value.autoSaveToTm && tmAutosaveIds.value.size) {
     const onlyIds = [...tmAutosaveIds.value]
-    const dirty = await recordDoneSegmentsInTm(record.value.segments, {
+    const tmOptions = {
       sourceLang: record.value.meta.sourceLang,
       targetLang: record.value.meta.targetLang,
       projectId: record.value.meta.id,
       actor: publicActorLabel(user.value),
       onlyIds,
+    }
+    const dirty = await recordDoneSegmentsInTm(record.value.segments, {
+      ...tmOptions,
     })
     markTmDirty(...dirty)
     tmUnits.value = await listTmUnits()
+    const jobId = record.value.meta.jobId
+    if (jobId && jobTmWritable(jobResource.value)) {
+      const jobDirty = await recordDoneSegmentsInJobTm(jobId, record.value.segments, tmOptions)
+      if (jobDirty.length) markJobTmDirty(jobId, ...jobDirty)
+      if (jobTmReadable(jobResource.value)) {
+        jobTmUnits.value = await listJobTmUnits(jobId)
+      }
+    }
     tmAutosaveIds.value = new Set()
   }
   allSaved.value = true
@@ -526,6 +565,14 @@ watch(
   () => {
     void load()
   }
+)
+
+watch(
+  () => record.value?.meta.jobId,
+  jobId => {
+    void reloadJobTm(jobId)
+  },
+  { immediate: true },
 )
 
 watch(
@@ -1117,16 +1164,27 @@ async function saveSegmentToTmById(segId: string) {
   patchSegment(segId, { status })
   const segments = record.value.segments.map(s => (s.id === segId ? { ...s, status } : s))
   try {
-    const dirty = await recordDoneSegmentsInTm(segments, {
+    const tmOptions = {
       sourceLang: record.value.meta.sourceLang,
       targetLang: record.value.meta.targetLang,
       projectId: record.value.meta.id,
       actor: publicActorLabel(user.value),
       onlyIds: [segId],
+    }
+    const dirty = await recordDoneSegmentsInTm(segments, {
+      ...tmOptions,
     })
     markTmDirty(...dirty)
     clearTmAutosave(segId)
     tmUnits.value = await listTmUnits()
+    const jobId = record.value.meta.jobId
+    if (jobId && jobTmWritable(jobResource.value)) {
+      const jobDirty = await recordDoneSegmentsInJobTm(jobId, segments, tmOptions)
+      if (jobDirty.length) markJobTmDirty(jobId, ...jobDirty)
+      if (jobTmReadable(jobResource.value)) {
+        jobTmUnits.value = await listJobTmUnits(jobId)
+      }
+    }
   } catch (e) {
     setSaveError(e)
   }
