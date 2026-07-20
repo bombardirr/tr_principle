@@ -61,6 +61,8 @@ The earlier design assumed one cloud bilingual, membership, and write locks (pro
 
 ### Resources (TM / glossary) — attach model
 
+Detailed MVP for job TM: [`2026-07-20-job-tm-attach-design.md`](./2026-07-20-job-tm-attach-design.md) (one shared pool per job + light «Памяти» UI; personal TM refs later).
+
 - **No** auto built-in ephemeral `job_tm` as the default product path (removed).
 - Members **attach** selected bases they can access; job has preset defaults + per-member overrides (Read/Write; export/clone later).
 - Writes to **writable shared** bases go through a **deferred pending stack** (configurable delay on project create + settings): send/cancel all or per item; top item auto-flushes if untouched when timer expires — so accidental bad confirms can be fixed before leaving the device.
