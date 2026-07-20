@@ -30,6 +30,7 @@ import { readPreviewEnabled, writePreviewEnabled } from '@/editor/previewPrefere
 import { findTmMatches } from '@/tm/match'
 import { findLangPairPreset, langPairLabel } from '@/tm/langPairs'
 import { tmLookupKey } from '@/tm/normalize'
+import { canReadPersonalTm, canWritePersonalTm } from '@/tm/projectAttachments'
 import { projectNeedsResegment, resegmentProjectRecord } from '@/tm/resegment'
 import { exportTmx, parseTmx } from '@/tm/tmx'
 import {
@@ -116,7 +117,7 @@ const tmImportInput = ref<HTMLInputElement | null>(null)
 const tmAutosaveIds = ref(new Set<string>())
 
 function markTmAutosave(segId: string) {
-  if (!tmSettings.value.autoSaveToTm) return
+  if (!tmSettings.value.autoSaveToTm || !personalTmWritable.value) return
   const next = new Set(tmAutosaveIds.value)
   next.add(segId)
   tmAutosaveIds.value = next
@@ -132,7 +133,13 @@ function clearTmAutosave(segId: string) {
 const done = computed(() => (record.value ? countTranslatedSegments(record.value.segments) : 0))
 const total = computed(() => record.value?.segments.length ?? 0)
 const editorReadOnly = computed(() => projectLease.blocked.value || jobRole.value === 'viewer')
-const matchTmUnits = computed(() => tmUnits.value)
+const personalTmReadable = computed(() =>
+  record.value ? canReadPersonalTm(record.value.meta) : false
+)
+const personalTmWritable = computed(() =>
+  record.value ? canWritePersonalTm(record.value.meta) : false
+)
+const matchTmUnits = computed(() => (personalTmReadable.value ? tmUnits.value : []))
 
 const tmCoveragePct = computed(() => {
   if (!record.value?.segments.length) return 0
@@ -405,7 +412,7 @@ async function persistNow(): Promise<void> {
   if (projectLease.isLeader.value) {
     scheduleProjectBackup(record.value)
   }
-  if (tmSettings.value.autoSaveToTm && tmAutosaveIds.value.size) {
+  if (personalTmWritable.value && tmSettings.value.autoSaveToTm && tmAutosaveIds.value.size) {
     const onlyIds = [...tmAutosaveIds.value]
     const tmOptions = {
       sourceLang: record.value.meta.sourceLang,
@@ -418,7 +425,7 @@ async function persistNow(): Promise<void> {
       ...tmOptions,
     })
     markTmDirty(...dirty)
-    tmUnits.value = await listTmUnits()
+    tmUnits.value = personalTmReadable.value ? await listTmUnits() : []
     tmAutosaveIds.value = new Set()
   }
   allSaved.value = true
@@ -486,6 +493,8 @@ async function load() {
   let loaded = withNormalizedRecord(found)
   if (gen !== loadGen) return
   record.value = loaded
+  tmUnits.value = canReadPersonalTm(loaded.meta) ? await listTmUnits() : []
+  if (gen !== loadGen) return
   await reloadJobMembership(loaded.meta.jobId)
   if (gen !== loadGen) return
   const emptyNoticeKey = `tr.emptyDocNotice:${props.id}`
@@ -507,9 +516,6 @@ const PAGE_SCROLL_OPTS: AddEventListenerOptions = { passive: true }
 onMounted(() => {
   projectLease.start()
   void load()
-  void listTmUnits().then(units => {
-    tmUnits.value = units
-  })
   void reloadGlossary()
   window.addEventListener('scroll', onPageScroll, PAGE_SCROLL_OPTS)
   window.addEventListener('beforeunload', onBeforeUnload)
@@ -743,7 +749,7 @@ function resetTargetById(segId: string) {
 }
 
 async function removeSegmentFromTm(seg: Segment) {
-  if (!record.value) return
+  if (!record.value || !personalTmWritable.value) return
   try {
     const dirty = await deleteTmForSegmentSource(seg.source, {
       sourceLang: record.value.meta.sourceLang,
@@ -792,7 +798,7 @@ function matchesFor(seg: Segment): TmMatch[] {
 
 /** Show “save to TM” only when target is non-empty and not already stored for this source. */
 function needsTmSave(seg: Segment): boolean {
-  if (!record.value || !seg.target.trim()) return false
+  if (!record.value || !personalTmWritable.value || !seg.target.trim()) return false
   const key = tmLookupKey(seg.source, record.value.meta.sourceLang, record.value.meta.targetLang)
   return !matchTmUnits.value.some(u => u.sourceKey === key && u.target === seg.target)
 }
@@ -1112,7 +1118,7 @@ function redoSegment(segId: string) {
 }
 
 async function saveSegmentToTmById(segId: string) {
-  if (!record.value || editorReadOnly.value) return
+  if (!record.value || editorReadOnly.value || !personalTmWritable.value) return
   const seg = record.value.segments.find(s => s.id === segId)
   if (!seg || !seg.target.trim()) return
 
@@ -1132,14 +1138,14 @@ async function saveSegmentToTmById(segId: string) {
     })
     markTmDirty(...dirty)
     clearTmAutosave(segId)
-    tmUnits.value = await listTmUnits()
+    tmUnits.value = personalTmReadable.value ? await listTmUnits() : []
   } catch (e) {
     setSaveError(e)
   }
 }
 
 async function exportTmxFile() {
-  if (!record.value) return
+  if (!record.value || !personalTmReadable.value) return
   if (!tmUnits.value.length) {
     notice.value = t('editor.tmxExportEmpty')
     return
@@ -1152,6 +1158,7 @@ async function exportTmxFile() {
 }
 
 function openTmxImport() {
+  if (!personalTmWritable.value) return
   tmImportInput.value?.click()
 }
 
@@ -1159,13 +1166,13 @@ async function onTmxImportChange(e: Event) {
   const input = e.target as HTMLInputElement
   const file = input.files?.[0]
   input.value = ''
-  if (!file) return
+  if (!file || !personalTmWritable.value) return
   try {
     const xml = await file.text()
     const units = parseTmx(xml)
     const { count, ids } = await importTmUnits(units)
     markTmDirty(...ids)
-    tmUnits.value = await listTmUnits()
+    tmUnits.value = personalTmReadable.value ? await listTmUnits() : []
     notice.value = t('editor.tmxImported', { count })
     error.value = ''
   } catch (err) {
@@ -1701,10 +1708,18 @@ async function goBack() {
           >
             <EditorGlyph name="cloud-upload" />
           </IconButton>
-          <IconButton :title="t('editor.importTmxHint')" @click="openTmxImport">
+          <IconButton
+            :title="t('editor.importTmxHint')"
+            :disabled="!personalTmWritable"
+            @click="openTmxImport"
+          >
             <EditorGlyph name="import" />
           </IconButton>
-          <IconButton :title="t('editor.exportTmxHint')" @click="exportTmxFile">
+          <IconButton
+            :title="t('editor.exportTmxHint')"
+            :disabled="!personalTmReadable"
+            @click="exportTmxFile"
+          >
             <EditorGlyph name="export" />
           </IconButton>
           <IconButton
