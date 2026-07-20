@@ -393,8 +393,9 @@ export default {
     memoriesTitle: 'Памяти',
     memoriesPersonal: 'Личная ТМ',
     memoriesPersonalHint: 'всегда · только вы',
-    memoriesJob: 'ТМ работы',
-    memoriesJobOff: 'Общая ТМ выключена — каждый работает со своей.',
+    memoriesAttachedTitle: 'Прикреплённые ТМ',
+    memoriesAttachedEmpty:
+      'Пока нет прикреплённых ТМ. Подключите базы, чтобы использовать их в этой работе.',
     memoriesRead: 'Читать',
     memoriesWrite: 'Писать',
     memoriesWritePrivacy: 'Запись попадает в облако и видна участникам с доступом на чтение.',

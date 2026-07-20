@@ -379,13 +379,14 @@ After attach-bases exists (Task 14+), TM writes that target **writable shared ba
 
 ### Task 14: Attach selected bases (replaces auto job_tm)
 
-**Files:** reuse dormant `job_resource_*` / sync ideas; new attach UI; no auto ephemeral job TM.
+**Files:** `job_tm_attachments` table + API; attach UI in «Памяти»; editor match/write via attachments.
 
-> **Done (2026-07-20):** Model A — one `job_tm` pool per job via [`2026-07-20-job-tm-attach.md`](2026-07-20-job-tm-attach.md). Personal/cloud ref attach (Model B) remains future.
+> **2026-07-20:** Model A (`job_tm` pool) **removed from product** — see [`2026-07-20-job-tm-attach-only-design.md`](../specs/2026-07-20-job-tm-attach-only-design.md). Schema kept; UI/editor path disabled.
 
-- [x] **Step 1: Attach personal / cloud TM refs to job** with preset + member overrides — *job_tm pool + preset/override (Model A)*
-- [x] **Step 2: Editor match/write** only via attached bases + privacy copy on Write
-- [x] **Step 3: Commit** `Attach selectable TM bases to shared work.`
+- [x] **Step 0:** Retire «ТМ работы» toggles and editor dual-write to `job_tm`
+- [ ] **Step 1:** `job_tm_attachments` + attach personal cloud TM with R/W flags
+- [ ] **Step 2:** Editor match/write via attached bases + privacy copy on Write
+- [ ] **Step 3: Commit** `Attach selectable TM bases to shared work.`
 
 ### Task 15: Dual progress metrics + finalize for boss
 

@@ -1,7 +1,9 @@
 # Job TM attach (shared memory for a job) — design
 
+> **Superseded (2026-07-20):** Model A («ТМ работы» / one `job_tm` pool) is **withdrawn**. Product uses **attach-only** — see [`2026-07-20-job-tm-attach-only-design.md`](./2026-07-20-job-tm-attach-only-design.md).
+
 Date: 2026-07-20  
-Status: Approved for planning  
+Status: Superseded  
 Slice: Phase F / J2 — Task 14 (attach selected bases)  
 Parent: [`2026-07-17-shared-work-jobs-design.md`](./2026-07-17-shared-work-jobs-design.md)  
 Related sync pattern: [`2026-07-14-cloud-tm-sync-design.md`](./2026-07-14-cloud-tm-sync-design.md)
