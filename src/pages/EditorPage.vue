@@ -403,7 +403,7 @@ async function reloadJobTm(jobId?: string) {
   const resource = await loadJobResource(jobId)
   if (record.value?.meta.jobId !== jobId) return
   jobResource.value = resource
-  if (jobTmReadable(resource)) await syncJobTm(jobId)
+  if (jobTmReadable(resource)) await syncJobTm(jobId, { resource })
   if (record.value?.meta.jobId !== jobId) return
   jobTmUnits.value = await listJobTmUnits(jobId)
 }

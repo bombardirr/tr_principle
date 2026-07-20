@@ -40,6 +40,15 @@ const resource: JobResource = {
   },
 }
 
+const writableResource: JobResource = {
+  ...resource,
+  canWrite: true,
+  preset: {
+    ...resource.preset,
+    canWrite: true,
+  },
+}
+
 describe('job TM resource cache', () => {
   beforeEach(() => {
     localStorage.clear()
@@ -88,8 +97,10 @@ describe('job TM sync', () => {
 
   it('pushes a locally dirty unit for its job', async () => {
     getJobTmUnit.mockResolvedValueOnce(unit)
+    const { cacheJobResource } = await import('@/jobs/resources')
     const { markJobTmDirty, syncJobTm } = await import('@/jobs/tmSync')
 
+    cacheJobResource('job-1', writableResource)
     markJobTmDirty('job-1', unit.id)
     await syncJobTm('job-1', { pushOnly: true })
 
@@ -115,5 +126,17 @@ describe('job TM sync', () => {
     expect(localStorage.getItem('appzac-job-tm-sync-since:account-1:job-1')).toBe(
       '2026-01-03T00:00:00.000Z'
     )
+  })
+
+  it('does not push dirty units for a read-only resource', async () => {
+    const { cacheJobResource } = await import('@/jobs/resources')
+    const { markJobTmDirty, syncJobTm } = await import('@/jobs/tmSync')
+
+    cacheJobResource('job-1', resource)
+    getJobTmUnit.mockResolvedValueOnce(unit)
+    markJobTmDirty('job-1', unit.id)
+    await syncJobTm('job-1', { pushOnly: true })
+
+    expect(pushJobTmSync).not.toHaveBeenCalled()
   })
 })

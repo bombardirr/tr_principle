@@ -1,5 +1,7 @@
 import { getStorageAccountId } from '@/storage/scope'
 import { getJobTmUnit, putJobTmUnit, removeJobTmUnit } from '@/storage/jobTmIdb'
+import { jobTmWritable, readCachedJobResource } from '@/jobs/resources'
+import type { JobResource } from '@/types/job'
 import type { TmUnit } from '@/types/tm'
 import { pullJobTmSync, pushJobTmSync } from '@/jobs/tmApi'
 
@@ -118,9 +120,18 @@ async function pushDirty(jobId: string): Promise<void> {
   writeDirty(jobId, dirty)
 }
 
-/** Pull then push (or push-only). Safe to call frequently; overlaps coalesce. */
-export async function syncJobTm(jobId: string, opts?: { pushOnly?: boolean }): Promise<void> {
+/**
+ * Pull then push when the resource is writable (or push-only). Safe to call
+ * frequently; overlaps coalesce.
+ */
+export async function syncJobTm(
+  jobId: string,
+  opts?: { pushOnly?: boolean; resource?: JobResource | null },
+): Promise<void> {
   if (!getStorageAccountId()) return
+  const resource = opts?.resource ?? readCachedJobResource(jobId)
+  const canWrite = jobTmWritable(resource)
+  if (opts?.pushOnly && !canWrite) return
   if (syncingJobs.has(jobId)) {
     if (!opts?.pushOnly) scheduleJobTmPush(jobId, 500)
     return
@@ -128,7 +139,7 @@ export async function syncJobTm(jobId: string, opts?: { pushOnly?: boolean }): P
   syncingJobs.add(jobId)
   try {
     if (!opts?.pushOnly) await pullAll(jobId)
-    await pushDirty(jobId)
+    if (canWrite) await pushDirty(jobId)
   } catch {
     // Dirty rows remain queued for a later retry.
   } finally {
