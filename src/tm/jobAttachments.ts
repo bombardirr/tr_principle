@@ -1,3 +1,7 @@
+/**
+ * Local-only job TM overlay (per browser).
+ * Shared job attachments live on the server — see src/jobs/tmAttachmentsApi.ts.
+ */
 import type { ProjectTmAttachment, ProjectTmAttachmentId } from '@/types/project'
 import {
   attachProjectTm,
