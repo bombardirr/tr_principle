@@ -1,7 +1,7 @@
 # TM collection — Part 1 (browse / pick / attach / detach / delete own)
 
 Date: 2026-07-20  
-Status: Draft (awaiting user review)  
+Status: Approved  
 Related: [`2026-07-20-job-tm-attach-only-design.md`](./2026-07-20-job-tm-attach-only-design.md)
 
 ## Goal
