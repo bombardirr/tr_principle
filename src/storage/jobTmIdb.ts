@@ -5,7 +5,8 @@ import {
   buildTmUnitFromSegment,
   type TmUnitFromSegmentOptions,
 } from '@/tm/unitFromSegment'
-import { onStorageAccountChange, scopedDbName } from '@/storage/scope'
+import { isSegmentDone } from '@/utils/segmentStatus'
+import { onStorageAccountChange, requireStorageAccountId } from '@/storage/scope'
 import { tmLookupKey } from '@/tm/normalize'
 
 interface JobTmDb extends DBSchema {
@@ -25,10 +26,14 @@ onStorageAccountChange(() => {
   dbPromises.clear()
 })
 
+function jobTmDbName(jobId: string): string {
+  return `${DB_BASE}:${requireStorageAccountId()}:${jobId}`
+}
+
 function getDb(jobId: string) {
   let dbPromise = dbPromises.get(jobId)
   if (!dbPromise) {
-    dbPromise = openDB<JobTmDb>(scopedDbName(`${DB_BASE}:${jobId}`), DB_VERSION, {
+    dbPromise = openDB<JobTmDb>(jobTmDbName(jobId), DB_VERSION, {
       upgrade(db) {
         const store = db.createObjectStore('units', { keyPath: 'id' })
         store.createIndex('by-source-key', 'sourceKey')
@@ -74,6 +79,8 @@ export async function upsertJobTmFromSegment(
   segment: Segment,
   options?: TmUnitFromSegmentOptions,
 ): Promise<string | null> {
+  if (!isSegmentDone(segment) || !segment.target.trim()) return null
+
   const sourceKey = tmLookupKey(
     segment.source,
     options?.sourceLang,
@@ -99,6 +106,7 @@ export async function recordDoneSegmentsInJobTm(
   for (let i = 0; i < ordered.length; i++) {
     const segment = ordered[i]!
     if (only && !only.has(segment.id)) continue
+    if (!isSegmentDone(segment) || !segment.target.trim()) continue
 
     const id = await upsertJobTmFromSegment(jobId, segment, {
       sourceLang: options?.sourceLang,
