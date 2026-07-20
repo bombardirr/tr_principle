@@ -95,6 +95,15 @@ export interface ProjectMeta {
   jobId?: string
   sourceFilename?: string
   sourceHash?: string
+  tmAttachments?: ProjectTmAttachment[]
+}
+
+export type ProjectTmAttachmentId = 'personal-tm'
+
+export interface ProjectTmAttachment {
+  id: ProjectTmAttachmentId
+  canRead: boolean
+  canWrite: boolean
 }
 
 export interface ProjectRecord {
