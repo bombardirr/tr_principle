@@ -13,6 +13,7 @@ import {
 import { inviteLink } from '@/jobs/localProject'
 import { useAuth } from '@/auth/session'
 import type { Job, JobInvite, JobMember } from '@/types/job'
+import JobMemoriesPanel from '@/components/JobMemoriesPanel.vue'
 
 const props = defineProps<{
   open: boolean
@@ -225,7 +226,11 @@ async function transferOwnership() {
               <span>{{ t('jobs.transferLabel') }}</span>
               <select v-model="transferTargetId" :disabled="busy">
                 <option value="">{{ t('jobs.transferChoose') }}</option>
-                <option v-for="member in transferCandidates" :key="member.userId" :value="member.userId">
+                <option
+                  v-for="member in transferCandidates"
+                  :key="member.userId"
+                  :value="member.userId"
+                >
                   {{ memberName(member) }} ({{ roleLabel(member.role) }})
                 </option>
               </select>
@@ -240,6 +245,13 @@ async function transferOwnership() {
             </button>
           </div>
         </section>
+
+        <JobMemoriesPanel
+          v-if="job"
+          :job-id="jobId"
+          :is-owner="isOwner"
+          :my-role="myMember?.role ?? null"
+        />
 
         <section v-if="isOwner">
           <h3>{{ t('jobs.inviteTitle') }}</h3>
