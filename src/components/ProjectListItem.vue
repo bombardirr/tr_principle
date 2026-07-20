@@ -3,13 +3,26 @@ import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import IconButton from '@/components/IconButton.vue'
 import EditorGlyph from '@/components/EditorGlyph.vue'
+import ProjectTmBasesDialog from '@/components/ProjectTmBasesDialog.vue'
+import TmCollectionDialog from '@/components/TmCollectionDialog.vue'
 import { ApiError } from '@/auth/api'
 import { getProjectBackup } from '@/projects/api'
 import { deleteProject, getProject, saveProject } from '@/storage/idb'
 import { unpackProjectFile } from '@/storage/projectFile'
 import { langPairLabel } from '@/tm/langPairs'
+import {
+  attachProjectTm,
+  detachProjectTm,
+  normalizeProjectTmAttachments,
+  PERSONAL_TM_ATTACHMENT_ID,
+  TM_ATTACHMENT_CATALOG,
+} from '@/tm/projectAttachments'
 import { resegmentProjectRecord } from '@/tm/resegment'
-import { SEGMENT_SCHEMA_DATE_SAFE, type ProjectMeta } from '@/types/project'
+import {
+  SEGMENT_SCHEMA_DATE_SAFE,
+  type ProjectMeta,
+  type ProjectTmAttachmentId,
+} from '@/types/project'
 
 const props = defineProps<{
   project: ProjectMeta
@@ -30,6 +43,10 @@ const busy = ref(false)
 const pending = ref<'delete' | 'resegment' | null>(null)
 /** Inline resegment button feedback: spinner → check → idle. */
 const resegmentFlash = ref<'spin' | 'ok' | null>(null)
+const basesOpen = ref(false)
+const collectionOpen = ref(false)
+const collectionMode = ref<'pick' | 'browse'>('pick')
+const collectionReturnTo = ref<'project' | null>(null)
 
 const langPairText = computed(() => {
   const source = props.project.sourceLang || props.sourceLang
@@ -37,6 +54,63 @@ const langPairText = computed(() => {
   if (!source && !target) return ''
   return langPairLabel(source, target)
 })
+const tmAttachments = computed(() => normalizeProjectTmAttachments(props.project))
+const attachedIds = computed(() => tmAttachments.value.map(item => item.id))
+
+function tmLabel(id: ProjectTmAttachmentId) {
+  const item = TM_ATTACHMENT_CATALOG.find(entry => entry.id === id)
+  return id === PERSONAL_TM_ATTACHMENT_ID ? t('projects.tmPersonalBase') : (item?.label ?? id)
+}
+
+function openBases() {
+  basesOpen.value = true
+}
+
+function openPick() {
+  basesOpen.value = false
+  collectionMode.value = 'pick'
+  collectionReturnTo.value = 'project'
+  collectionOpen.value = true
+}
+
+function openFullFromPick() {
+  collectionMode.value = 'browse'
+  collectionReturnTo.value = 'project'
+}
+
+function onCollectionClose() {
+  collectionOpen.value = false
+  if (collectionReturnTo.value === 'project') {
+    basesOpen.value = true
+  }
+  collectionReturnTo.value = null
+}
+
+async function updateTmAttachments(change: (meta: ProjectMeta) => ProjectMeta['tmAttachments']) {
+  emit('error', '')
+  try {
+    const record = await getProject(props.project.id)
+    if (!record) throw new Error(t('editor.projectNotFound'))
+    record.meta.tmAttachments = change(record.meta)
+    await saveProject(record)
+    emit('changed')
+    return true
+  } catch (err) {
+    emit('error', err instanceof Error ? err.message : String(err))
+    return false
+  }
+}
+
+async function detachTm(id: ProjectTmAttachmentId) {
+  await updateTmAttachments(meta => detachProjectTm(meta, id))
+}
+
+async function onAttach(id: ProjectTmAttachmentId) {
+  if (!(await updateTmAttachments(meta => attachProjectTm(meta, id)))) return
+  collectionOpen.value = false
+  collectionReturnTo.value = null
+  basesOpen.value = true
+}
 
 function formatDate(iso: string) {
   try {
@@ -89,7 +163,10 @@ async function confirmResegment() {
     await saveProject(record)
     emit('changed')
     if (ambiguousCount > 0) {
-      emit('notice', t('projects.resegmentAmbiguous', { name: props.project.name, n: ambiguousCount }))
+      emit(
+        'notice',
+        t('projects.resegmentAmbiguous', { name: props.project.name, n: ambiguousCount })
+      )
     }
     const elapsed = Date.now() - started
     if (elapsed < 1000) await sleep(1000 - elapsed)
@@ -140,6 +217,29 @@ async function restoreFromCloud() {
         {{ t('projects.updated', { date: formatDate(project.updatedAt) }) }}
       </span>
     </router-link>
+    <div class="tm-chips" @click.stop>
+      <button
+        v-for="attachment in tmAttachments"
+        :key="attachment.id"
+        type="button"
+        class="tm-chip"
+        :title="t('projects.tmDetach')"
+        @click="detachTm(attachment.id)"
+      >
+        <EditorGlyph name="tm" />
+        {{ tmLabel(attachment.id) }}
+        <span aria-hidden="true">×</span>
+      </button>
+      <button
+        type="button"
+        class="tm-chip tm-chip-add"
+        :title="t('projects.tmOpenPicker')"
+        :aria-label="t('projects.tmOpenPicker')"
+        @click="openBases"
+      >
+        <EditorGlyph name="plus" />
+      </button>
+    </div>
     <div class="item-actions" @click.stop>
       <template v-if="pending === 'resegment'">
         <div class="action-confirm">
@@ -170,11 +270,7 @@ async function restoreFromCloud() {
         </div>
       </template>
       <template v-else>
-        <IconButton
-          :title="t('projects.copyNameHint')"
-          :disabled="busy"
-          @click="copyProjectName"
-        >
+        <IconButton :title="t('projects.copyNameHint')" :disabled="busy" @click="copyProjectName">
           <EditorGlyph name="clipboard" />
         </IconButton>
         <IconButton
@@ -194,11 +290,7 @@ async function restoreFromCloud() {
           :disabled="busy"
           @click="pending = 'resegment'"
         >
-          <EditorGlyph
-            v-if="resegmentFlash === 'spin'"
-            class="glyph-spin"
-            name="spinner"
-          />
+          <EditorGlyph v-if="resegmentFlash === 'spin'" class="glyph-spin" name="spinner" />
           <EditorGlyph v-else-if="resegmentFlash === 'ok'" name="check" />
           <EditorGlyph v-else name="resegment" />
         </IconButton>
@@ -212,6 +304,26 @@ async function restoreFromCloud() {
         </IconButton>
       </template>
     </div>
+    <ProjectTmBasesDialog
+      :open="basesOpen"
+      :project="project"
+      @close="basesOpen = false"
+      @changed="emit('changed')"
+      @error="emit('error', $event)"
+      @open-pick="openPick"
+    />
+    <TmCollectionDialog
+      :open="collectionOpen"
+      :mode="collectionMode"
+      :return-to="collectionReturnTo"
+      :attached-ids="attachedIds"
+      :context-label="project.name"
+      @close="onCollectionClose"
+      @attach="onAttach"
+      @deleted="emit('changed')"
+      @open-full="openFullFromPick"
+      @error="emit('error', $event)"
+    />
   </li>
 </template>
 
@@ -271,6 +383,43 @@ async function restoreFromCloud() {
   display: inline-flex;
   align-items: center;
   gap: 0.05rem;
+}
+
+.tm-chips {
+  display: inline-flex;
+  flex: 0 1 auto;
+  align-items: center;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+.tm-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  max-width: 10rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0.22rem 0.45rem;
+  background: var(--surface);
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 0.72rem;
+  white-space: nowrap;
+  cursor: pointer;
+
+  &:hover {
+    border-color: var(--border-strong);
+    color: var(--text);
+  }
+}
+
+.tm-chip-add {
+  width: 1.65rem;
+  height: 1.65rem;
+  justify-content: center;
+  padding: 0;
+  color: var(--accent);
 }
 
 .action-confirm {
