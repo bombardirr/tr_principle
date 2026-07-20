@@ -216,7 +216,13 @@ git commit -m "Add client API for job resources and job TM sync."
 
 DB name pattern: `appzac-job-tm:${accountId}:${jobId}` (or one DB `appzac-job-tm` with `jobId` index — prefer **one DB per account** `appzac-job-tm:${accountId}` with store keyed by `id` and index `by-job` / compound — simplest MVP: **separate DB per job** like above to copy personal sync logic).
 
-Mirror personal `upsertTmFromSegment` logic (copy, do not import private helpers if not exported — duplicate minimal block or extract shared `buildTmUnitFromSegment` in a follow-up; for this task **duplicate the upsert body** into `jobTmIdb` to avoid wide refactor).
+Mirror personal `upsertTmFromSegment` logic via a **shared helper** (do not copy-paste the full upsert body):
+
+- Create `src/tm/unitFromSegment.ts` with `buildTmUnitFromSegment(segment, options, existing?: TmUnit[]): Promise<TmUnit | null>` (or sync function returning unit + whether to write)
+- Refactor `upsertTmFromSegment` in `tmIdb.ts` to call it, then `put`
+- `jobTmIdb.upsertJobTmFromSegment` calls the same helper, then job-store `put`
+
+Keep the helper small (lookup key + row construction only).
 
 - [ ] **Step 1: Write pure test for match merge**
 
