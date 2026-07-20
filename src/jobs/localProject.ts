@@ -1,6 +1,7 @@
 import { fingerprintDocx } from '@/jobs/fingerprint'
 import type { Job } from '@/types/job'
-import type { ProjectRecord } from '@/types/project'
+import type { ProjectMeta, ProjectRecord } from '@/types/project'
+import { getProject, saveProject } from '@/storage/idb'
 
 export function projectFingerprint(record: ProjectRecord) {
   const filename =
@@ -18,6 +19,20 @@ export function bindProjectToJob(record: ProjectRecord, job: Job): ProjectRecord
       sourceFilename: job.sourceFilename || record.meta.sourceFilename,
       sourceHash: job.sourceHash || record.meta.sourceHash,
     },
+  }
+}
+
+/** Clear meta.jobId on local projects that pointed at this job. Projects stay intact. */
+export async function unlinkLocalProjectsFromJob(
+  jobId: string,
+  projects: ProjectMeta[],
+): Promise<void> {
+  for (const meta of projects) {
+    if (meta.jobId !== jobId) continue
+    const record = await getProject(meta.id)
+    if (!record?.meta.jobId) continue
+    record.meta.jobId = undefined
+    await saveProject(record)
   }
 }
 

@@ -27,7 +27,7 @@ func (s *Store) CreateJob(
 	filename, hash string,
 	localProjectID uuid.UUID,
 ) (Job, error) {
-	if ownerID == uuid.Nil || jobID == uuid.Nil || localProjectID == uuid.Nil || strings.TrimSpace(title) == "" {
+	if ownerID == uuid.Nil || jobID == uuid.Nil || strings.TrimSpace(title) == "" {
 		return Job{}, ErrInvalidJob
 	}
 
@@ -43,8 +43,10 @@ func (s *Store) CreateJob(
 			id, owner_user_id, title, source_lang, target_lang,
 			source_filename, source_hash
 		) VALUES ($1, $2, $3, $4, $5, $6, $7)
-		RETURNING id, owner_user_id, title, source_lang, target_lang,
-		          source_filename, source_hash, created_at, updated_at
+		RETURNING id, owner_user_id, title,
+		          COALESCE(source_lang, ''), COALESCE(target_lang, ''),
+		          COALESCE(source_filename, ''), COALESCE(source_hash, ''),
+		          created_at, updated_at, archived_at
 	`, jobID, ownerID, title, langs.Source, langs.Target, filename, hash).Scan(
 		&job.ID,
 		&job.OwnerUserID,
@@ -55,15 +57,20 @@ func (s *Store) CreateJob(
 		&job.SourceHash,
 		&job.CreatedAt,
 		&job.UpdatedAt,
+		&job.ArchivedAt,
 	)
 	if err != nil {
 		return Job{}, err
 	}
 
+	var localID *uuid.UUID
+	if localProjectID != uuid.Nil {
+		localID = &localProjectID
+	}
 	if _, err := tx.Exec(ctx, `
 		INSERT INTO job_members (job_id, user_id, role, local_project_id)
 		VALUES ($1, $2, $3, $4)
-	`, jobID, ownerID, RoleOwner, localProjectID); err != nil {
+	`, jobID, ownerID, RoleOwner, localID); err != nil {
 		return Job{}, err
 	}
 

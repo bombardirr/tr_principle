@@ -1,5 +1,6 @@
 # Local stack: Postgres + API
 #   docker compose -f docker-compose.local.yml up --build
+# After Go/API changes: rebuild api — up -d --build api (otherwise routes like DELETE stay stale).
 #
 # SPA: npm run dev (Vite proxies /api → :18081)
 # Host :8080 often taken by Cursor; :18080 may be another local API — map this stack to 18081.

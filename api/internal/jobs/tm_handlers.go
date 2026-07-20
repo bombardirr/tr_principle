@@ -68,6 +68,15 @@ func (h *Handler) PushJobTM(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusForbidden, "forbidden")
 		return
 	}
+	archived, err := h.Store.IsArchived(r.Context(), jobID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "server error")
+		return
+	}
+	if archived {
+		writeError(w, http.StatusConflict, ErrJobArchived.Error())
+		return
+	}
 
 	r.Body = http.MaxBytesReader(w, r.Body, 4<<20)
 	var body tm.PushRequest

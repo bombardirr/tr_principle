@@ -1,7 +1,9 @@
 <script setup lang="ts">
-import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { nextTick, onBeforeUnmount, onMounted, ref, useAttrs, watch } from 'vue'
 import AppTooltip from '@/components/AppTooltip.vue'
 import { useAnchoredTooltip } from '@/composables/useAnchoredTooltip'
+
+defineOptions({ inheritAttrs: false })
 
 const props = withDefaults(
   defineProps<{
@@ -10,6 +12,8 @@ const props = withDefaults(
   }>(),
   { maxWidth: '14rem' },
 )
+
+const attrs = useAttrs()
 
 const root = ref<HTMLElement | null>(null)
 const overflow = ref(false)
@@ -70,6 +74,7 @@ function onLeave() {
   <div
     ref="root"
     class="marquee-text"
+    v-bind="attrs"
     :style="{ maxWidth }"
     @mouseenter="onEnter"
     @mouseleave="onLeave"

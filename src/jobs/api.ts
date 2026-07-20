@@ -34,6 +34,24 @@ export async function patchJob(jobId: string, input: PatchJobInput) {
   })
 }
 
+export async function deleteJob(jobId: string) {
+  return apiFetch<void>(`/api/jobs/${jobId}`, {
+    method: 'DELETE',
+  })
+}
+
+export async function archiveJob(jobId: string) {
+  return apiFetch<Job>(`/api/jobs/${jobId}/archive`, {
+    method: 'POST',
+  })
+}
+
+export async function leaveJob(jobId: string) {
+  return apiFetch<void>(`/api/jobs/${jobId}/leave`, {
+    method: 'POST',
+  })
+}
+
 export async function transferJob(jobId: string, userId: string) {
   return apiFetch<Job>(`/api/jobs/${jobId}/transfer`, {
     method: 'POST',

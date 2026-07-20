@@ -4,15 +4,18 @@ import { useI18n } from 'vue-i18n'
 import { publicActorLabel, useAuth } from '@/auth/session'
 import IconButton from '@/components/IconButton.vue'
 import EditorGlyph from '@/components/EditorGlyph.vue'
+import LangPairBadge from '@/components/LangPairBadge.vue'
 import MarqueeText from '@/components/MarqueeText.vue'
 import ProjectListItem from '@/components/ProjectListItem.vue'
 import SharedWorkPanel from '@/components/SharedWorkPanel.vue'
 import { openDocx } from '@/docx/openDocx'
 import { createEmptyJobProject } from '@/jobs/createProject'
 import { fingerprintMismatch } from '@/jobs/fingerprint'
-import { bindProjectToJob, projectFingerprint } from '@/jobs/localProject'
-import { getJob, listMembers } from '@/jobs/api'
+import { bindProjectToJob, projectFingerprint, unlinkLocalProjectsFromJob } from '@/jobs/localProject'
+import { getJob, listMembers, deleteJob, archiveJob, leaveJob, patchJob } from '@/jobs/api'
+import { saveJobLangPairFromCodes } from '@/jobs/langPairPreference'
 import { createProjectId, getProject, listProjects, saveProject } from '@/storage/idb'
+import { langPairLabel } from '@/tm/langPairs'
 import { unpackProjectFile } from '@/storage/projectFile'
 import { SEGMENT_SCHEMA_DATE_SAFE, type ProjectMeta, type ProjectRecord } from '@/types/project'
 import { acknowledgeJobJoins } from '@/jobs/joinActivity'
@@ -46,6 +49,7 @@ const projectInput = ref<HTMLInputElement | null>(null)
 const panelOpen = ref(false)
 const busy = ref(false)
 const error = ref('')
+const pendingAction = ref<'leave' | 'archive' | 'delete' | null>(null)
 const pendingProject = ref<ProjectRecord | null>(null)
 const mismatchOpen = ref(false)
 /** Live local progress for current user (overrides stale server roster). */
@@ -56,12 +60,20 @@ const myLiveProgress = ref<{
 } | null>(null)
 
 const myMember = computed(() => members.value.find(member => member.userId === user.value?.id))
+const isOwner = computed(() => job.value?.ownerUserId === user.value?.id)
+const isArchived = computed(() => Boolean(job.value?.archivedAt))
 const canHaveProject = computed(
   () => myMember.value?.role === 'owner' || myMember.value?.role === 'translator',
 )
 const linkedProject = computed(() => {
   const localId = myMember.value?.localProjectId
   return projects.value.find(project => project.id === localId || project.jobId === props.jobId)
+})
+
+const jobLangPairText = computed(() => {
+  const j = job.value
+  if (!j?.sourceLang && !j?.targetLang) return ''
+  return langPairLabel(j?.sourceLang, j?.targetLang)
 })
 
 const displayMembers = computed(() =>
@@ -147,6 +159,40 @@ function closePanel() {
   panelOpen.value = false
   void load()
   emit('changed')
+}
+
+async function confirmPendingAction() {
+  if (!job.value || !pendingAction.value || busy.value) return
+  const kind = pendingAction.value
+  if (kind === 'leave' && isOwner.value) return
+  if ((kind === 'archive' || kind === 'delete') && !isOwner.value) return
+  busy.value = true
+  error.value = ''
+  try {
+    if (kind === 'leave') {
+      await leaveJob(job.value.id)
+      await unlinkLocalProjectsFromJob(job.value.id, projects.value)
+      pendingAction.value = null
+      emit('changed')
+      emit('close')
+      return
+    }
+    if (kind === 'archive') {
+      job.value = await archiveJob(job.value.id)
+      pendingAction.value = null
+      emit('changed')
+      return
+    }
+    await deleteJob(job.value.id)
+    await unlinkLocalProjectsFromJob(job.value.id, projects.value)
+    pendingAction.value = null
+    emit('changed')
+    emit('close')
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : String(err)
+  } finally {
+    busy.value = false
+  }
 }
 
 async function onProjectChanged() {
@@ -276,6 +322,21 @@ async function onProjectFileSelected(event: Event) {
     busy.value = false
   }
 }
+
+async function onLangPairChange(payload: { sourceLang: string; targetLang: string }) {
+  if (!job.value || busy.value || isArchived.value || !isOwner.value) return
+  busy.value = true
+  error.value = ''
+  try {
+    job.value = await patchJob(job.value.id, payload)
+    saveJobLangPairFromCodes(payload.sourceLang, payload.targetLang)
+    emit('changed')
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : String(err)
+  } finally {
+    busy.value = false
+  }
+}
 </script>
 
 <template>
@@ -287,15 +348,75 @@ async function onProjectFileSelected(event: Event) {
     <header class="hub-head">
       <h3 class="hub-title">
         <span>{{ job?.title || t('jobs.panelTitle') }}</span>
+        <LangPairBadge
+          v-if="job && (jobLangPairText || isOwner)"
+          :source-lang="job.sourceLang"
+          :target-lang="job.targetLang"
+          :editable="isOwner && !isArchived"
+          :disabled="busy"
+          @change="onLangPairChange"
+        />
+        <span v-if="isArchived" class="archived-chip">{{ t('jobs.archivedBadge') }}</span>
         <IconButton
           v-if="job"
           :title="t('jobs.manageWork')"
-          :disabled="busy"
+          :disabled="busy || isArchived"
           @click="panelOpen = true"
         >
           <EditorGlyph name="user-plus" />
         </IconButton>
       </h3>
+      <div v-if="job" class="hub-actions">
+        <template v-if="pendingAction">
+          <IconButton
+            danger
+            :title="
+              pendingAction === 'leave'
+                ? t('jobs.confirmLeave', { name: job.title })
+                : pendingAction === 'archive'
+                  ? t('jobs.confirmArchive', { name: job.title })
+                  : t('jobs.confirmDeleteForever', { name: job.title })
+            "
+            :disabled="busy"
+            @click="confirmPendingAction"
+          >
+            <EditorGlyph name="check" />
+          </IconButton>
+          <IconButton
+            :title="t('jobs.deleteCancel')"
+            :disabled="busy"
+            @click="pendingAction = null"
+          >
+            <EditorGlyph name="close" />
+          </IconButton>
+        </template>
+        <template v-else-if="isOwner">
+          <IconButton
+            v-if="!isArchived"
+            :title="t('jobs.archive')"
+            :disabled="busy"
+            @click="pendingAction = 'archive'"
+          >
+            <EditorGlyph name="archive" />
+          </IconButton>
+          <IconButton
+            danger
+            :title="t('jobs.deleteForever')"
+            :disabled="busy"
+            @click="pendingAction = 'delete'"
+          >
+            <EditorGlyph name="trash" />
+          </IconButton>
+        </template>
+        <IconButton
+          v-else
+          :title="t('jobs.leave')"
+          :disabled="busy"
+          @click="pendingAction = 'leave'"
+        >
+          <EditorGlyph name="leave" />
+        </IconButton>
+      </div>
     </header>
 
     <p v-if="error" class="error" role="alert">{{ error }}</p>
@@ -360,8 +481,8 @@ async function onProjectFileSelected(event: Event) {
       <section v-else class="hub-card">
         <p class="muted">
           {{ t('jobs.noLinkedProject') }}
-          <template v-if="job">
-            · {{ job.sourceLang || '—' }} → {{ job.targetLang || '—' }}
+          <template v-if="jobLangPairText">
+            · {{ jobLangPairText }}
           </template>
         </p>
         <div class="project-actions">
@@ -465,6 +586,35 @@ async function onProjectFileSelected(event: Event) {
 
 .hub-head {
   margin: 0 0 0.45rem;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.hub-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.15rem;
+  flex-shrink: 0;
+}
+
+.hub-title {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+  min-width: 0;
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.archived-chip {
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0.05rem 0.4rem;
 }
 
 .hub-title {

@@ -173,6 +173,60 @@ func TestHTTPCreateInviteAcceptAndListMembers(t *testing.T) {
 	)
 }
 
+func TestHTTPDeleteJobOwnerOnly(t *testing.T) {
+	dbURL := os.Getenv("DATABASE_URL")
+	if dbURL == "" {
+		t.Skip("DATABASE_URL not set")
+	}
+
+	ctx := context.Background()
+	pool, err := db.Connect(ctx, dbURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(pool.Close)
+
+	if err := db.Migrate(ctx, pool, filepath.Join("..", "..", "migrations")); err != nil {
+		t.Fatal(err)
+	}
+
+	authHandler := &auth.Handler{
+		Store:   auth.NewStore(pool),
+		Tokens:  auth.NewTokenIssuer([]byte("test-secret-key-32bytes-minimum!!"), time.Hour),
+		Limiter: auth.NewRateLimiter(100, time.Minute),
+	}
+	srv := httptest.NewServer(httpapi.NewRouter(
+		authHandler,
+		&tm.Handler{Store: tm.NewStore(pool)},
+		&glossary.Handler{Store: glossary.NewStore(pool)},
+		&projects.Handler{Store: projects.NewStore(pool), BackupDir: t.TempDir()},
+		&jobs.Handler{Store: jobs.NewStore(pool)},
+		"http://localhost",
+	))
+	t.Cleanup(srv.Close)
+
+	ownerToken := registerHTTPUser(t, srv.URL, "Owner")
+	memberToken := registerHTTPUser(t, srv.URL, "Translator")
+	jobID := uuid.New()
+
+	requestJSON(t, http.MethodPost, srv.URL+"/api/jobs", ownerToken, map[string]any{
+		"id":    jobID,
+		"title": "To delete",
+	}, http.StatusCreated)
+
+	invite := requestJSON(t, http.MethodPost, srv.URL+"/api/jobs/"+jobID.String()+"/invites", ownerToken, map[string]any{
+		"role": "translator",
+	}, http.StatusCreated)
+	rawToken, _ := invite["token"].(string)
+	requestJSON(t, http.MethodPost, srv.URL+"/api/job-invites/accept", memberToken, map[string]any{
+		"token": rawToken,
+	}, http.StatusOK)
+
+	requestRaw(t, http.MethodDelete, srv.URL+"/api/jobs/"+jobID.String(), memberToken, nil, http.StatusNotFound)
+	requestRaw(t, http.MethodDelete, srv.URL+"/api/jobs/"+jobID.String(), ownerToken, nil, http.StatusNoContent)
+	requestRaw(t, http.MethodGet, srv.URL+"/api/jobs/"+jobID.String(), ownerToken, nil, http.StatusNotFound)
+}
+
 func registerHTTPUser(t *testing.T, baseURL, displayName string) string {
 	t.Helper()
 	email := fmt.Sprintf("jobs_http_%s@example.com", uuid.NewString())

@@ -2,13 +2,25 @@
 import { ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { createJob } from '@/jobs/api'
+import {
+  loadJobLangPairPresetId,
+  saveJobLangPairFromCodes,
+  saveJobLangPairPresetId,
+} from '@/jobs/langPairPreference'
 import { projectFingerprint } from '@/jobs/localProject'
+import { createProjectId } from '@/storage/idb'
+import {
+  LANG_PAIR_PRESETS,
+  findLangPairPreset,
+  type LangPairPreset,
+} from '@/tm/langPairs'
 import type { Job } from '@/types/job'
 import type { ProjectRecord } from '@/types/project'
 
 const props = defineProps<{
   open: boolean
-  project: ProjectRecord
+  /** When set — bind this project; otherwise create an empty shared-work card. */
+  project?: ProjectRecord | null
 }>()
 
 const emit = defineEmits<{
@@ -18,35 +30,67 @@ const emit = defineEmits<{
 
 const { t } = useI18n()
 const title = ref('')
+const pairId = ref(loadJobLangPairPresetId())
 const busy = ref(false)
 const error = ref('')
+
+function initPairId() {
+  if (props.project) {
+    const found = findLangPairPreset(
+      props.project.meta.sourceLang,
+      props.project.meta.targetLang,
+    )
+    pairId.value = found?.id ?? loadJobLangPairPresetId()
+    return
+  }
+  pairId.value = loadJobLangPairPresetId()
+}
 
 watch(
   () => props.open,
   open => {
     if (!open) return
-    title.value = props.project.meta.name
+    title.value = props.project?.meta.name?.trim() || ''
+    initPairId()
     error.value = ''
   },
-  { immediate: true }
+  { immediate: true },
 )
+
+function selectedPreset(): LangPairPreset {
+  return LANG_PAIR_PRESETS.find(preset => preset.id === pairId.value) ?? LANG_PAIR_PRESETS[0]!
+}
 
 async function submit() {
   const trimmed = title.value.trim()
   if (!trimmed || busy.value) return
   busy.value = true
   error.value = ''
+  const preset = selectedPreset()
+  saveJobLangPairPresetId(preset.id)
   try {
-    const fingerprint = await projectFingerprint(props.project)
+    if (props.project) {
+      const fingerprint = await projectFingerprint(props.project)
+      const job = await createJob({
+        id: props.project.meta.id,
+        title: trimmed,
+        sourceLang: preset.sourceLang,
+        targetLang: preset.targetLang,
+        sourceFilename: fingerprint.filename,
+        sourceHash: fingerprint.hash,
+        localProjectId: props.project.meta.id,
+      })
+      saveJobLangPairFromCodes(preset.sourceLang, preset.targetLang)
+      emit('created', job)
+      return
+    }
     const job = await createJob({
-      id: props.project.meta.id,
+      id: createProjectId(),
       title: trimmed,
-      sourceLang: props.project.meta.sourceLang,
-      targetLang: props.project.meta.targetLang,
-      sourceFilename: fingerprint.filename,
-      sourceHash: fingerprint.hash,
-      localProjectId: props.project.meta.id,
+      sourceLang: preset.sourceLang,
+      targetLang: preset.targetLang,
     })
+    saveJobLangPairFromCodes(preset.sourceLang, preset.targetLang)
     emit('created', job)
   } catch (err) {
     error.value = err instanceof Error ? err.message : String(err)
@@ -58,9 +102,18 @@ async function submit() {
 
 <template>
   <div v-if="open" class="backdrop" role="presentation" @click.self="emit('close')">
-    <div class="dialog" role="dialog" aria-modal="true" :aria-label="t('jobs.createTitle')">
-      <h2 class="title">{{ t('jobs.createTitle') }}</h2>
-      <p class="hint">{{ t('jobs.createHint') }}</p>
+    <div
+      class="dialog"
+      role="dialog"
+      aria-modal="true"
+      :aria-label="project ? t('jobs.createTitle') : t('jobs.createEmptyTitle')"
+    >
+      <h2 class="title">
+        {{ project ? t('jobs.createTitle') : t('jobs.createEmptyTitle') }}
+      </h2>
+      <p class="hint">
+        {{ project ? t('jobs.createHint') : t('jobs.createEmptyHint') }}
+      </p>
 
       <label class="field">
         <span>{{ t('jobs.titleLabel') }}</span>
@@ -71,6 +124,15 @@ async function submit() {
           :disabled="busy"
           @keydown.enter.prevent="submit"
         />
+      </label>
+
+      <label class="field">
+        <span>{{ t('editor.langPairLabel') }}</span>
+        <select v-model="pairId" class="select" :disabled="busy">
+          <option v-for="preset in LANG_PAIR_PRESETS" :key="preset.id" :value="preset.id">
+            {{ preset.label }}
+          </option>
+        </select>
       </label>
 
       <p v-if="error" class="error" role="alert">{{ error }}</p>
@@ -129,6 +191,17 @@ async function submit() {
 }
 
 input {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.55rem 0.7rem;
+  background: var(--surface-2);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.95rem;
+}
+
+.select {
+  appearance: none;
   border: 1px solid var(--border);
   border-radius: 8px;
   padding: 0.55rem 0.7rem;

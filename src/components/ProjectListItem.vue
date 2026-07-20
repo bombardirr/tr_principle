@@ -50,6 +50,16 @@ function cancelPending() {
   pending.value = null
 }
 
+async function copyProjectName() {
+  const name = props.project.name.trim()
+  if (!name) return
+  try {
+    await navigator.clipboard.writeText(name)
+  } catch {
+    emit('error', t('projects.copyNameFailed'))
+  }
+}
+
 async function confirmRemove() {
   await deleteProject(props.project.id)
   pending.value = null
@@ -160,6 +170,13 @@ async function restoreFromCloud() {
         </div>
       </template>
       <template v-else>
+        <IconButton
+          :title="t('projects.copyNameHint')"
+          :disabled="busy"
+          @click="copyProjectName"
+        >
+          <EditorGlyph name="clipboard" />
+        </IconButton>
         <IconButton
           :title="t('projects.restoreCloudHint')"
           :disabled="busy"

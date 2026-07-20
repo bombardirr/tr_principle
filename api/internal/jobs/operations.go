@@ -14,6 +14,8 @@ var (
 	ErrJobNotFound  = errors.New("job not found")
 	ErrMemberAbsent = errors.New("job member not found")
 	ErrOwnerMember  = errors.New("owner cannot be removed")
+	ErrJobArchived  = errors.New("job archived")
+	ErrOwnerLeave   = errors.New("owner cannot leave")
 )
 
 type JobPatch struct {
@@ -50,11 +52,11 @@ func (s *Store) ListJobs(ctx context.Context, userID uuid.UUID) ([]Job, error) {
 		SELECT j.id, j.owner_user_id, j.title,
 		       COALESCE(j.source_lang, ''), COALESCE(j.target_lang, ''),
 		       COALESCE(j.source_filename, ''), COALESCE(j.source_hash, ''),
-		       j.created_at, j.updated_at
+		       j.created_at, j.updated_at, j.archived_at
 		FROM jobs j
 		JOIN job_members m ON m.job_id = j.id
 		WHERE m.user_id = $1
-		ORDER BY j.updated_at DESC, j.id
+		ORDER BY j.archived_at NULLS FIRST, j.updated_at DESC, j.id
 	`, userID)
 	if err != nil {
 		return nil, err
@@ -77,7 +79,7 @@ func (s *Store) GetJob(ctx context.Context, jobID, userID uuid.UUID) (Job, error
 		SELECT j.id, j.owner_user_id, j.title,
 		       COALESCE(j.source_lang, ''), COALESCE(j.target_lang, ''),
 		       COALESCE(j.source_filename, ''), COALESCE(j.source_hash, ''),
-		       j.created_at, j.updated_at
+		       j.created_at, j.updated_at, j.archived_at
 		FROM jobs j
 		JOIN job_members m ON m.job_id = j.id
 		WHERE j.id = $1 AND m.user_id = $2
@@ -86,6 +88,73 @@ func (s *Store) GetJob(ctx context.Context, jobID, userID uuid.UUID) (Job, error
 		return Job{}, ErrJobNotFound
 	}
 	return job, err
+}
+
+func (s *Store) ArchiveJob(ctx context.Context, jobID, ownerID uuid.UUID) (Job, error) {
+	job, err := scanJob(s.pool.QueryRow(ctx, `
+		UPDATE jobs
+		SET archived_at = COALESCE(archived_at, now()),
+		    updated_at = now()
+		WHERE id = $1 AND owner_user_id = $2
+		RETURNING id, owner_user_id, title,
+		          COALESCE(source_lang, ''), COALESCE(target_lang, ''),
+		          COALESCE(source_filename, ''), COALESCE(source_hash, ''),
+		          created_at, updated_at, archived_at
+	`, jobID, ownerID))
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Job{}, ErrJobNotFound
+	}
+	return job, err
+}
+
+func (s *Store) LeaveJob(ctx context.Context, jobID, userID uuid.UUID) error {
+	var role Role
+	err := s.pool.QueryRow(ctx, `
+		SELECT role FROM job_members WHERE job_id = $1 AND user_id = $2
+	`, jobID, userID).Scan(&role)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ErrMemberAbsent
+	}
+	if err != nil {
+		return err
+	}
+	if role == RoleOwner {
+		return ErrOwnerLeave
+	}
+	tag, err := s.pool.Exec(ctx, `
+		DELETE FROM job_members WHERE job_id = $1 AND user_id = $2 AND role <> 'owner'
+	`, jobID, userID)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrMemberAbsent
+	}
+	return nil
+}
+
+func (s *Store) DeleteJob(ctx context.Context, jobID, ownerID uuid.UUID) error {
+	tag, err := s.pool.Exec(ctx, `
+		DELETE FROM jobs WHERE id = $1 AND owner_user_id = $2
+	`, jobID, ownerID)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrJobNotFound
+	}
+	return nil
+}
+
+func (s *Store) IsArchived(ctx context.Context, jobID uuid.UUID) (bool, error) {
+	var archived bool
+	err := s.pool.QueryRow(ctx, `
+		SELECT archived_at IS NOT NULL FROM jobs WHERE id = $1
+	`, jobID).Scan(&archived)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return false, ErrJobNotFound
+	}
+	return archived, err
 }
 
 func (s *Store) UpdateJob(ctx context.Context, jobID, ownerID uuid.UUID, patch JobPatch) (Job, error) {
@@ -104,7 +173,7 @@ func (s *Store) UpdateJob(ctx context.Context, jobID, ownerID uuid.UUID, patch J
 		RETURNING id, owner_user_id, title,
 		          COALESCE(source_lang, ''), COALESCE(target_lang, ''),
 		          COALESCE(source_filename, ''), COALESCE(source_hash, ''),
-		          created_at, updated_at
+		          created_at, updated_at, archived_at
 	`, jobID, ownerID, patch.Title, patch.SourceLang, patch.TargetLang, patch.SourceFilename, patch.SourceHash))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Job{}, ErrJobNotFound
@@ -323,7 +392,7 @@ func (s *Store) TransferOwner(ctx context.Context, jobID, currentOwnerID, nextOw
 		RETURNING id, owner_user_id, title,
 		          COALESCE(source_lang, ''), COALESCE(target_lang, ''),
 		          COALESCE(source_filename, ''), COALESCE(source_hash, ''),
-		          created_at, updated_at
+		          created_at, updated_at, archived_at
 	`, jobID, nextOwnerID))
 	if err != nil {
 		return Job{}, err
@@ -350,6 +419,7 @@ func scanJob(row rowScanner) (Job, error) {
 		&job.SourceHash,
 		&job.CreatedAt,
 		&job.UpdatedAt,
+		&job.ArchivedAt,
 	)
 	return job, err
 }

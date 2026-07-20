@@ -114,6 +114,18 @@ func (s *Store) AcceptInvite(
 		return uuid.Nil, "", ErrInviteExhausted
 	}
 
+	var archived bool
+	err = tx.QueryRow(ctx, `SELECT archived_at IS NOT NULL FROM jobs WHERE id = $1`, invite.JobID).Scan(&archived)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return uuid.Nil, "", ErrJobNotFound
+	}
+	if err != nil {
+		return uuid.Nil, "", err
+	}
+	if archived {
+		return uuid.Nil, "", ErrJobArchived
+	}
+
 	if _, err := tx.Exec(ctx, `
 		INSERT INTO job_members (job_id, user_id, role, local_project_id)
 		VALUES ($1, $2, $3, $4)

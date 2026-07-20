@@ -10,6 +10,7 @@ export type Job = {
   sourceHash: string
   createdAt: string
   updatedAt: string
+  archivedAt?: string | null
 }
 
 export type JobMember = {

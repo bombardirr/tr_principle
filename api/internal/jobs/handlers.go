@@ -120,6 +120,56 @@ func (h *Handler) Patch(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func (h *Handler) Archive(w http.ResponseWriter, r *http.Request) {
+	user, jobID, ok := requestJob(w, r)
+	if !ok {
+		return
+	}
+	job, err := h.Store.ArchiveJob(r.Context(), jobID, user.ID)
+	switch {
+	case errors.Is(err, ErrJobNotFound):
+		writeError(w, http.StatusNotFound, err.Error())
+	case err != nil:
+		writeError(w, http.StatusInternalServerError, "server error")
+	default:
+		writeJSON(w, http.StatusOK, job)
+	}
+}
+
+func (h *Handler) Leave(w http.ResponseWriter, r *http.Request) {
+	user, jobID, ok := requestJob(w, r)
+	if !ok {
+		return
+	}
+	err := h.Store.LeaveJob(r.Context(), jobID, user.ID)
+	switch {
+	case errors.Is(err, ErrOwnerLeave):
+		writeError(w, http.StatusBadRequest, err.Error())
+	case errors.Is(err, ErrMemberAbsent):
+		writeError(w, http.StatusNotFound, err.Error())
+	case err != nil:
+		writeError(w, http.StatusInternalServerError, "server error")
+	default:
+		w.WriteHeader(http.StatusNoContent)
+	}
+}
+
+func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
+	user, jobID, ok := requestJob(w, r)
+	if !ok {
+		return
+	}
+	err := h.Store.DeleteJob(r.Context(), jobID, user.ID)
+	switch {
+	case errors.Is(err, ErrJobNotFound):
+		writeError(w, http.StatusNotFound, err.Error())
+	case err != nil:
+		writeError(w, http.StatusInternalServerError, "server error")
+	default:
+		w.WriteHeader(http.StatusNoContent)
+	}
+}
+
 func (h *Handler) Transfer(w http.ResponseWriter, r *http.Request) {
 	user, jobID, ok := requestJob(w, r)
 	if !ok {
@@ -234,6 +284,15 @@ func (h *Handler) CreateInvite(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "job not found")
 		return
 	}
+	archived, err := h.Store.IsArchived(r.Context(), jobID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "server error")
+		return
+	}
+	if archived {
+		writeError(w, http.StatusConflict, ErrJobArchived.Error())
+		return
+	}
 	var body struct {
 		Role      Role       `json:"role"`
 		ExpiresAt *time.Time `json:"expiresAt"`
@@ -322,10 +381,14 @@ func (h *Handler) AcceptInvite(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case errors.Is(err, ErrInvalidInvite):
 		writeError(w, http.StatusBadRequest, err.Error())
+	case errors.Is(err, ErrJobArchived):
+		writeError(w, http.StatusConflict, err.Error())
 	case errors.Is(err, ErrInviteRevoked),
 		errors.Is(err, ErrInviteExpired),
 		errors.Is(err, ErrInviteExhausted):
 		writeError(w, http.StatusGone, err.Error())
+	case errors.Is(err, ErrJobNotFound):
+		writeError(w, http.StatusNotFound, err.Error())
 	case err != nil:
 		writeError(w, http.StatusInternalServerError, "server error")
 	default:

@@ -27,6 +27,7 @@ import {
   History,
   ListRestart,
   LoaderCircle,
+  LogOut,
   Pencil,
   Percent,
   Plus,
@@ -65,6 +66,7 @@ export type GlyphName =
   | 'theme'
   | 'settings'
   | 'trash'
+  | 'leave'
   | 'edit'
   | 'plus'
   | 'send'
@@ -111,6 +113,7 @@ const icons: Record<GlyphName, Component> = {
   theme: Contrast,
   settings: Settings,
   trash: Trash2,
+  leave: LogOut,
   edit: Pencil,
   plus: Plus,
   send: SendHorizontal,

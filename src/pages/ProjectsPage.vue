@@ -12,15 +12,20 @@ import { unpackProjectFile } from '@/storage/projectFile'
 import { SEGMENT_SCHEMA_DATE_SAFE } from '@/types/project'
 import JobHubInline from '@/components/JobHubInline.vue'
 import ProjectListItem from '@/components/ProjectListItem.vue'
+import CreateSharedWorkDialog from '@/components/CreateSharedWorkDialog.vue'
+import IconButton from '@/components/IconButton.vue'
+import EditorGlyph from '@/components/EditorGlyph.vue'
 import { useAuth } from '@/auth/session'
-import { listJobs } from '@/jobs/api'
+import { listJobs, deleteJob, archiveJob, leaveJob } from '@/jobs/api'
 import { parseJobInviteToken } from '@/jobs/inviteToken'
+import { unlinkLocalProjectsFromJob } from '@/jobs/localProject'
 import {
   joinUnreadCount,
   jobHasJoinUnread,
   startJoinActivityPolling,
   stopJoinActivityPolling,
 } from '@/jobs/joinActivity'
+import { langPairLabel } from '@/tm/langPairs'
 import type { Job } from '@/types/job'
 import type { ProjectMeta } from '@/types/project'
 
@@ -40,6 +45,12 @@ const inviteInput = ref('')
 const inviteError = ref('')
 const openJobId = ref('')
 const hoverJobId = ref('')
+const pendingJobAction = ref<{
+  jobId: string
+  kind: 'leave' | 'archive' | 'delete'
+} | null>(null)
+const actionBusy = ref(false)
+const createSharedOpen = ref(false)
 
 const sectionUnread = computed(() => joinUnreadCount.value)
 const relatedJobId = computed(() => hoverJobId.value || openJobId.value)
@@ -48,9 +59,57 @@ function isRelatedProject(project: ProjectMeta) {
   return Boolean(relatedJobId.value && project.jobId === relatedJobId.value)
 }
 
+function isJobOwner(job: Job) {
+  return Boolean(user.value?.id && job.ownerUserId === user.value.id)
+}
+
+function isJobArchived(job: Job) {
+  return Boolean(job.archivedAt)
+}
+
+function cancelJobAction() {
+  pendingJobAction.value = null
+}
+
+async function confirmJobAction(job: Job) {
+  const pending = pendingJobAction.value
+  if (!pending || pending.jobId !== job.id || actionBusy.value) return
+  actionBusy.value = true
+  error.value = ''
+  notice.value = ''
+  try {
+    if (pending.kind === 'leave') {
+      await leaveJob(job.id)
+      await unlinkLocalProjectsFromJob(job.id, projects.value)
+      notice.value = t('jobs.leftNotice', { name: job.title })
+    } else if (pending.kind === 'archive') {
+      await archiveJob(job.id)
+      notice.value = t('jobs.archivedNotice', { name: job.title })
+    } else {
+      await deleteJob(job.id)
+      await unlinkLocalProjectsFromJob(job.id, projects.value)
+      notice.value = t('jobs.deletedNotice', { name: job.title })
+    }
+    if (openJobId.value === job.id && pending.kind !== 'archive') closeJob()
+    pendingJobAction.value = null
+    await refresh()
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : String(err)
+  } finally {
+    actionBusy.value = false
+  }
+}
+
 function openJob(jobId: string) {
   openJobId.value = jobId
   void router.replace({ name: 'projects', query: { ...route.query, job: jobId } })
+}
+
+async function onSharedWorkCreated(job: Job) {
+  createSharedOpen.value = false
+  notice.value = ''
+  await refresh()
+  openJob(job.id)
 }
 
 function closeJob() {
@@ -166,6 +225,11 @@ function formatDate(iso: string) {
   }
 }
 
+function jobLangPairText(job: Job) {
+  if (!job.sourceLang && !job.targetLang) return ''
+  return langPairLabel(job.sourceLang, job.targetLang)
+}
+
 async function openInvite() {
   const token = parseJobInviteToken(inviteInput.value)
   if (!token) {
@@ -250,6 +314,14 @@ async function openInvite() {
           >
             {{ sectionUnread }}
           </span>
+          <IconButton
+            v-if="!openJobId"
+            class="create-shared"
+            :title="t('jobs.createFromListHint')"
+            @click="createSharedOpen = true"
+          >
+            <EditorGlyph name="plus" />
+          </IconButton>
         </h2>
 
         <JobHubInline
@@ -275,6 +347,10 @@ async function openInvite() {
                 <span class="name">
                   {{ job.title }}
                   <span
+                    v-if="isJobArchived(job)"
+                    class="archived-chip"
+                  >{{ t('jobs.archivedBadge') }}</span>
+                  <span
                     v-if="jobHasJoinUnread(job.id)"
                     class="join-dot"
                     :title="t('jobs.joinUnreadHint')"
@@ -282,16 +358,75 @@ async function openInvite() {
                   />
                 </span>
                 <span class="sub">
-                  {{ job.sourceLang || '—' }} → {{ job.targetLang || '—' }} ·
+                  <template v-if="jobLangPairText(job)">{{ jobLangPairText(job) }} · </template>
                   {{ t('projects.updated', { date: formatDate(job.updatedAt) }) }}
                 </span>
               </button>
+              <div class="item-actions">
+                <template
+                  v-if="pendingJobAction && pendingJobAction.jobId === job.id"
+                >
+                  <IconButton
+                    danger
+                    :title="
+                      pendingJobAction.kind === 'leave'
+                        ? t('jobs.confirmLeave', { name: job.title })
+                        : pendingJobAction.kind === 'archive'
+                          ? t('jobs.confirmArchive', { name: job.title })
+                          : t('jobs.confirmDeleteForever', { name: job.title })
+                    "
+                    :disabled="actionBusy"
+                    @click="confirmJobAction(job)"
+                  >
+                    <EditorGlyph name="check" />
+                  </IconButton>
+                  <IconButton
+                    :title="t('jobs.deleteCancel')"
+                    :disabled="actionBusy"
+                    @click="cancelJobAction"
+                  >
+                    <EditorGlyph name="close" />
+                  </IconButton>
+                </template>
+                <template v-else-if="isJobOwner(job)">
+                  <IconButton
+                    v-if="!isJobArchived(job)"
+                    :title="t('jobs.archive')"
+                    :disabled="actionBusy"
+                    @click="pendingJobAction = { jobId: job.id, kind: 'archive' }"
+                  >
+                    <EditorGlyph name="archive" />
+                  </IconButton>
+                  <IconButton
+                    danger
+                    :title="t('jobs.deleteForever')"
+                    :disabled="actionBusy"
+                    @click="pendingJobAction = { jobId: job.id, kind: 'delete' }"
+                  >
+                    <EditorGlyph name="trash" />
+                  </IconButton>
+                </template>
+                <IconButton
+                  v-else
+                  :title="t('jobs.leave')"
+                  :disabled="actionBusy"
+                  @click="pendingJobAction = { jobId: job.id, kind: 'leave' }"
+                >
+                  <EditorGlyph name="leave" />
+                </IconButton>
+              </div>
             </li>
           </ul>
           <p v-else-if="!busy" class="empty">{{ t('projects.noSharedWorks') }}</p>
         </template>
       </section>
     </div>
+
+    <CreateSharedWorkDialog
+      :open="createSharedOpen"
+      @close="createSharedOpen = false"
+      @created="onSharedWorkCreated"
+    />
   </section>
 </template>
 
@@ -437,21 +572,28 @@ button.primary {
 }
 
 .viewer-card {
-  display: flex;
   flex: 1 1 auto;
   min-width: 0;
+  display: flex;
   flex-direction: column;
-  align-items: flex-start;
   gap: 0.15rem;
-  border: 0;
-  padding: 0.2rem 0.3rem;
-  background: transparent;
+  align-items: flex-start;
   text-align: left;
-  text-decoration: none;
+  border: 0;
+  background: transparent;
+  padding: 0.2rem 0.3rem;
+  cursor: pointer;
   color: inherit;
   font: inherit;
-  cursor: pointer;
   width: 100%;
+  text-decoration: none;
+}
+
+.item-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.15rem;
+  flex-shrink: 0;
 }
 
 .name {
@@ -469,6 +611,15 @@ button.primary {
   border-radius: 50%;
   background: #e05555;
   flex: 0 0 auto;
+}
+
+.archived-chip {
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0.05rem 0.4rem;
 }
 
 .sub {
