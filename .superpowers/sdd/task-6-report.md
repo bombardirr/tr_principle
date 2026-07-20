@@ -1,37 +1,43 @@
-# Task 6 report: Project segment sync, shared lock, and presence
+# Task 6 Report
 
-## Delivered
+## Status
 
-- Added migration `010_project_sync_state.sql` for shared project snapshot state.
-- Added authenticated shared-project sync, shared lock, and presence endpoints.
-- Kept `/api/projects/{id}/lock` compatible with legacy solo locks when the caller is not a member of a shared project.
-- Enforced editor/owner access for shared locks and writes; a second editor receives `409`.
-- Added cloud project API/snapshot helpers and minimal EditorPage pull-on-open, push-after-save, and presence heartbeat wiring.
-- Added `ProjectMeta.cloudShared` and preserved it in IndexedDB records.
+Implemented `ProjectTmBasesDialog` and the project-list TM dialog stack.
+
+## Changes
+
+- Added an attached-only project TM dialog with:
+  - normalized attached base cards;
+  - personal TM unit statistics;
+  - read/write permission toggles;
+  - detach action;
+  - empty state and collection-picker handoff.
+- Added attached TM chips to `ProjectListItem`; clicking a chip detaches it and `+` opens the project bases dialog.
+- Wired `TmCollectionDialog` pick/browse transitions, return-to-project behavior, attach/save, deletion refresh, and error forwarding.
 
 ## Verification
 
-- `DATABASE_URL=postgres://appzac:appzac@localhost:55432/appzac?sslmode=disable go test ./...` — passed.
-- `npm run build` — passed.
-- `npm run test` — passed: 33 files, 147 tests.
+- `npx vue-tsc --noEmit` — passed.
+- `npx vitest run tests/tm/projectAttachments.test.ts` — passed (7 tests).
+- IDE lints for both changed components — clean.
 
-## Scope notes
+## Concern
 
-- Presence is process-local and expires after 45 seconds; it intentionally does not return email addresses.
-- Sync is full-snapshot last-write-wins, with no OT or segment-level conflict resolution.
-- No Task 7 invite UI or Task 8 project TM changes were added.
+~~`cloneProjectRecord` in `src/storage/idb.ts` does not currently copy `meta.tmAttachments`. As a result, existing `saveProject` calls can discard attachment changes when cloning records for IndexedDB. This is outside the two-file Task 6 scope but should be corrected before relying on attachment persistence.~~
 
-## Blocking review fixes
+## Review fix: persist tmAttachments through clone/save
 
-- `ClaimSharedLock` now uses a single conditional `INSERT ... ON CONFLICT DO UPDATE ... WHERE ... RETURNING` statement. An active lock can only be renewed by the same user and holder with its valid token; every other active claim receives `ErrSharedLockHeld`.
-- Added a PostgreSQL-backed concurrent-claim regression test. It delays competing inserts so both callers contend for the same row, verifies exactly one successful claim, and confirms that the winner can renew its token.
-- `useProjectAccess` now treats `401`, `403`, and `409` lock-claim API responses as non-editable. Network failures and server errors remain offline-friendly and editable.
-- Added frontend regression coverage for both `401` and `403`.
+**Finding:** `cloneProjectRecord()` omitted `meta.tmAttachments`, so attach/detach/R/W changes were dropped on `saveProject()` / `getProject()`.
 
-## Review-fix verification
+**Fix:** Copy `tmAttachments` in `cloneProjectRecord` (deep-clone each attachment entry alongside existing meta fields).
 
-- `npm test -- tests/composables/useProjectAccess.test.ts` — first red run: 2 failures (401/403 incorrectly left `cloudOk=true`); after the fix: 2 passed.
-- `cmd /c "set DATABASE_URL=postgres://appzac:appzac@localhost:55432/appzac?sslmode=disable&& go test ./internal/collab -run TestClaimSharedLockAtomicallyExcludesConcurrentClaims -count=1"` — passed.
-- `npm test` — passed: 34 files, 149 tests.
-- `cmd /c "set DATABASE_URL=postgres://appzac:appzac@localhost:55432/appzac?sslmode=disable&& go test ./..."` — passed.
-- `npm run build` — passed.
+**Test:** Added `tests/storage/cloneProjectRecord.test.ts` — verifies `tmAttachments` round-trips through clone and stays undefined when absent.
+
+```text
+$ npm test -- tests/storage/cloneProjectRecord.test.ts
+ ✓ tests/storage/cloneProjectRecord.test.ts (2 tests)
+ Test Files  1 passed (1)
+      Tests  2 passed (2)
+```
+
+**Commit:** `fix: persist tmAttachments through project clone/save`
