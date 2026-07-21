@@ -17,9 +17,11 @@ import {
 } from '@/tm/jobAttachments'
 import { PERSONAL_TM_ATTACHMENT_ID } from '@/tm/projectAttachments'
 import { listTmCatalog } from '@/tm/tmBasesCatalog'
-import { sharedTmLocalId, upsertSharedTmBase } from '@/storage/tmBasesIdb'
+import { listTmBases, sharedTmLocalId, upsertSharedTmBase } from '@/storage/tmBasesIdb'
 import { syncTmBase } from '@/tm/sync'
+import { cloneSharedJobTm, exportSharedJobTm } from '@/tm/jobTmIo'
 import type { TmAttachmentCatalogItem } from '@/tm/projectAttachments'
+import type { TmBaseRecord } from '@/storage/tmBasesIdb'
 import type { JobRole, JobTmAttachment } from '@/types/job'
 import type { ProjectTmAttachmentId } from '@/types/project'
 
@@ -33,6 +35,11 @@ const { t } = useI18n()
 const shared = ref<JobTmAttachment[]>([])
 const localOverlay = ref(listJobTmAttachments(props.jobId))
 const loadError = ref<string | null>(null)
+const ioNotice = ref<string | null>(null)
+const actionBusyId = ref<string | null>(null)
+const cloneSource = ref<JobTmAttachment | null>(null)
+const cloneTargets = ref<TmBaseRecord[]>([])
+const cloneTargetId = ref('')
 const collectionOpen = ref(false)
 const collectionMode = ref<'pick' | 'browse'>('pick')
 const collectionReturnTo = ref<'job' | null>(null)
@@ -59,6 +66,8 @@ watch(
   jobId => {
     jobGeneration += 1
     shared.value = []
+    cloneSource.value = null
+    ioNotice.value = null
     localOverlay.value = listJobTmAttachments(jobId)
     void refreshShared()
     void refreshCatalog()
@@ -84,7 +93,7 @@ async function refreshShared(options: { keepError?: boolean } = {}) {
       try {
         const localId = sharedTmLocalId(
           attachment.ownerId || attachment.createdBy,
-          attachment.tmBaseId,
+          attachment.tmBaseId
         )
         await upsertSharedTmBase({
           id: localId,
@@ -189,7 +198,7 @@ async function detachShared(attachmentId: string) {
 
 async function toggleShared(
   attachmentId: string,
-  permission: 'canRead' | 'canWrite',
+  permission: 'canRead' | 'canWrite' | 'canExport' | 'canClone',
   value: boolean
 ) {
   if (!props.isOwner) return
@@ -206,6 +215,79 @@ async function toggleShared(
     if (!isCurrentJob(jobId, generation)) return
     loadError.value = error instanceof Error ? error.message : String(error)
     await refreshShared({ keepError: true })
+  }
+}
+
+async function exportShared(attachment: JobTmAttachment) {
+  if (!attachment.canRead || !attachment.canExport || !attachment.ownerId) return
+  const jobId = props.jobId
+  const generation = jobGeneration
+  actionBusyId.value = attachment.id
+  loadError.value = null
+  ioNotice.value = null
+  try {
+    const result = await exportSharedJobTm({
+      jobId,
+      ownerId: attachment.ownerId,
+      tmBaseId: attachment.tmBaseId,
+      label: attachment.label,
+    })
+    if (!isCurrentJob(jobId, generation)) return
+    ioNotice.value =
+      result.count === 0
+        ? t('projects.tmIoEmpty')
+        : t('projects.tmExported', { count: result.count })
+  } catch (error) {
+    if (!isCurrentJob(jobId, generation)) return
+    loadError.value = error instanceof Error ? error.message : String(error)
+  } finally {
+    if (isCurrentJob(jobId, generation)) actionBusyId.value = null
+  }
+}
+
+async function openClone(attachment: JobTmAttachment) {
+  if (!attachment.canRead || !attachment.canClone || !attachment.ownerId) return
+  loadError.value = null
+  ioNotice.value = null
+  try {
+    cloneTargets.value = (await listTmBases()).filter(base => base.sharedOnly !== true)
+    cloneTargetId.value = cloneTargets.value[0]?.id ?? ''
+    cloneSource.value = attachment
+  } catch (error) {
+    loadError.value = error instanceof Error ? error.message : String(error)
+  }
+}
+
+function closeClone() {
+  cloneSource.value = null
+  cloneTargets.value = []
+  cloneTargetId.value = ''
+}
+
+async function confirmClone() {
+  const attachment = cloneSource.value
+  if (!attachment?.ownerId || !cloneTargetId.value) return
+  const jobId = props.jobId
+  const generation = jobGeneration
+  actionBusyId.value = attachment.id
+  loadError.value = null
+  ioNotice.value = null
+  try {
+    const result = await cloneSharedJobTm({
+      jobId,
+      ownerId: attachment.ownerId,
+      tmBaseId: attachment.tmBaseId,
+      targetBaseId: cloneTargetId.value,
+    })
+    if (!isCurrentJob(jobId, generation)) return
+    closeClone()
+    ioNotice.value =
+      result.count === 0 ? t('projects.tmIoEmpty') : t('projects.tmCloned', { count: result.count })
+  } catch (error) {
+    if (!isCurrentJob(jobId, generation)) return
+    loadError.value = error instanceof Error ? error.message : String(error)
+  } finally {
+    if (isCurrentJob(jobId, generation)) actionBusyId.value = null
   }
 }
 
@@ -250,6 +332,7 @@ function toggleLocal(
       </div>
 
       <p v-if="loadError" class="error">{{ loadError }}</p>
+      <p v-if="ioNotice" class="notice">{{ ioNotice }}</p>
       <p v-if="shared.length === 0" class="muted">
         {{ t('jobs.memoriesJobBasesEmpty') }}
       </p>
@@ -292,6 +375,54 @@ function toggleLocal(
               "
             />
           </label>
+          <label class="permission" :title="t('projects.tmPermExport')">
+            <span>{{ t('projects.tmPermExportShort') }}</span>
+            <input
+              data-testid="job-tm-shared-export"
+              type="checkbox"
+              :checked="attachment.canExport"
+              :disabled="!isOwner"
+              @change="
+                toggleShared(
+                  attachment.id,
+                  'canExport',
+                  ($event.target as HTMLInputElement).checked
+                )
+              "
+            />
+          </label>
+          <label class="permission" :title="t('projects.tmPermClone')">
+            <span>{{ t('projects.tmPermCloneShort') }}</span>
+            <input
+              data-testid="job-tm-shared-clone"
+              type="checkbox"
+              :checked="attachment.canClone"
+              :disabled="!isOwner"
+              @change="
+                toggleShared(attachment.id, 'canClone', ($event.target as HTMLInputElement).checked)
+              "
+            />
+          </label>
+          <button
+            v-if="attachment.canRead && attachment.canExport && attachment.ownerId"
+            type="button"
+            class="io-action"
+            data-testid="job-tm-export"
+            :disabled="actionBusyId === attachment.id"
+            @click="exportShared(attachment)"
+          >
+            {{ t('projects.tmExportTmx') }}
+          </button>
+          <button
+            v-if="attachment.canRead && attachment.canClone && attachment.ownerId"
+            type="button"
+            class="io-action"
+            data-testid="job-tm-clone"
+            :disabled="actionBusyId === attachment.id"
+            @click="openClone(attachment)"
+          >
+            {{ t('projects.tmClone') }}
+          </button>
           <button
             v-if="isOwner"
             type="button"
@@ -384,6 +515,38 @@ function toggleLocal(
       @attach="attach"
       @open-full="openFullFromPick"
     />
+
+    <div v-if="cloneSource" class="clone-backdrop" role="presentation" @click.self="closeClone">
+      <section
+        class="clone-dialog"
+        role="dialog"
+        aria-modal="true"
+        :aria-label="t('projects.tmCloneTitle')"
+      >
+        <h3>{{ t('projects.tmCloneTitle') }}</h3>
+        <label>
+          <span>{{ t('projects.tmCloneTarget') }}</span>
+          <select v-model="cloneTargetId" data-testid="job-tm-clone-target">
+            <option v-for="base in cloneTargets" :key="base.id" :value="base.id">
+              {{ base.label }}
+            </option>
+          </select>
+        </label>
+        <div class="clone-actions">
+          <button type="button" :disabled="actionBusyId !== null" @click="closeClone">
+            {{ t('projects.tmCloneCancel') }}
+          </button>
+          <button
+            type="button"
+            data-testid="job-tm-clone-confirm"
+            :disabled="!cloneTargetId || actionBusyId !== null"
+            @click="confirmClone"
+          >
+            {{ t('projects.tmCloneConfirm') }}
+          </button>
+        </div>
+      </section>
+    </div>
   </section>
 </template>
 
@@ -447,7 +610,8 @@ h3 {
 }
 
 .add,
-.detach {
+.detach,
+.io-action {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -459,6 +623,13 @@ h3 {
   background: transparent;
   font: inherit;
   cursor: pointer;
+}
+
+.io-action {
+  width: auto;
+  padding: 0 0.4rem;
+  color: var(--accent);
+  font-size: 0.7rem;
 }
 
 .add {
@@ -522,10 +693,56 @@ small,
   line-height: 1.4;
 }
 
-.error {
+.error,
+.notice {
   margin: 0.2rem 0 0;
-  color: var(--danger);
   font-size: 0.72rem;
+}
+
+.error {
+  color: var(--danger);
+}
+
+.notice {
+  color: var(--text-muted);
+}
+
+.clone-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+  background: color-mix(in srgb, #000 45%, transparent);
+}
+
+.clone-dialog {
+  width: min(24rem, 100%);
+  padding: 1rem;
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--text);
+
+  h3 {
+    margin-top: 0;
+  }
+
+  label {
+    display: grid;
+    gap: 0.35rem;
+  }
+
+  select {
+    width: 100%;
+  }
+}
+
+.clone-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: 1rem;
 }
 
 @media (max-width: 30rem) {

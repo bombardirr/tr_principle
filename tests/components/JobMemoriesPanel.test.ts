@@ -36,15 +36,22 @@ vi.mock('../../src/jobs/tmAttachmentsApi', () => ({
 vi.mock('../../src/storage/tmBasesIdb', () => ({
   sharedTmLocalId: (ownerId: string, tmBaseId: string) => `share:${ownerId}:${tmBaseId}`,
   upsertSharedTmBase: vi.fn(async () => undefined),
+  listTmBases: vi.fn(async () => []),
 }))
 
 vi.mock('../../src/tm/sync', () => ({
   syncTmBase: vi.fn(async () => undefined),
 }))
 
+vi.mock('../../src/tm/jobTmIo', () => ({
+  exportSharedJobTm: vi.fn(async () => ({ count: 2 })),
+  cloneSharedJobTm: vi.fn(async () => ({ count: 2 })),
+}))
+
 import JobMemoriesPanel from '../../src/components/JobMemoriesPanel.vue'
-import { upsertSharedTmBase } from '../../src/storage/tmBasesIdb'
+import { listTmBases, upsertSharedTmBase } from '../../src/storage/tmBasesIdb'
 import { syncTmBase } from '../../src/tm/sync'
+import { cloneSharedJobTm, exportSharedJobTm } from '../../src/tm/jobTmIo'
 import {
   createJobTmAttachment,
   deleteJobTmAttachment,
@@ -73,6 +80,19 @@ const messages = {
       tmPermWrite: 'Write',
       tmPermReadShort: 'R',
       tmPermWriteShort: 'W',
+      tmPermExport: 'Export',
+      tmPermClone: 'Clone',
+      tmPermExportShort: 'E',
+      tmPermCloneShort: 'C',
+      tmExportTmx: 'Export TMX',
+      tmClone: 'Clone…',
+      tmCloneTitle: 'Clone into your TM',
+      tmCloneTarget: 'Target base',
+      tmCloneConfirm: 'Clone',
+      tmCloneCancel: 'Cancel',
+      tmIoEmpty: 'No units in this base yet',
+      tmCloned: 'Cloned {count} units',
+      tmExported: 'Exported {count} units',
     },
     tmCollection: {
       pickTitle: 'Choose a TM',
@@ -121,6 +141,9 @@ function deferred<T>() {
 beforeEach(() => {
   vi.clearAllMocks()
   vi.mocked(listJobTmAttachmentsApi).mockResolvedValue([])
+  vi.mocked(listTmBases).mockResolvedValue([])
+  vi.mocked(exportSharedJobTm).mockResolvedValue({ count: 2 })
+  vi.mocked(cloneSharedJobTm).mockResolvedValue({ count: 2 })
   localStorage.clear()
 })
 
@@ -191,7 +214,7 @@ describe('JobMemoriesPanel', () => {
     await settle()
     const memberCheckboxes = memberHost.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')
     expect(memberHost.textContent).toContain('Personal TM')
-    expect(memberCheckboxes).toHaveLength(2)
+    expect(memberCheckboxes).toHaveLength(4)
     expect([...memberCheckboxes].every(input => input.disabled)).toBe(true)
     expect(memberHost.querySelector('[data-testid="job-tm-shared-detach"]')).toBeNull()
 
@@ -209,6 +232,148 @@ describe('JobMemoriesPanel', () => {
     ownerHost.querySelector<HTMLButtonElement>('[data-testid="job-tm-shared-detach"]')!.click()
     await settle()
     expect(deleteJobTmAttachment).toHaveBeenCalledWith('job-1', 'att-server')
+  })
+
+  it('lets the owner toggle export and clone permissions', async () => {
+    vi.mocked(listJobTmAttachmentsApi).mockResolvedValue([
+      {
+        id: 'att-server',
+        jobId: 'job-1',
+        tmBaseId: 'shared-base',
+        ownerId: 'owner-1',
+        canRead: true,
+        canWrite: false,
+        canExport: false,
+        canClone: false,
+        createdBy: 'owner-1',
+        createdAt: '2026-01-01T00:00:00Z',
+        updatedAt: '2026-01-01T00:00:00Z',
+      },
+    ])
+    const host = mountPanel({ jobId: 'job-1', isOwner: true, myRole: 'owner' })
+    await settle()
+
+    host.querySelector<HTMLInputElement>('[data-testid="job-tm-shared-export"]')!.click()
+    await settle()
+    expect(patchJobTmAttachment).toHaveBeenCalledWith('job-1', 'att-server', {
+      canExport: true,
+    })
+
+    host.querySelector<HTMLInputElement>('[data-testid="job-tm-shared-clone"]')!.click()
+    await settle()
+    expect(patchJobTmAttachment).toHaveBeenCalledWith('job-1', 'att-server', {
+      canClone: true,
+    })
+  })
+
+  it('hides export and clone actions from members without flags', async () => {
+    vi.mocked(listJobTmAttachmentsApi).mockResolvedValue([
+      {
+        id: 'att-server',
+        jobId: 'job-1',
+        tmBaseId: 'shared-base',
+        ownerId: 'owner-1',
+        canRead: true,
+        canWrite: false,
+        canExport: false,
+        canClone: false,
+        createdBy: 'owner-1',
+        createdAt: '2026-01-01T00:00:00Z',
+        updatedAt: '2026-01-01T00:00:00Z',
+      },
+    ])
+    const host = mountPanel()
+    await settle()
+
+    expect(host.querySelector('[data-testid="job-tm-export"]')).toBeNull()
+    expect(host.querySelector('[data-testid="job-tm-clone"]')).toBeNull()
+  })
+
+  it('exports a readable shared base when the member has permission', async () => {
+    vi.mocked(listJobTmAttachmentsApi).mockResolvedValue([
+      {
+        id: 'att-server',
+        jobId: 'job-1',
+        tmBaseId: 'shared-base',
+        label: 'Shared base',
+        ownerId: 'owner-1',
+        canRead: true,
+        canWrite: false,
+        canExport: true,
+        canClone: false,
+        createdBy: 'owner-1',
+        createdAt: '2026-01-01T00:00:00Z',
+        updatedAt: '2026-01-01T00:00:00Z',
+      },
+    ])
+    const host = mountPanel()
+    await settle()
+
+    host.querySelector<HTMLButtonElement>('[data-testid="job-tm-export"]')!.click()
+    await settle()
+
+    expect(exportSharedJobTm).toHaveBeenCalledWith({
+      jobId: 'job-1',
+      ownerId: 'owner-1',
+      tmBaseId: 'shared-base',
+      label: 'Shared base',
+    })
+    expect(host.textContent).toContain('Exported 2 units')
+  })
+
+  it('clones into an owned base and excludes shared-only targets', async () => {
+    vi.mocked(listJobTmAttachmentsApi).mockResolvedValue([
+      {
+        id: 'att-server',
+        jobId: 'job-1',
+        tmBaseId: 'shared-base',
+        ownerId: 'owner-1',
+        canRead: true,
+        canWrite: false,
+        canExport: false,
+        canClone: true,
+        createdBy: 'owner-1',
+        createdAt: '2026-01-01T00:00:00Z',
+        updatedAt: '2026-01-01T00:00:00Z',
+      },
+    ])
+    vi.mocked(listTmBases).mockResolvedValue([
+      {
+        id: 'personal-tm',
+        label: 'Personal TM',
+        color: '#111111',
+        createdAt: '2026-01-01T00:00:00Z',
+        updatedAt: '2026-01-01T00:00:00Z',
+        sharedOnly: false,
+      },
+      {
+        id: 'share:other:base',
+        label: 'Other shared',
+        color: '#222222',
+        createdAt: '2026-01-01T00:00:00Z',
+        updatedAt: '2026-01-01T00:00:00Z',
+        sharedOnly: true,
+      },
+    ])
+    const host = mountPanel()
+    await settle()
+
+    host.querySelector<HTMLButtonElement>('[data-testid="job-tm-clone"]')!.click()
+    await settle()
+
+    const target = host.querySelector<HTMLSelectElement>('[data-testid="job-tm-clone-target"]')!
+    expect(target.textContent).toContain('Personal TM')
+    expect(target.textContent).not.toContain('Other shared')
+    host.querySelector<HTMLButtonElement>('[data-testid="job-tm-clone-confirm"]')!.click()
+    await settle()
+
+    expect(cloneSharedJobTm).toHaveBeenCalledWith({
+      jobId: 'job-1',
+      ownerId: 'owner-1',
+      tmBaseId: 'shared-base',
+      targetBaseId: 'personal-tm',
+    })
+    expect(host.textContent).toContain('Cloned 2 units')
   })
 
   it('caches and pulls each readable shared base in the job context', async () => {
@@ -250,10 +415,7 @@ describe('JobMemoriesPanel', () => {
         label: 'Shared base',
         color: '#123456',
       })
-      expect(syncTmBase).toHaveBeenCalledWith(
-        'share:owner-1:shared-base',
-        { jobId: 'job-1' },
-      )
+      expect(syncTmBase).toHaveBeenCalledWith('share:owner-1:shared-base', { jobId: 'job-1' })
     })
     expect(document.body.textContent).toContain('Shared base')
     expect(syncTmBase).not.toHaveBeenCalledWith('hidden-base', expect.anything())
@@ -300,6 +462,8 @@ describe('JobMemoriesPanel', () => {
 
     expect(host.querySelector('[data-testid="job-tm-local-read"]')).not.toBeNull()
     expect(host.querySelector('[data-testid="job-tm-local-write"]')).not.toBeNull()
+    expect(host.querySelector('[data-testid="job-tm-local-export"]')).toBeNull()
+    expect(host.querySelector('[data-testid="job-tm-local-clone"]')).toBeNull()
     expect(createJobTmAttachment).not.toHaveBeenCalled()
   })
 

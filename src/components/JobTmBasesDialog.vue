@@ -54,7 +54,7 @@ watch(
     if (!open) return
     await Promise.all([refreshStats(), refreshCatalog()])
   },
-  { immediate: true },
+  { immediate: true }
 )
 
 function catalogItem(tmBaseId: string) {
@@ -108,8 +108,8 @@ async function detach(attachmentId: string) {
 
 async function togglePermission(
   attachmentId: string,
-  permission: 'canRead' | 'canWrite',
-  value: boolean,
+  permission: 'canRead' | 'canWrite' | 'canExport' | 'canClone',
+  value: boolean
 ) {
   if (!props.isOwner || busy.value) return
   busy.value = true
@@ -146,7 +146,11 @@ async function togglePermission(
           >
             <EditorGlyph name="plus" />
           </IconButton>
-          <IconButton :title="t('tmCollection.openFromProjects')" :disabled="busy" @click="emit('close')">
+          <IconButton
+            :title="t('tmCollection.openFromProjects')"
+            :disabled="busy"
+            @click="emit('close')"
+          >
             <EditorGlyph name="close" />
           </IconButton>
         </div>
@@ -199,7 +203,9 @@ async function togglePermission(
               v-if="attachment.tmBaseId === PERSONAL_TM_ATTACHMENT_ID"
               class="card-stat"
               :title="
-                lastUpdatedAt ? t('projects.tmLastUpdatedHint') : t('projects.tmLastUpdatedNeverHint')
+                lastUpdatedAt
+                  ? t('projects.tmLastUpdatedHint')
+                  : t('projects.tmLastUpdatedNeverHint')
               "
             >
               {{ lastUpdatedLabel(true) }}
@@ -231,6 +237,30 @@ async function togglePermission(
                 @click="togglePermission(attachment.id, 'canWrite', !attachment.canWrite)"
               >
                 {{ t('projects.tmPermWriteShort') }}
+              </button>
+              <button
+                type="button"
+                class="perm"
+                :class="{ on: attachment.canExport }"
+                :disabled="busy || !isOwner"
+                :aria-pressed="attachment.canExport"
+                :title="t('projects.tmPermExport')"
+                :aria-label="t('projects.tmPermExport')"
+                @click="togglePermission(attachment.id, 'canExport', !attachment.canExport)"
+              >
+                {{ t('projects.tmPermExportShort') }}
+              </button>
+              <button
+                type="button"
+                class="perm"
+                :class="{ on: attachment.canClone }"
+                :disabled="busy || !isOwner"
+                :aria-pressed="attachment.canClone"
+                :title="t('projects.tmPermClone')"
+                :aria-label="t('projects.tmPermClone')"
+                @click="togglePermission(attachment.id, 'canClone', !attachment.canClone)"
+              >
+                {{ t('projects.tmPermCloneShort') }}
               </button>
             </div>
           </div>
