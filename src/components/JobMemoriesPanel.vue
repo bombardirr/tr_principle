@@ -67,6 +67,8 @@ watch(
     jobGeneration += 1
     shared.value = []
     cloneSource.value = null
+    cloneTargets.value = []
+    cloneTargetId.value = ''
     ioNotice.value = null
     localOverlay.value = listJobTmAttachments(jobId)
     void refreshShared()
@@ -247,13 +249,18 @@ async function exportShared(attachment: JobTmAttachment) {
 
 async function openClone(attachment: JobTmAttachment) {
   if (!attachment.canRead || !attachment.canClone || !attachment.ownerId) return
+  const jobId = props.jobId
+  const generation = jobGeneration
   loadError.value = null
   ioNotice.value = null
   try {
-    cloneTargets.value = (await listTmBases()).filter(base => base.sharedOnly !== true)
+    const bases = (await listTmBases()).filter(base => base.sharedOnly !== true)
+    if (!isCurrentJob(jobId, generation)) return
+    cloneTargets.value = bases
     cloneTargetId.value = cloneTargets.value[0]?.id ?? ''
     cloneSource.value = attachment
   } catch (error) {
+    if (!isCurrentJob(jobId, generation)) return
     loadError.value = error instanceof Error ? error.message : String(error)
   }
 }

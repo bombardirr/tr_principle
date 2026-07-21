@@ -564,6 +564,48 @@ describe('JobMemoriesPanel', () => {
     expect(host.textContent).not.toContain('old-base')
   })
 
+  it('does not open clone dialog after job changes while targets load', async () => {
+    const oldList = deferred<Awaited<ReturnType<typeof listTmBases>>>()
+    vi.mocked(listJobTmAttachmentsApi).mockResolvedValue([
+      {
+        id: 'att-server',
+        jobId: 'job-1',
+        tmBaseId: 'shared-base',
+        ownerId: 'owner-1',
+        canRead: true,
+        canWrite: false,
+        canExport: false,
+        canClone: true,
+        createdBy: 'owner-1',
+        createdAt: '2026-01-01T00:00:00Z',
+        updatedAt: '2026-01-01T00:00:00Z',
+      },
+    ])
+    vi.mocked(listTmBases).mockImplementationOnce(() => oldList.promise)
+    const props = reactive({ jobId: 'job-1', isOwner: false, myRole: 'translator' as const })
+    const host = mountPanel(props)
+    await settle()
+
+    host.querySelector<HTMLButtonElement>('[data-testid="job-tm-clone"]')!.click()
+    props.jobId = 'job-2'
+    await settle()
+
+    oldList.resolve([
+      {
+        id: 'personal-tm',
+        label: 'Personal TM',
+        color: '#111111',
+        createdAt: '2026-01-01T00:00:00Z',
+        updatedAt: '2026-01-01T00:00:00Z',
+        sharedOnly: false,
+      },
+    ])
+    await settle()
+
+    expect(host.querySelector('[data-testid="job-tm-clone-target"]')).toBeNull()
+    expect(cloneSharedJobTm).not.toHaveBeenCalled()
+  })
+
   it('keeps a mutation error visible after refreshing shared attachments', async () => {
     const attachment = {
       id: 'att-server',
