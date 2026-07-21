@@ -9,6 +9,7 @@ export type TmBaseRecord = {
   color: string
   createdAt: string
   updatedAt: string
+  sharedOnly?: boolean
 }
 
 interface TmBasesDb extends DBSchema {
@@ -46,6 +47,7 @@ function personalDefault(): TmBaseRecord {
     color: TM_BASE_COLORS[0]!,
     createdAt: now,
     updatedAt: now,
+    sharedOnly: false,
   }
 }
 
@@ -69,6 +71,11 @@ export async function listTmBases(): Promise<TmBaseRecord[]> {
   })
 }
 
+export async function listOwnedTmBaseIds(): Promise<Set<string>> {
+  const bases = await listTmBases()
+  return new Set(bases.filter(base => base.sharedOnly !== true).map(base => base.id))
+}
+
 export async function getTmBase(id: string): Promise<TmBaseRecord | undefined> {
   const db = await getDb()
   return db.get('bases', id)
@@ -78,7 +85,7 @@ export async function upsertTmBasesFromCloud(bases: TmBaseApiRecord[]): Promise<
   const db = await getDb()
   const tx = db.transaction('bases', 'readwrite')
   for (const base of bases) {
-    await tx.store.put(base)
+    await tx.store.put({ ...base, sharedOnly: false })
   }
   await tx.done
 }
@@ -98,6 +105,7 @@ export async function upsertSharedTmBase(input: {
     color: input.color,
     createdAt: existing?.createdAt ?? now,
     updatedAt: now,
+    sharedOnly: existing?.sharedOnly ?? !existing,
   }
   await db.put('bases', row)
   return row
@@ -114,7 +122,14 @@ export async function createTmBase(input: { label: string; id?: string }): Promi
   const now = new Date().toISOString()
   const bases = await db.getAll('bases')
   const color = TM_BASE_COLORS[bases.length % TM_BASE_COLORS.length]!
-  const row: TmBaseRecord = { id, label, color, createdAt: now, updatedAt: now }
+  const row: TmBaseRecord = {
+    id,
+    label,
+    color,
+    createdAt: now,
+    updatedAt: now,
+    sharedOnly: false,
+  }
   await db.put('bases', row)
   try {
     await upsertTmBaseApi({ id, label, color })
@@ -155,6 +170,7 @@ export async function ensureTmBasesForIds(ids: string[]): Promise<void> {
       color,
       createdAt: now,
       updatedAt: now,
+      sharedOnly: false,
     })
   }
 }

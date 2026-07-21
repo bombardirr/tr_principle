@@ -81,12 +81,17 @@ async function refreshShared(options: { keepError?: boolean } = {}) {
     shared.value = attachments
     for (const attachment of attachments) {
       if (!attachment.canRead) continue
-      await upsertSharedTmBase({
-        id: attachment.tmBaseId,
-        label: attachment.label ?? attachment.tmBaseId,
-        color: attachment.color ?? '#5b9fd4',
-      })
-      await syncTmBase(attachment.tmBaseId, { jobId })
+      try {
+        await upsertSharedTmBase({
+          id: attachment.tmBaseId,
+          label: attachment.label ?? attachment.tmBaseId,
+          color: attachment.color ?? '#5b9fd4',
+        })
+        await syncTmBase(attachment.tmBaseId, { jobId })
+      } catch (error) {
+        if (!isCurrentRequest(jobId, generation, requestGeneration)) return
+        loadError.value = error instanceof Error ? error.message : String(error)
+      }
       if (!isCurrentRequest(jobId, generation, requestGeneration)) return
     }
   } catch (error) {

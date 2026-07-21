@@ -1,6 +1,6 @@
 import { getStorageAccountId } from '@/storage/scope'
 import { getTmUnit, putTmUnit, removeTmUnit } from '@/storage/tmIdb'
-import { upsertTmBasesFromCloud } from '@/storage/tmBasesIdb'
+import { listOwnedTmBaseIds, upsertTmBasesFromCloud } from '@/storage/tmBasesIdb'
 import type { TmUnit } from '@/types/tm'
 import { listTmBasesApi, pullTmBaseSync, pushTmBaseSync } from '@/tm/api'
 import { PERSONAL_TM_ATTACHMENT_ID } from '@/tm/projectAttachments'
@@ -221,9 +221,19 @@ export async function syncTmBase(
 ): Promise<void> {
   if (!getStorageAccountId()) return
   return runExclusive(async () => {
-    if (!opts?.pushOnly) await pullAll(baseId, opts?.jobId)
-    await bucketDirtyUnits(opts?.jobId)
-    await pushDirty(baseId, opts?.jobId)
+    const ownedBaseIds = await listOwnedTmBaseIds()
+    const baseJobId = opts?.jobId && !ownedBaseIds.has(baseId) ? opts.jobId : undefined
+    if (!opts?.pushOnly) await pullAll(baseId, baseJobId)
+    await bucketDirtyUnits(opts?.jobId, ownedBaseIds)
+    await pushDirty(baseId, baseJobId, ownedBaseIds)
+
+    const attempted = new Set<string>()
+    while (true) {
+      const ownedBaseId = dirtyBaseIds().find(id => !attempted.has(id))
+      if (!ownedBaseId) break
+      attempted.add(ownedBaseId)
+      await pushDirty(ownedBaseId, undefined, ownedBaseIds)
+    }
   })
 }
 

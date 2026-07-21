@@ -255,6 +255,33 @@ describe('JobMemoriesPanel', () => {
     expect(syncTmBase).not.toHaveBeenCalledWith('hidden-base', expect.anything())
   })
 
+  it('keeps listed shared attachments visible when one base sync fails', async () => {
+    vi.mocked(listJobTmAttachmentsApi).mockResolvedValue([
+      {
+        id: 'att-readable',
+        jobId: 'job-1',
+        tmBaseId: 'shared-base',
+        label: 'Shared base',
+        canRead: true,
+        canWrite: false,
+        canExport: false,
+        canClone: false,
+        createdBy: 'owner-1',
+        createdAt: '2026-01-01T00:00:00Z',
+        updatedAt: '2026-01-01T00:00:00Z',
+      },
+    ])
+    vi.mocked(syncTmBase).mockRejectedValueOnce(new Error('Shared base sync failed'))
+
+    const host = mountPanel()
+
+    await vi.waitFor(() => {
+      expect(host.textContent).toContain('Shared base')
+      expect(host.textContent).toContain('Shared base sync failed')
+    })
+    expect(host.textContent).not.toContain('No shared bases attached yet.')
+  })
+
   it('lets a member attach and mutate a local extra without server writes', async () => {
     const host = mountPanel()
     await settle()
