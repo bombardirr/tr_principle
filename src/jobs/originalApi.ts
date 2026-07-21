@@ -1,8 +1,4 @@
-import { apiFetch, getStoredToken, ApiError, apiBlob } from '@/auth/api'
-
-function apiBase() {
-  return (import.meta.env.VITE_API_BASE as string | undefined)?.replace(/\/$/, '') ?? ''
-}
+import { apiBase, apiFetch, getStoredToken, ApiError, apiBlob } from '@/auth/api'
 
 export async function putJobOriginal(jobId: string, blob: Blob, filename: string) {
   const headers = new Headers()

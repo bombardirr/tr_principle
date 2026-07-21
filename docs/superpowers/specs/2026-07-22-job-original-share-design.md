@@ -1,12 +1,19 @@
 # Job original DOCX — share / download
 
 Date: 2026-07-22  
-Status: Approved (brainstorm)  
+Status: Implemented (feature/job-original-share)  
 Related:
 
 - [`2026-07-17-shared-work-jobs-design.md`](./2026-07-17-shared-work-jobs-design.md) — jobs store fingerprint only (`source_filename`, `source_hash`), not DOCX bytes
 - Project backup handlers (`PUT/GET /api/projects/{id}/backup`) — filesystem pattern under `BACKUP_DIR`
+- Plan: [`../plans/2026-07-22-job-original-share.md`](../plans/2026-07-22-job-original-share.md)
 - Follow-up (not this MVP): gate upload/storage behind **Pro** subscription / quotas
+
+## Post-implementation notes
+
+- Changing `source_hash` via job PATCH revokes `job_originals` (meta) and deletes the disk file.
+- Download `Content-Disposition` uses sanitized filenames (no header injection).
+- Upload filename from `X-Filename` is basename-sanitized server-side.
 
 ## Goal
 

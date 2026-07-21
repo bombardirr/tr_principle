@@ -2,6 +2,7 @@
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { publicActorLabel, useAuth } from '@/auth/session'
+import { ApiError } from '@/auth/api'
 import IconButton from '@/components/IconButton.vue'
 import EditorGlyph from '@/components/EditorGlyph.vue'
 import LangPairBadge from '@/components/LangPairBadge.vue'
@@ -337,8 +338,14 @@ async function onOriginalFile(file: File) {
       originalFilename: result.filename,
     }
     emit('changed')
-  } catch {
-    error.value = t('jobs.originalShareFailed')
+  } catch (err) {
+    if (err instanceof ApiError && err.message.includes('hash mismatch')) {
+      error.value = t('jobs.originalHashMismatch')
+    } else if (err instanceof ApiError && err.message.includes('missing source hash')) {
+      error.value = t('jobs.originalMissingSourceHash')
+    } else {
+      error.value = t('jobs.originalShareFailed')
+    }
   } finally {
     busy.value = false
   }
