@@ -7,24 +7,33 @@ import EditorGlyph from '@/components/EditorGlyph.vue'
 import LangPairBadge from '@/components/LangPairBadge.vue'
 import MarqueeText from '@/components/MarqueeText.vue'
 import ProjectListItem from '@/components/ProjectListItem.vue'
+import JobTmBasesDialog from '@/components/JobTmBasesDialog.vue'
 import SharedWorkPanel from '@/components/SharedWorkPanel.vue'
+import TmAttachmentStrip from '@/components/TmAttachmentStrip.vue'
+import TmCollectionDialog from '@/components/TmCollectionDialog.vue'
 import { openDocx } from '@/docx/openDocx'
 import { createEmptyJobProject } from '@/jobs/createProject'
 import { fingerprintMismatch } from '@/jobs/fingerprint'
 import { bindProjectToJob, projectFingerprint, unlinkLocalProjectsFromJob } from '@/jobs/localProject'
 import { getJob, listMembers, deleteJob, archiveJob, leaveJob, patchJob } from '@/jobs/api'
+import {
+  createJobTmAttachment,
+  listJobTmAttachmentsApi,
+} from '@/jobs/tmAttachmentsApi'
 import { saveJobLangPairFromCodes } from '@/jobs/langPairPreference'
 import { createProjectId, getProject, listProjects, saveProject } from '@/storage/idb'
+import { getPersonalTmStats } from '@/storage/tmIdb'
 import { langPairLabel } from '@/tm/langPairs'
+import { PERSONAL_TM_ATTACHMENT_ID } from '@/tm/projectAttachments'
 import { unpackProjectFile } from '@/storage/projectFile'
-import { SEGMENT_SCHEMA_DATE_SAFE, type ProjectMeta, type ProjectRecord } from '@/types/project'
+import { SEGMENT_SCHEMA_DATE_SAFE, type ProjectMeta, type ProjectRecord, type ProjectTmAttachmentId } from '@/types/project'
 import { acknowledgeJobJoins } from '@/jobs/joinActivity'
 import { progressPercent } from '@/jobs/progress'
 import {
   computeLocalJobProgress,
   reportJobMemberProgress,
 } from '@/jobs/reportProgress'
-import type { Job, JobMember } from '@/types/job'
+import type { Job, JobMember, JobTmAttachment } from '@/types/job'
 
 const props = defineProps<{
   jobId: string
@@ -59,6 +68,14 @@ const myLiveProgress = ref<{
   progressTm: number
 } | null>(null)
 
+const jobTmAttachments = ref<JobTmAttachment[]>([])
+const jobTmBasesOpen = ref(false)
+const jobTmCollectionOpen = ref(false)
+const jobTmCollectionMode = ref<'pick' | 'browse'>('pick')
+const jobTmCollectionReturnTo = ref<'job' | null>(null)
+const personalTmCount = ref(0)
+const personalTmUpdatedAt = ref<string | null>(null)
+
 const myMember = computed(() => members.value.find(member => member.userId === user.value?.id))
 const isOwner = computed(() => job.value?.ownerUserId === user.value?.id)
 const isArchived = computed(() => Boolean(job.value?.archivedAt))
@@ -70,6 +87,16 @@ const linkedProject = computed(() => {
   return projects.value.find(project => project.id === localId || project.jobId === props.jobId)
 })
 
+const jobTmStripItems = computed(() =>
+  jobTmAttachments.value.map(item => ({
+    id: item.tmBaseId,
+    canRead: item.canRead,
+    canWrite: item.canWrite,
+  })),
+)
+const jobTmAttachedIds = computed(() =>
+  jobTmAttachments.value.map(item => item.tmBaseId as ProjectTmAttachmentId),
+)
 const jobLangPairText = computed(() => {
   const j = job.value
   if (!j?.sourceLang && !j?.targetLang) return ''
@@ -110,6 +137,7 @@ async function load() {
   error.value = ''
   job.value = null
   myLiveProgress.value = null
+  jobTmAttachments.value = []
   try {
     const [nextJob, nextMembers, nextProjects] = await Promise.all([
       getJob(props.jobId),
@@ -122,11 +150,85 @@ async function load() {
     if (user.value?.id && nextJob.ownerUserId === user.value.id) {
       acknowledgeJobJoins(user.value.id, nextJob.id, nextMembers)
     }
-    await syncMyProgressFromLocal()
+    await Promise.all([syncMyProgressFromLocal(), refreshJobTmAttachments()])
   } catch (err) {
     error.value = err instanceof Error ? err.message : String(err)
   } finally {
     busy.value = false
+  }
+}
+
+async function refreshJobTmAttachments() {
+  if (!props.jobId) return
+  try {
+    jobTmAttachments.value = await listJobTmAttachmentsApi(props.jobId)
+    await refreshPersonalTmStatsForStrip()
+  } catch (err) {
+    jobTmAttachments.value = []
+    // Non-fatal for hub; surface message but keep card usable.
+    error.value = err instanceof Error ? err.message : String(err)
+  }
+}
+
+async function refreshPersonalTmStatsForStrip() {
+  if (!jobTmAttachments.value.some(item => item.tmBaseId === PERSONAL_TM_ATTACHMENT_ID)) {
+    personalTmCount.value = 0
+    personalTmUpdatedAt.value = null
+    return
+  }
+  try {
+    const stats = await getPersonalTmStats()
+    personalTmCount.value = stats.count
+    personalTmUpdatedAt.value = stats.lastUpdatedAt
+  } catch {
+    personalTmCount.value = 0
+    personalTmUpdatedAt.value = null
+  }
+}
+
+function openJobTmBases() {
+  if (!isOwner.value) return
+  if (jobTmAttachments.value.length === 0) {
+    openJobTmPick()
+    return
+  }
+  jobTmBasesOpen.value = true
+}
+
+function openJobTmPick() {
+  jobTmBasesOpen.value = false
+  jobTmCollectionMode.value = 'pick'
+  jobTmCollectionReturnTo.value = 'job'
+  jobTmCollectionOpen.value = true
+}
+
+function openJobTmFullFromPick() {
+  jobTmCollectionMode.value = 'browse'
+  jobTmCollectionReturnTo.value = 'job'
+}
+
+function onJobTmCollectionClose() {
+  jobTmCollectionOpen.value = false
+  if (jobTmCollectionReturnTo.value === 'job' && jobTmAttachments.value.length > 0) {
+    jobTmBasesOpen.value = true
+  }
+  jobTmCollectionReturnTo.value = null
+}
+
+async function onJobTmAttach(id: ProjectTmAttachmentId) {
+  if (!isOwner.value) return
+  try {
+    await createJobTmAttachment(props.jobId, {
+      tmBaseId: id,
+      canRead: true,
+      canWrite: true,
+    })
+    await refreshJobTmAttachments()
+    jobTmCollectionOpen.value = false
+    jobTmCollectionReturnTo.value = null
+    jobTmBasesOpen.value = true
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : String(err)
   }
 }
 
@@ -478,7 +580,17 @@ async function onLangPairChange(payload: { sourceLang: string; targetLang: strin
           @error="emit('error', $event)"
         />
       </ul>
-      <section v-else class="hub-card">
+      <section v-else class="hub-card" data-testid="job-hub-unbound">
+        <TmAttachmentStrip
+          class="job-hub-tm-strip"
+          data-testid="job-hub-tm-strip"
+          :items="jobTmStripItems"
+          :show-add="isOwner"
+          :busy="busy"
+          :personal-unit-count="personalTmCount"
+          :personal-last-updated-at="personalTmUpdatedAt"
+          @add="openJobTmBases"
+        />
         <p class="muted">
           {{ t('jobs.noLinkedProject') }}
           <template v-if="jobLangPairText">
@@ -508,6 +620,28 @@ async function onLangPairChange(payload: { sourceLang: string; targetLang: strin
           </button>
         </div>
       </section>
+      <JobTmBasesDialog
+        :open="jobTmBasesOpen"
+        :job-id="jobId"
+        :attachments="jobTmAttachments"
+        :is-owner="Boolean(isOwner)"
+        @close="jobTmBasesOpen = false"
+        @changed="refreshJobTmAttachments"
+        @error="error = $event"
+        @open-pick="openJobTmPick"
+      />
+      <TmCollectionDialog
+        :open="jobTmCollectionOpen"
+        :mode="jobTmCollectionMode"
+        :return-to="jobTmCollectionReturnTo"
+        :attached-ids="jobTmAttachedIds"
+        :context-label="job?.title || jobId"
+        @close="onJobTmCollectionClose"
+        @attach="onJobTmAttach"
+        @deleted="refreshJobTmAttachments"
+        @open-full="openJobTmFullFromPick"
+        @error="error = $event"
+      />
       <input
         ref="docxInput"
         type="file"
@@ -657,6 +791,13 @@ small {
   border: 1px solid var(--border);
   border-radius: 8px;
   background: var(--surface-soft);
+}
+
+.job-hub-tm-strip {
+  :deep(.tm-strip) {
+    max-width: 100%;
+    flex: 1 1 auto;
+  }
 }
 
 .members {
