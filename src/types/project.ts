@@ -98,7 +98,7 @@ export interface ProjectMeta {
   tmAttachments?: ProjectTmAttachment[]
 }
 
-export type ProjectTmAttachmentId = 'personal-tm'
+export type ProjectTmAttachmentId = string
 
 export interface ProjectTmAttachment {
   id: ProjectTmAttachmentId

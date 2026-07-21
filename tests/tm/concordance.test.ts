@@ -6,6 +6,7 @@ import type { TmUnit } from '@/types/tm'
 function unit(source: string, target: string, id = 'u1'): TmUnit {
   return {
     id,
+    baseId: 'personal-tm',
     source,
     target,
     sourceKey: tmLookupKey(source, 'ru', 'en'),

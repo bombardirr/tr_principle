@@ -3,9 +3,16 @@ import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import EditorGlyph from '@/components/EditorGlyph.vue'
 import { listProjects } from '@/storage/idb'
-import { getPersonalTmStats } from '@/storage/tmIdb'
+import { getTmBaseStats, importTmUnits } from '@/storage/tmIdb'
 import { PERSONAL_TM_ATTACHMENT_ID, type TmAttachmentCatalogItem } from '@/tm/projectAttachments'
-import { deleteOwnPersonalTm, ensureDefaultTmInCatalog } from '@/tm/tmCollection'
+import { createTmBase } from '@/tm/tmBasesCatalog'
+import {
+  deleteNamedTmBase,
+  deleteOwnPersonalTm,
+  listTmCatalog,
+} from '@/tm/tmCollection'
+import { notifyTmCollectionChanged } from '@/tm/tmCollectionEvents'
+import { parseTmx } from '@/tm/tmx'
 import type { ProjectTmAttachment, ProjectTmAttachmentId } from '@/types/project'
 
 const JOB_TM_ATTACHMENTS_KEY = 'tr_principle.job_tm_attachments.v1'
@@ -28,12 +35,25 @@ const emit = defineEmits<{
 
 const { t, locale } = useI18n()
 const busy = ref(false)
-const unitCount = ref(0)
-const lastUpdatedAt = ref<string | null>(null)
+const catalog = ref<TmAttachmentCatalogItem[]>([
+  {
+    id: PERSONAL_TM_ATTACHMENT_ID,
+    label: 'Personal TM',
+    color: '#5b9fd4',
+    glyph: 'tm',
+  },
+])
+const statsById = ref<Record<string, { count: number; lastUpdatedAt: string | null }>>({})
 const projectCount = ref(0)
 const jobCount = ref(0)
-const confirmDelete = ref(false)
-const catalog = computed(() => ensureDefaultTmInCatalog())
+const confirmDeleteId = ref<string | null>(null)
+const panel = ref<'list' | 'create' | 'import'>('list')
+const createName = ref('')
+const importMode = ref<'existing' | 'new'>('new')
+const importNewName = ref('')
+const importTargetId = ref(PERSONAL_TM_ATTACHMENT_ID)
+const importInput = ref<HTMLInputElement | null>(null)
+const pendingImportFile = ref<File | null>(null)
 
 const title = computed(() =>
   props.mode === 'pick' ? t('tmCollection.pickTitle') : t('tmCollection.title')
@@ -42,14 +62,32 @@ const hint = computed(() =>
   props.mode === 'pick' ? t('tmCollection.pickHint') : t('tmCollection.hint')
 )
 
-async function refreshStats() {
+async function refreshCatalog() {
   try {
-    const stats = await getPersonalTmStats()
-    unitCount.value = stats.count
-    lastUpdatedAt.value = stats.lastUpdatedAt
+    catalog.value = await listTmCatalog()
   } catch {
-    unitCount.value = 0
-    lastUpdatedAt.value = null
+    catalog.value = [
+      {
+        id: PERSONAL_TM_ATTACHMENT_ID,
+        label: 'Personal TM',
+        color: '#5b9fd4',
+        glyph: 'tm',
+      },
+    ]
+  }
+  const next: Record<string, { count: number; lastUpdatedAt: string | null }> = {}
+  await Promise.all(
+    catalog.value.map(async item => {
+      try {
+        next[item.id] = await getTmBaseStats(item.id)
+      } catch {
+        next[item.id] = { count: 0, lastUpdatedAt: null }
+      }
+    }),
+  )
+  statsById.value = next
+  if (!catalog.value.some(item => item.id === importTargetId.value)) {
+    importTargetId.value = PERSONAL_TM_ATTACHMENT_ID
   }
 }
 
@@ -57,12 +95,15 @@ watch(
   () => props.open,
   async open => {
     if (!open) {
-      confirmDelete.value = false
+      confirmDeleteId.value = null
+      panel.value = 'list'
+      createName.value = ''
+      pendingImportFile.value = null
       return
     }
-    await refreshStats()
+    await refreshCatalog()
   },
-  { immediate: true }
+  { immediate: true },
 )
 
 function itemLabel(item: TmAttachmentCatalogItem) {
@@ -87,10 +128,15 @@ function formatTmDate(iso: string, short = false) {
   }
 }
 
-function lastUpdatedLabel(short = false) {
-  if (!lastUpdatedAt.value) return t('projects.tmLastUpdatedNever')
-  const date = formatTmDate(lastUpdatedAt.value, short)
+function lastUpdatedLabel(id: string, short = false) {
+  const last = statsById.value[id]?.lastUpdatedAt
+  if (!last) return t('projects.tmLastUpdatedNever')
+  const date = formatTmDate(last, short)
   return short ? t('projects.tmLastUpdatedShort', { date }) : t('projects.tmLastUpdated', { date })
+}
+
+function unitCount(id: string) {
+  return statsById.value[id]?.count ?? 0
 }
 
 function isAttached(id: ProjectTmAttachmentId) {
@@ -116,19 +162,18 @@ function countAttachedJobs(id: ProjectTmAttachmentId): number {
   }
 }
 
-async function openDeleteConfirm() {
+async function openDeleteConfirm(id: string) {
   if (busy.value) return
   busy.value = true
   emit('error', '')
   try {
-    const [stats, projects] = await Promise.all([getPersonalTmStats(), listProjects()])
-    unitCount.value = stats.count
-    lastUpdatedAt.value = stats.lastUpdatedAt
+    await refreshCatalog()
+    const projects = await listProjects()
     projectCount.value = projects.filter(project =>
-      project.tmAttachments?.some(item => item.id === PERSONAL_TM_ATTACHMENT_ID)
+      project.tmAttachments?.some(item => item.id === id)
     ).length
-    jobCount.value = countAttachedJobs(PERSONAL_TM_ATTACHMENT_ID)
-    confirmDelete.value = true
+    jobCount.value = countAttachedJobs(id)
+    confirmDeleteId.value = id
   } catch (err) {
     emit('error', err instanceof Error ? err.message : String(err))
   } finally {
@@ -137,16 +182,18 @@ async function openDeleteConfirm() {
 }
 
 async function onConfirmDelete() {
-  if (busy.value) return
+  const id = confirmDeleteId.value
+  if (!id || busy.value) return
   busy.value = true
   emit('error', '')
   try {
-    await deleteOwnPersonalTm()
-    unitCount.value = 0
-    lastUpdatedAt.value = null
-    projectCount.value = 0
-    jobCount.value = 0
-    confirmDelete.value = false
+    if (id === PERSONAL_TM_ATTACHMENT_ID) {
+      await deleteOwnPersonalTm()
+    } else {
+      await deleteNamedTmBase(id)
+    }
+    confirmDeleteId.value = null
+    await refreshCatalog()
     emit('deleted')
   } catch (err) {
     emit('error', err instanceof Error ? err.message : String(err))
@@ -154,6 +201,76 @@ async function onConfirmDelete() {
     busy.value = false
   }
 }
+
+function openCreate() {
+  panel.value = 'create'
+  createName.value = ''
+  confirmDeleteId.value = null
+}
+
+function openImport() {
+  panel.value = 'import'
+  importMode.value = 'new'
+  importNewName.value = ''
+  importTargetId.value = PERSONAL_TM_ATTACHMENT_ID
+  pendingImportFile.value = null
+  confirmDeleteId.value = null
+}
+
+function onImportFileChange(e: Event) {
+  const input = e.target as HTMLInputElement
+  pendingImportFile.value = input.files?.[0] ?? null
+  input.value = ''
+}
+
+async function submitCreate() {
+  if (busy.value) return
+  const label = createName.value.trim()
+  if (!label) return
+  busy.value = true
+  emit('error', '')
+  try {
+    await createTmBase({ label })
+    notifyTmCollectionChanged()
+    panel.value = 'list'
+    createName.value = ''
+    await refreshCatalog()
+  } catch (err) {
+    emit('error', err instanceof Error ? err.message : String(err))
+  } finally {
+    busy.value = false
+  }
+}
+
+async function submitImport() {
+  if (busy.value || !pendingImportFile.value) return
+  busy.value = true
+  emit('error', '')
+  try {
+    const xml = await pendingImportFile.value.text()
+    const units = parseTmx(xml)
+    let baseId = importTargetId.value
+    if (importMode.value === 'new') {
+      const label = importNewName.value.trim() || pendingImportFile.value.name.replace(/\.tmx$/i, '')
+      const base = await createTmBase({ label: label || 'Imported TM' })
+      baseId = base.id
+    }
+    const stamped = units.map(u => ({ ...u, id: crypto.randomUUID(), baseId }))
+    await importTmUnits(stamped, { baseId })
+    notifyTmCollectionChanged()
+    panel.value = 'list'
+    pendingImportFile.value = null
+    await refreshCatalog()
+  } catch (err) {
+    emit('error', err instanceof Error ? err.message : String(err))
+  } finally {
+    busy.value = false
+  }
+}
+
+const deleteConfirmItem = computed(() =>
+  confirmDeleteId.value ? catalog.value.find(item => item.id === confirmDeleteId.value) : null
+)
 </script>
 
 <template>
@@ -183,7 +300,80 @@ async function onConfirmDelete() {
 
       <p class="hint">{{ hint }}</p>
 
-      <div class="catalog" :class="{ 'catalog-pick': mode === 'pick' }">
+      <div v-if="mode === 'browse' && panel === 'list'" class="toolbar">
+        <button type="button" class="secondary" :disabled="busy" @click="openCreate">
+          {{ t('tmCollection.create') }}
+        </button>
+        <button type="button" class="secondary" :disabled="busy" @click="openImport">
+          {{ t('tmCollection.importTmx') }}
+        </button>
+      </div>
+
+      <div v-if="panel === 'create'" class="form-panel">
+        <h3>{{ t('tmCollection.createTitle') }}</h3>
+        <label class="field">
+          <span>{{ t('tmCollection.createNameLabel') }}</span>
+          <input v-model="createName" type="text" :placeholder="t('tmCollection.createNamePlaceholder')" />
+        </label>
+        <div class="form-actions">
+          <button type="button" class="ghost" :disabled="busy" @click="panel = 'list'">
+            {{ t('tmCollection.createCancel') }}
+          </button>
+          <button
+            type="button"
+            class="primary"
+            :disabled="busy || !createName.trim()"
+            @click="submitCreate"
+          >
+            {{ t('tmCollection.createSubmit') }}
+          </button>
+        </div>
+      </div>
+
+      <div v-else-if="panel === 'import'" class="form-panel">
+        <h3>{{ t('tmCollection.importTitle') }}</h3>
+        <div class="import-modes">
+          <label>
+            <input v-model="importMode" type="radio" value="new" />
+            {{ t('tmCollection.importAsNew') }}
+          </label>
+          <label>
+            <input v-model="importMode" type="radio" value="existing" />
+            {{ t('tmCollection.importIntoExisting') }}
+          </label>
+        </div>
+        <label v-if="importMode === 'new'" class="field">
+          <span>{{ t('tmCollection.importNewNameLabel') }}</span>
+          <input v-model="importNewName" type="text" :placeholder="t('tmCollection.createNamePlaceholder')" />
+        </label>
+        <label v-else class="field">
+          <span>{{ t('tmCollection.importTargetLabel') }}</span>
+          <select v-model="importTargetId">
+            <option v-for="item in catalog" :key="item.id" :value="item.id">
+              {{ itemLabel(item) }}
+            </option>
+          </select>
+        </label>
+        <input ref="importInput" type="file" accept=".tmx,application/xml,text/xml" hidden @change="onImportFileChange" />
+        <button type="button" class="secondary" :disabled="busy" @click="importInput?.click()">
+          {{ pendingImportFile ? pendingImportFile.name : t('tmCollection.importTmx') }}
+        </button>
+        <div class="form-actions">
+          <button type="button" class="ghost" :disabled="busy" @click="panel = 'list'">
+            {{ t('tmCollection.importCancel') }}
+          </button>
+          <button
+            type="button"
+            class="primary"
+            :disabled="busy || !pendingImportFile"
+            @click="submitImport"
+          >
+            {{ t('tmCollection.importSubmit') }}
+          </button>
+        </div>
+      </div>
+
+      <div v-else class="catalog" :class="{ 'catalog-pick': mode === 'pick' }">
         <article
           v-for="item in catalog"
           :key="item.id"
@@ -204,20 +394,22 @@ async function onConfirmDelete() {
           <div class="card-copy">
             <strong>{{ itemLabel(item) }}</strong>
             <span
-              v-if="mode === 'browse' && item.id === PERSONAL_TM_ATTACHMENT_ID"
+              v-if="mode === 'browse'"
               class="stat"
               :title="t('projects.tmUnitsStatHint')"
             >
-              {{ t('projects.tmUnitsStat', { n: unitCount }) }}
+              {{ t('projects.tmUnitsStat', { n: unitCount(item.id) }) }}
             </span>
             <span
-              v-if="mode === 'browse' && item.id === PERSONAL_TM_ATTACHMENT_ID"
+              v-if="mode === 'browse'"
               class="stat"
               :title="
-                lastUpdatedAt ? t('projects.tmLastUpdatedHint') : t('projects.tmLastUpdatedNeverHint')
+                statsById[item.id]?.lastUpdatedAt
+                  ? t('projects.tmLastUpdatedHint')
+                  : t('projects.tmLastUpdatedNeverHint')
               "
             >
-              {{ lastUpdatedLabel(true) }}
+              {{ lastUpdatedLabel(item.id, true) }}
             </span>
           </div>
           <span v-if="isAttached(item.id)" class="attached-mark">
@@ -225,11 +417,11 @@ async function onConfirmDelete() {
             {{ t('tmCollection.attached') }}
           </span>
           <button
-            v-if="mode === 'browse' && item.id === PERSONAL_TM_ATTACHMENT_ID"
+            v-if="mode === 'browse'"
             type="button"
             class="danger ghost"
             :disabled="busy"
-            @click.stop="openDeleteConfirm"
+            @click.stop="openDeleteConfirm(item.id)"
           >
             <EditorGlyph name="trash" />
             {{ t('tmCollection.delete') }}
@@ -237,20 +429,27 @@ async function onConfirmDelete() {
         </article>
       </div>
 
-      <div v-if="mode === 'browse' && confirmDelete" class="confirm" role="alertdialog">
+      <div v-if="mode === 'browse' && deleteConfirmItem" class="confirm" role="alertdialog">
         <h3>{{ t('tmCollection.deleteConfirmTitle') }}</h3>
         <p>
           {{
-            t('tmCollection.deleteConfirmBody', {
-              name: t('projects.tmPersonalBase'),
-              units: unitCount,
-              projects: projectCount,
-              jobs: jobCount,
-            })
+            deleteConfirmItem.id === PERSONAL_TM_ATTACHMENT_ID
+              ? t('tmCollection.deleteConfirmBody', {
+                  name: itemLabel(deleteConfirmItem),
+                  units: unitCount(deleteConfirmItem.id),
+                  projects: projectCount,
+                  jobs: jobCount,
+                })
+              : t('tmCollection.deleteConfirmNamedBody', {
+                  name: itemLabel(deleteConfirmItem),
+                  units: unitCount(deleteConfirmItem.id),
+                  projects: projectCount,
+                  jobs: jobCount,
+                })
           }}
         </p>
         <div class="confirm-actions">
-          <button type="button" class="ghost" :disabled="busy" @click="confirmDelete = false">
+          <button type="button" class="ghost" :disabled="busy" @click="confirmDeleteId = null">
             {{ t('tmCollection.deleteConfirmCancel') }}
           </button>
           <button type="button" class="danger" :disabled="busy" @click="onConfirmDelete">
@@ -305,15 +504,23 @@ async function onConfirmDelete() {
 
 .header,
 .actions,
-.confirm-actions {
+.confirm-actions,
+.form-actions,
+.toolbar {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 0.75rem;
 }
 
+.toolbar {
+  justify-content: flex-start;
+  margin-bottom: 0.85rem;
+}
+
 .title,
-.confirm h3 {
+.confirm h3,
+.form-panel h3 {
   margin: 0;
   font-size: 1.15rem;
 }
@@ -329,6 +536,44 @@ async function onConfirmDelete() {
   color: var(--text-muted);
   font-size: 0.85rem;
   line-height: 1.45;
+}
+
+.form-panel {
+  display: grid;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+  padding: 1rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-2);
+}
+
+.field {
+  display: grid;
+  gap: 0.35rem;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+
+  input,
+  select {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 0.45rem 0.6rem;
+    background: var(--surface);
+    color: var(--text);
+    font: inherit;
+  }
+}
+
+.import-modes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.85rem;
+  font-size: 0.85rem;
+}
+
+.form-actions {
+  justify-content: flex-end;
 }
 
 .catalog {

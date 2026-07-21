@@ -1,25 +1,15 @@
+import { PERSONAL_TM_ATTACHMENT_ID } from '@/tm/projectAttachments'
 import {
-  canReadPersonalTm,
-  canWritePersonalTm,
-  PERSONAL_TM_ATTACHMENT_ID,
-} from '@/tm/projectAttachments'
-import type { ProjectMeta, ProjectTmAttachment } from '@/types/project'
+  isJobEditorContext,
+  resolveTmBaseAccess,
+  type JobTmAccessRow,
+  type TmBaseAccessInput,
+} from '@/tm/tmAccess'
 
-export type JobTmAccessRow = {
-  tmBaseId: string
-  canRead: boolean
-  canWrite: boolean
-}
+export type { JobTmAccessRow }
+export { isJobEditorContext }
 
-export type PersonalTmAccessInput = {
-  projectMeta: ProjectMeta
-  /** From route query `job`. */
-  jobQueryId?: string | null
-  /** Server job attachments (shared). */
-  jobShared?: JobTmAccessRow[]
-  /** Local job overlay attachments. */
-  jobLocal?: ProjectTmAttachment[]
-}
+export type PersonalTmAccessInput = TmBaseAccessInput
 
 export type PersonalTmAccess = {
   jobContext: boolean
@@ -27,49 +17,15 @@ export type PersonalTmAccess = {
   canWrite: boolean
 }
 
-function sharedFlag(
-  rows: JobTmAccessRow[] | undefined,
-  flag: 'canRead' | 'canWrite',
-): boolean {
-  const row = rows?.find(item => item.tmBaseId === PERSONAL_TM_ATTACHMENT_ID)
-  return Boolean(row?.[flag])
-}
-
-function localFlag(
-  rows: ProjectTmAttachment[] | undefined,
-  flag: 'canRead' | 'canWrite',
-): boolean {
-  const row = rows?.find(item => item.id === PERSONAL_TM_ATTACHMENT_ID)
-  return Boolean(row?.[flag])
-}
-
-/** True when editor was opened with matching `?job=` for this project. */
-export function isJobEditorContext(
-  jobQueryId: string | null | undefined,
-  projectJobId: string | null | undefined,
-): boolean {
-  return Boolean(jobQueryId && projectJobId && jobQueryId === projectJobId)
-}
-
 /**
- * Personal TM pool access: project flags OR (in job context) job shared / local overlay.
+ * Personal TM pool access (compat): project OR job layers for `personal-tm` only.
+ * Prefer {@link resolveTmBaseAccess} for multi-base editors.
  */
 export function resolvePersonalTmAccess(input: PersonalTmAccessInput): PersonalTmAccess {
-  const jobContext = isJobEditorContext(input.jobQueryId, input.projectMeta.jobId)
-  const projectRead = canReadPersonalTm(input.projectMeta)
-  const projectWrite = canWritePersonalTm(input.projectMeta)
-  if (!jobContext) {
-    return { jobContext: false, canRead: projectRead, canWrite: projectWrite }
-  }
+  const access = resolveTmBaseAccess(input)
   return {
-    jobContext: true,
-    canRead:
-      projectRead ||
-      sharedFlag(input.jobShared, 'canRead') ||
-      localFlag(input.jobLocal, 'canRead'),
-    canWrite:
-      projectWrite ||
-      sharedFlag(input.jobShared, 'canWrite') ||
-      localFlag(input.jobLocal, 'canWrite'),
+    jobContext: access.jobContext,
+    canRead: access.readableBaseIds.includes(PERSONAL_TM_ATTACHMENT_ID),
+    canWrite: access.writableBaseIds.includes(PERSONAL_TM_ATTACHMENT_ID),
   }
 }

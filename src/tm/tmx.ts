@@ -1,4 +1,5 @@
 import type { TmUnit } from '@/types/tm'
+import { PERSONAL_TM_ATTACHMENT_ID } from '@/tm/projectAttachments'
 import { tmLookupKey } from './normalize'
 
 function escapeXml(text: string): string {
@@ -71,6 +72,7 @@ export function parseTmx(xml: string): TmUnit[] {
     const targetLang = langOf(targetTuv)
     units.push({
       id: crypto.randomUUID(),
+      baseId: PERSONAL_TM_ATTACHMENT_ID,
       source,
       target,
       sourceKey: tmLookupKey(source, sourceLang, targetLang),

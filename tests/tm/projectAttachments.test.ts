@@ -49,6 +49,15 @@ describe('normalizeProjectTmAttachments', () => {
     )
     expect(out).toEqual([])
   })
+
+  it('keeps arbitrary string base ids', () => {
+    const out = normalizeProjectTmAttachments(
+      meta({
+        tmAttachments: [{ id: 'named-uuid', canRead: true, canWrite: false }],
+      }),
+    )
+    expect(out).toEqual([{ id: 'named-uuid', canRead: true, canWrite: false }])
+  })
 })
 
 describe('attach / detach', () => {

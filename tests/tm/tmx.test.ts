@@ -5,6 +5,7 @@ import type { TmUnit } from '@/types/tm'
 const sample: TmUnit[] = [
   {
     id: '1',
+    baseId: 'personal-tm',
     source: 'Hello',
     target: 'Привет',
     sourceKey: 'hello::en|ru',

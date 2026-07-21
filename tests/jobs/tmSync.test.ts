@@ -78,6 +78,7 @@ describe('job TM resource cache', () => {
 
 const unit: TmUnit = {
   id: 'unit-1',
+  baseId: 'personal-tm',
   source: 'Source',
   target: 'Target',
   sourceKey: 'source',

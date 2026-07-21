@@ -31,9 +31,11 @@ export const TM_ATTACHMENT_CATALOG: TmAttachmentCatalogItem[] = [
 ]
 
 export function colorForTmBase(id: ProjectTmAttachmentId, fallbackIndex = 0): string {
-  const hit = TM_ATTACHMENT_CATALOG.findIndex(item => item.id === id)
-  const index = hit >= 0 ? hit : fallbackIndex
-  return TM_ATTACHMENT_CATALOG[hit]?.color ?? TM_BASE_COLORS[index % TM_BASE_COLORS.length]!
+  const hit = TM_ATTACHMENT_CATALOG.find(item => item.id === id)
+  if (hit) return hit.color
+  let hash = 0
+  for (let i = 0; i < id.length; i++) hash = (hash * 31 + id.charCodeAt(i)) >>> 0
+  return TM_BASE_COLORS[(hash || fallbackIndex) % TM_BASE_COLORS.length]!
 }
 
 type LegacyAttachment = ProjectTmAttachment & { connected?: boolean }
@@ -42,7 +44,7 @@ export function normalizeProjectTmAttachments(meta: ProjectMeta): ProjectTmAttac
   const raw = (meta.tmAttachments ?? []) as LegacyAttachment[]
   const out: ProjectTmAttachment[] = []
   for (const item of raw) {
-    if (!TM_ATTACHMENT_CATALOG.some(c => c.id === item.id)) continue
+    if (!item?.id || typeof item.id !== 'string') continue
     if (item.connected === false) continue
     // connected === true | undefined with presence → attached
     out.push({

@@ -1,5 +1,7 @@
 export interface TmUnit {
   id: string
+  /** Which local/catalog TM base this unit belongs to. */
+  baseId: string
   source: string
   target: string
   sourceKey: string

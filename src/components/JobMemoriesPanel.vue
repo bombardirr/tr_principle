@@ -15,7 +15,9 @@ import {
   listJobTmAttachments,
   updateJobTmAttachment,
 } from '@/tm/jobAttachments'
-import { PERSONAL_TM_ATTACHMENT_ID, TM_ATTACHMENT_CATALOG } from '@/tm/projectAttachments'
+import { PERSONAL_TM_ATTACHMENT_ID } from '@/tm/projectAttachments'
+import { listTmCatalog } from '@/tm/tmBasesCatalog'
+import type { TmAttachmentCatalogItem } from '@/tm/projectAttachments'
 import type { JobRole, JobTmAttachment } from '@/types/job'
 import type { ProjectTmAttachmentId } from '@/types/project'
 
@@ -33,17 +35,22 @@ const collectionOpen = ref(false)
 const collectionMode = ref<'pick' | 'browse'>('pick')
 const collectionReturnTo = ref<'job' | null>(null)
 const pickerTarget = ref<'shared' | 'local'>('local')
+const catalog = ref<TmAttachmentCatalogItem[]>([])
 let jobGeneration = 0
 let sharedRequestGeneration = 0
 const attachedIds = computed<ProjectTmAttachmentId[]>(() =>
   pickerTarget.value === 'shared'
-    ? shared.value
-        .map(item => item.tmBaseId)
-        .filter((id): id is ProjectTmAttachmentId =>
-          TM_ATTACHMENT_CATALOG.some(item => item.id === id)
-        )
+    ? shared.value.map(item => item.tmBaseId)
     : localOverlay.value.map(item => item.id)
 )
+
+async function refreshCatalog() {
+  try {
+    catalog.value = await listTmCatalog()
+  } catch {
+    catalog.value = []
+  }
+}
 
 watch(
   () => props.jobId,
@@ -52,11 +59,13 @@ watch(
     shared.value = []
     localOverlay.value = listJobTmAttachments(jobId)
     void refreshShared()
+    void refreshCatalog()
   }
 )
 
 onMounted(() => {
   void refreshShared()
+  void refreshCatalog()
 })
 
 async function refreshShared(options: { keepError?: boolean } = {}) {
@@ -84,7 +93,7 @@ function isCurrentRequest(jobId: string, generation: number, requestGeneration: 
 }
 
 function catalogItem(id: string) {
-  return TM_ATTACHMENT_CATALOG.find(item => item.id === id)
+  return catalog.value.find(item => item.id === id)
 }
 
 function itemLabel(id: string) {

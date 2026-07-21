@@ -30,7 +30,7 @@ import { readPreviewEnabled, writePreviewEnabled } from '@/editor/previewPrefere
 import { findTmMatches } from '@/tm/match'
 import { findLangPairPreset, langPairLabel } from '@/tm/langPairs'
 import { tmLookupKey } from '@/tm/normalize'
-import { resolvePersonalTmAccess } from '@/tm/personalTmAccess'
+import { resolveTmBaseAccess } from '@/tm/tmAccess'
 import { listJobTmAttachments } from '@/tm/jobAttachments'
 import { listJobTmAttachmentsApi } from '@/jobs/tmAttachmentsApi'
 import { TM_COLLECTION_CHANGED_EVENT } from '@/tm/tmCollectionEvents'
@@ -38,7 +38,7 @@ import { projectNeedsResegment, resegmentProjectRecord } from '@/tm/resegment'
 import { exportTmx, parseTmx } from '@/tm/tmx'
 import {
   listTmUnits,
-  recordDoneSegmentsInTm,
+  recordDoneSegmentsInTmBases,
   importTmUnits,
   deleteTmForSegmentSource,
 } from '@/storage/tmIdb'
@@ -97,18 +97,22 @@ const jobQueryId = computed(() => {
   return typeof raw === 'string' && raw.trim() ? raw.trim() : null
 })
 
-const personalTmAccess = computed(() => {
-  if (!record.value) return { jobContext: false, canRead: false, canWrite: false }
+const tmBaseAccess = computed(() => {
+  if (!record.value) {
+    return { jobContext: false, readableBaseIds: [] as string[], writableBaseIds: [] as string[] }
+  }
   const jobId = jobQueryId.value
-  return resolvePersonalTmAccess({
+  return resolveTmBaseAccess({
     projectMeta: record.value.meta,
     jobQueryId: jobId,
     jobShared: jobSharedAttachments.value,
     jobLocal: jobId ? listJobTmAttachments(jobId) : [],
   })
 })
-const personalTmReadable = computed(() => personalTmAccess.value.canRead)
-const personalTmWritable = computed(() => personalTmAccess.value.canWrite)
+const readableBaseIds = computed(() => tmBaseAccess.value.readableBaseIds)
+const writableBaseIds = computed(() => tmBaseAccess.value.writableBaseIds)
+const personalTmReadable = computed(() => readableBaseIds.value.length > 0)
+const personalTmWritable = computed(() => writableBaseIds.value.length > 0)
 const saving = ref(false)
 const allSaved = ref(true)
 let saveTimer: ReturnType<typeof setTimeout> | null = null
@@ -156,7 +160,7 @@ function clearTmAutosave(segId: string) {
 const done = computed(() => (record.value ? countTranslatedSegments(record.value.segments) : 0))
 const total = computed(() => record.value?.segments.length ?? 0)
 const editorReadOnly = computed(() => projectLease.blocked.value || jobRole.value === 'viewer')
-const matchTmUnits = computed(() => (personalTmReadable.value ? tmUnits.value : []))
+const matchTmUnits = computed(() => tmUnits.value)
 
 const tmCoveragePct = computed(() => {
   if (!record.value?.segments.length) return 0
@@ -431,18 +435,19 @@ async function persistNow(): Promise<void> {
   }
   if (personalTmWritable.value && tmSettings.value.autoSaveToTm && tmAutosaveIds.value.size) {
     const onlyIds = [...tmAutosaveIds.value]
-    const tmOptions = {
-      sourceLang: record.value.meta.sourceLang,
-      targetLang: record.value.meta.targetLang,
-      projectId: record.value.meta.id,
-      actor: publicActorLabel(user.value),
-      onlyIds,
-    }
-    const dirty = await recordDoneSegmentsInTm(record.value.segments, {
-      ...tmOptions,
-    })
+    const dirty = await recordDoneSegmentsInTmBases(
+      record.value.segments,
+      writableBaseIds.value,
+      {
+        sourceLang: record.value.meta.sourceLang,
+        targetLang: record.value.meta.targetLang,
+        projectId: record.value.meta.id,
+        actor: publicActorLabel(user.value),
+        onlyIds,
+      },
+    )
     markTmDirty(...dirty)
-    tmUnits.value = personalTmReadable.value ? await listTmUnits() : []
+    await reloadPersonalTmUnits()
     tmAutosaveIds.value = new Set()
   }
   allSaved.value = true
@@ -511,7 +516,7 @@ async function refreshJobTmLayers() {
 }
 
 async function reloadPersonalTmUnits() {
-  tmUnits.value = personalTmReadable.value ? await listTmUnits() : []
+  tmUnits.value = await listTmUnits({ baseIds: readableBaseIds.value })
 }
 
 async function load() {
@@ -559,7 +564,7 @@ async function onTmCollectionChanged() {
     tmAutosaveIds.value = new Set()
     return
   }
-  tmUnits.value = await listTmUnits()
+  await reloadPersonalTmUnits()
 }
 
 function onBeforeUnload(e: BeforeUnloadEvent) {
@@ -821,9 +826,10 @@ async function removeSegmentFromTm(seg: Segment) {
     const dirty = await deleteTmForSegmentSource(seg.source, {
       sourceLang: record.value.meta.sourceLang,
       targetLang: record.value.meta.targetLang,
+      baseIds: writableBaseIds.value,
     })
     markTmDirty(...dirty)
-    tmUnits.value = await listTmUnits()
+    await reloadPersonalTmUnits()
   } catch (e) {
     setSaveError(e)
   }
@@ -1193,19 +1199,16 @@ async function saveSegmentToTmById(segId: string) {
   patchSegment(segId, { status })
   const segments = record.value.segments.map(s => (s.id === segId ? { ...s, status } : s))
   try {
-    const tmOptions = {
+    const dirty = await recordDoneSegmentsInTmBases(segments, writableBaseIds.value, {
       sourceLang: record.value.meta.sourceLang,
       targetLang: record.value.meta.targetLang,
       projectId: record.value.meta.id,
       actor: publicActorLabel(user.value),
       onlyIds: [segId],
-    }
-    const dirty = await recordDoneSegmentsInTm(segments, {
-      ...tmOptions,
     })
     markTmDirty(...dirty)
     clearTmAutosave(segId)
-    tmUnits.value = personalTmReadable.value ? await listTmUnits() : []
+    await reloadPersonalTmUnits()
   } catch (e) {
     setSaveError(e)
   }
@@ -1237,10 +1240,19 @@ async function onTmxImportChange(e: Event) {
   try {
     const xml = await file.text()
     const units = parseTmx(xml)
-    const { count, ids } = await importTmUnits(units)
-    markTmDirty(...ids)
-    tmUnits.value = personalTmReadable.value ? await listTmUnits() : []
-    notice.value = t('editor.tmxImported', { count })
+    const allIds: string[] = []
+    for (const baseId of writableBaseIds.value) {
+      const stamped = units.map(u => ({
+        ...u,
+        id: crypto.randomUUID(),
+        baseId,
+      }))
+      const result = await importTmUnits(stamped, { baseId })
+      allIds.push(...result.ids)
+    }
+    markTmDirty(...allIds)
+    await reloadPersonalTmUnits()
+    notice.value = t('editor.tmxImported', { count: units.length })
     error.value = ''
   } catch (err) {
     setSaveError(err)

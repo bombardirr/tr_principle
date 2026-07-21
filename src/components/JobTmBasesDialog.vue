@@ -5,7 +5,8 @@ import EditorGlyph from '@/components/EditorGlyph.vue'
 import IconButton from '@/components/IconButton.vue'
 import { deleteJobTmAttachment, patchJobTmAttachment } from '@/jobs/tmAttachmentsApi'
 import { getPersonalTmStats } from '@/storage/tmIdb'
-import { PERSONAL_TM_ATTACHMENT_ID, TM_ATTACHMENT_CATALOG } from '@/tm/projectAttachments'
+import { PERSONAL_TM_ATTACHMENT_ID, type TmAttachmentCatalogItem } from '@/tm/projectAttachments'
+import { listTmCatalog } from '@/tm/tmBasesCatalog'
 import type { JobTmAttachment } from '@/types/job'
 
 const props = defineProps<{
@@ -26,6 +27,7 @@ const { t, locale } = useI18n()
 const busy = ref(false)
 const unitCount = ref(0)
 const lastUpdatedAt = ref<string | null>(null)
+const catalog = ref<TmAttachmentCatalogItem[]>([])
 
 async function refreshStats() {
   try {
@@ -38,17 +40,25 @@ async function refreshStats() {
   }
 }
 
+async function refreshCatalog() {
+  try {
+    catalog.value = await listTmCatalog()
+  } catch {
+    catalog.value = []
+  }
+}
+
 watch(
   () => props.open,
   async open => {
     if (!open) return
-    await refreshStats()
+    await Promise.all([refreshStats(), refreshCatalog()])
   },
   { immediate: true },
 )
 
 function catalogItem(tmBaseId: string) {
-  return TM_ATTACHMENT_CATALOG.find(item => item.id === tmBaseId)
+  return catalog.value.find(item => item.id === tmBaseId)
 }
 
 function itemLabel(tmBaseId: string) {

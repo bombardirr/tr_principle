@@ -5,6 +5,7 @@ import type { TmUnit } from '@/types/tm'
 function u(id: string, source: string, target: string): TmUnit {
   return {
     id,
+    baseId: 'personal-tm',
     source,
     target,
     sourceKey: source,

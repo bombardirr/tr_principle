@@ -9,9 +9,10 @@ import {
   detachProjectTm,
   normalizeProjectTmAttachments,
   PERSONAL_TM_ATTACHMENT_ID,
-  TM_ATTACHMENT_CATALOG,
   updateProjectTmAttachment,
+  type TmAttachmentCatalogItem,
 } from '@/tm/projectAttachments'
+import { listTmCatalog } from '@/tm/tmBasesCatalog'
 import type { ProjectMeta, ProjectTmAttachmentId } from '@/types/project'
 
 const props = defineProps<{
@@ -30,6 +31,7 @@ const { t, locale } = useI18n()
 const busy = ref(false)
 const unitCount = ref(0)
 const lastUpdatedAt = ref<string | null>(null)
+const catalog = ref<TmAttachmentCatalogItem[]>([])
 const attachments = computed(() => normalizeProjectTmAttachments(props.project))
 
 async function refreshStats() {
@@ -43,17 +45,25 @@ async function refreshStats() {
   }
 }
 
+async function refreshCatalog() {
+  try {
+    catalog.value = await listTmCatalog()
+  } catch {
+    catalog.value = []
+  }
+}
+
 watch(
   () => props.open,
   async open => {
     if (!open) return
-    await refreshStats()
+    await Promise.all([refreshStats(), refreshCatalog()])
   },
   { immediate: true },
 )
 
 function catalogItem(id: ProjectTmAttachmentId) {
-  return TM_ATTACHMENT_CATALOG.find(item => item.id === id)
+  return catalog.value.find(item => item.id === id)
 }
 
 function itemLabel(id: ProjectTmAttachmentId) {

@@ -59,7 +59,7 @@ describe('tmCollection', () => {
 
   it('deleteOwnPersonalTm clears units and detaches projects/jobs', async () => {
     const result = await deleteOwnPersonalTm()
-    expect(clearTmUnits).toHaveBeenCalled()
+    expect(clearTmUnits).toHaveBeenCalledWith(PERSONAL_TM_ATTACHMENT_ID)
     expect(saveProject).toHaveBeenCalled()
     expect(detachJobTmEverywhere).toHaveBeenCalledWith(PERSONAL_TM_ATTACHMENT_ID)
     expect(notifyTmCollectionChanged).toHaveBeenCalledOnce()

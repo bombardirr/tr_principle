@@ -1,12 +1,13 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import EditorGlyph from '@/components/EditorGlyph.vue'
 import {
   colorForTmBase,
   PERSONAL_TM_ATTACHMENT_ID,
-  TM_ATTACHMENT_CATALOG,
+  type TmAttachmentCatalogItem,
 } from '@/tm/projectAttachments'
+import { listTmCatalog } from '@/tm/tmBasesCatalog'
 import type { ProjectTmAttachmentId } from '@/types/project'
 
 export type TmStripItem = {
@@ -41,23 +42,35 @@ const tipId = ref<string | null>(null)
 const tipX = ref(0)
 const tipY = ref(0)
 const tipPlacement = ref<'top' | 'bottom'>('bottom')
+const catalog = ref<TmAttachmentCatalogItem[]>([])
+
+onMounted(() => {
+  void listTmCatalog()
+    .then(items => {
+      catalog.value = items
+    })
+    .catch(() => {
+      catalog.value = []
+    })
+})
 
 const tipItem = computed(() =>
   tipId.value ? props.items.find(item => item.id === tipId.value) ?? null : null,
 )
 
 function tmColor(id: string) {
-  return colorForTmBase(id as ProjectTmAttachmentId)
+  const fromCatalog = catalog.value.find(entry => entry.id === id)?.color
+  return fromCatalog ?? colorForTmBase(id as ProjectTmAttachmentId)
 }
 
 function tmGlyph(id: string) {
-  return TM_ATTACHMENT_CATALOG.find(entry => entry.id === id)?.glyph || 'tm'
+  return catalog.value.find(entry => entry.id === id)?.glyph || 'tm'
 }
 
 function tmLabel(id: string) {
   return id === PERSONAL_TM_ATTACHMENT_ID
     ? t('projects.tmPersonalBase')
-    : (TM_ATTACHMENT_CATALOG.find(entry => entry.id === id)?.label ?? id)
+    : (catalog.value.find(entry => entry.id === id)?.label ?? id)
 }
 
 function tmShortName(id: string) {

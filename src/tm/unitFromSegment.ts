@@ -2,12 +2,15 @@ import type { Segment } from '@/types/project'
 import type { TmUnit } from '@/types/tm'
 import { tmLookupKey } from '@/tm/normalize'
 import { isSegmentDone } from '@/utils/segmentStatus'
+import { PERSONAL_TM_ATTACHMENT_ID } from '@/tm/projectAttachments'
 
 export type TmUnitFromSegmentOptions = {
   sourceLang?: string
   targetLang?: string
   projectId?: string
   actor?: string
+  /** TM base this unit belongs to (defaults to personal-tm). */
+  baseId?: string
   contextBefore?: string
   contextAfter?: string
 }
@@ -35,6 +38,7 @@ export async function buildTmUnitFromSegment(
 
   return {
     id: prev?.id ?? crypto.randomUUID(),
+    baseId: options?.baseId ?? prev?.baseId ?? PERSONAL_TM_ATTACHMENT_ID,
     source: segment.source,
     target: segment.target,
     sourceKey,
