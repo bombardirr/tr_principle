@@ -82,7 +82,7 @@ func TestHTTPJobTMAttachmentsCRUDAndACL(t *testing.T) {
 
 	requestRaw(t, http.MethodPost, base, ownerToken, map[string]any{
 		"tmBaseId": "",
-	}, http.StatusInternalServerError)
+	}, http.StatusBadRequest)
 	list = requestJSON(t, http.MethodGet, base, ownerToken, nil, http.StatusOK)
 	if len(list["attachments"].([]any)) != 0 {
 		t.Fatalf("EnsureBase failure created an attachment: %v", list)
