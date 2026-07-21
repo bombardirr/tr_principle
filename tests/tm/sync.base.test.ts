@@ -155,6 +155,28 @@ describe('per-base TM sync', () => {
     })
   })
 
+  it('pushes owned dirty without jobId when catalog API fails during job sync', async () => {
+    const owned = unit({ id: 'owned-unit', baseId: 'owned-offline-base' })
+    await createTmBase({ id: owned.baseId, label: 'Owned offline base' })
+    await putTmUnit(owned)
+    apiFetch.mockImplementation(async (path: string) => {
+      if (path === '/api/tm/bases') throw new Error('catalog unavailable')
+      return { ok: true, until: '2026-07-21T11:00:00.000Z' }
+    })
+
+    markTmDirty(owned.id)
+    await syncTm({ pushOnly: true, jobId: 'job-1' })
+
+    expect(apiFetch).toHaveBeenCalledWith('/api/tm/bases/owned-offline-base/sync', {
+      method: 'POST',
+      body: JSON.stringify({ units: [owned] }),
+    })
+    expect(apiFetch).not.toHaveBeenCalledWith(
+      '/api/tm/bases/owned-offline-base/sync?jobId=job-1',
+      expect.anything(),
+    )
+  })
+
   it('pushes an owned dirty base without job context during a shared base sync', async () => {
     const owned = unit({ id: 'owned-unit', baseId: 'owned-base' })
     await createTmBase({ id: owned.baseId, label: 'Owned base' })

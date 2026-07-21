@@ -243,12 +243,13 @@ export async function syncTm(opts?: { pushOnly?: boolean; jobId?: string }): Pro
   return runExclusive(async () => {
     let ownedBaseIds: Set<string> | undefined
     if (opts?.jobId) {
+      ownedBaseIds = await listOwnedTmBaseIds()
       try {
         const bases = await listTmBasesApi()
-        ownedBaseIds = new Set(bases.map(base => base.id))
+        for (const base of bases) ownedBaseIds.add(base.id)
         await upsertTmBasesFromCloud(bases)
       } catch {
-        ownedBaseIds = new Set()
+        // Catalog failure must not clear local owned ids.
       }
     }
     if (!opts?.pushOnly) {
