@@ -52,7 +52,9 @@ func (s *Store) ListJobs(ctx context.Context, userID uuid.UUID) ([]Job, error) {
 		SELECT j.id, j.owner_user_id, j.title,
 		       COALESCE(j.source_lang, ''), COALESCE(j.target_lang, ''),
 		       COALESCE(j.source_filename, ''), COALESCE(j.source_hash, ''),
-		       j.created_at, j.updated_at, j.archived_at
+		       j.created_at, j.updated_at, j.archived_at,
+		       EXISTS(SELECT 1 FROM job_originals o WHERE o.job_id = j.id) AS has_original,
+		       COALESCE((SELECT o.filename FROM job_originals o WHERE o.job_id = j.id), '') AS original_filename
 		FROM jobs j
 		JOIN job_members m ON m.job_id = j.id
 		WHERE m.user_id = $1
@@ -79,7 +81,9 @@ func (s *Store) GetJob(ctx context.Context, jobID, userID uuid.UUID) (Job, error
 		SELECT j.id, j.owner_user_id, j.title,
 		       COALESCE(j.source_lang, ''), COALESCE(j.target_lang, ''),
 		       COALESCE(j.source_filename, ''), COALESCE(j.source_hash, ''),
-		       j.created_at, j.updated_at, j.archived_at
+		       j.created_at, j.updated_at, j.archived_at,
+		       EXISTS(SELECT 1 FROM job_originals o WHERE o.job_id = j.id) AS has_original,
+		       COALESCE((SELECT o.filename FROM job_originals o WHERE o.job_id = j.id), '') AS original_filename
 		FROM jobs j
 		JOIN job_members m ON m.job_id = j.id
 		WHERE j.id = $1 AND m.user_id = $2
@@ -99,7 +103,9 @@ func (s *Store) ArchiveJob(ctx context.Context, jobID, ownerID uuid.UUID) (Job, 
 		RETURNING id, owner_user_id, title,
 		          COALESCE(source_lang, ''), COALESCE(target_lang, ''),
 		          COALESCE(source_filename, ''), COALESCE(source_hash, ''),
-		          created_at, updated_at, archived_at
+		          created_at, updated_at, archived_at,
+		          EXISTS(SELECT 1 FROM job_originals o WHERE o.job_id = jobs.id) AS has_original,
+		          COALESCE((SELECT o.filename FROM job_originals o WHERE o.job_id = jobs.id), '') AS original_filename
 	`, jobID, ownerID))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Job{}, ErrJobNotFound
@@ -173,7 +179,9 @@ func (s *Store) UpdateJob(ctx context.Context, jobID, ownerID uuid.UUID, patch J
 		RETURNING id, owner_user_id, title,
 		          COALESCE(source_lang, ''), COALESCE(target_lang, ''),
 		          COALESCE(source_filename, ''), COALESCE(source_hash, ''),
-		          created_at, updated_at, archived_at
+		          created_at, updated_at, archived_at,
+		          EXISTS(SELECT 1 FROM job_originals o WHERE o.job_id = jobs.id) AS has_original,
+		          COALESCE((SELECT o.filename FROM job_originals o WHERE o.job_id = jobs.id), '') AS original_filename
 	`, jobID, ownerID, patch.Title, patch.SourceLang, patch.TargetLang, patch.SourceFilename, patch.SourceHash))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Job{}, ErrJobNotFound
@@ -392,7 +400,9 @@ func (s *Store) TransferOwner(ctx context.Context, jobID, currentOwnerID, nextOw
 		RETURNING id, owner_user_id, title,
 		          COALESCE(source_lang, ''), COALESCE(target_lang, ''),
 		          COALESCE(source_filename, ''), COALESCE(source_hash, ''),
-		          created_at, updated_at, archived_at
+		          created_at, updated_at, archived_at,
+		          EXISTS(SELECT 1 FROM job_originals o WHERE o.job_id = jobs.id) AS has_original,
+		          COALESCE((SELECT o.filename FROM job_originals o WHERE o.job_id = jobs.id), '') AS original_filename
 	`, jobID, nextOwnerID))
 	if err != nil {
 		return Job{}, err
@@ -420,6 +430,8 @@ func scanJob(row rowScanner) (Job, error) {
 		&job.CreatedAt,
 		&job.UpdatedAt,
 		&job.ArchivedAt,
+		&job.HasOriginal,
+		&job.OriginalFilename,
 	)
 	return job, err
 }
