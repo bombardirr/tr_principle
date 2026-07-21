@@ -76,6 +76,7 @@ func TestJobOriginalShare(t *testing.T) {
 	if job["hasOriginal"] != true {
 		t.Fatalf("hasOriginal = %v, want true", job["hasOriginal"])
 	}
+	headOriginal(t, srv.URL, jobID, ownerToken, http.StatusOK)
 
 	wrongPayload := []byte("wrong payload")
 	if raw := putOriginal(t, srv.URL, jobID, ownerToken, wrongPayload, "manual.docx", http.StatusBadRequest); !bytes.Contains(raw, []byte("original hash mismatch")) {
@@ -93,6 +94,8 @@ func TestJobOriginalShare(t *testing.T) {
 	}
 	getOriginal(t, srv.URL, jobID, nonMemberToken, http.StatusForbidden)
 	putOriginal(t, srv.URL, jobID, translatorToken, payload, "manual.docx", http.StatusForbidden)
+	requestRaw(t, http.MethodDelete, srv.URL+"/api/jobs/"+jobID.String()+"/members/me", translatorToken, nil, http.StatusNoContent)
+	getOriginal(t, srv.URL, jobID, ownerToken, http.StatusOK)
 
 	requestRaw(t, http.MethodDelete, srv.URL+"/api/jobs/"+jobID.String()+"/original", ownerToken, nil, http.StatusNoContent)
 	getOriginal(t, srv.URL, jobID, ownerToken, http.StatusNotFound)
@@ -101,6 +104,28 @@ func TestJobOriginalShare(t *testing.T) {
 		t.Fatalf("hasOriginal = %v, want false", job["hasOriginal"])
 	}
 	requestRaw(t, http.MethodDelete, srv.URL+"/api/jobs/"+jobID.String()+"/original", ownerToken, nil, http.StatusNoContent)
+	requestJSON(t, http.MethodPost, srv.URL+"/api/jobs/"+jobID.String()+"/archive", ownerToken, nil, http.StatusOK)
+	archivedDelete := requestRaw(t, http.MethodDelete, srv.URL+"/api/jobs/"+jobID.String()+"/original", ownerToken, nil, http.StatusBadRequest)
+	if !bytes.Contains(archivedDelete, []byte("job archived")) {
+		t.Fatalf("archived delete response = %s", archivedDelete)
+	}
+
+	deleteJobID := uuid.New()
+	requestJSON(t, http.MethodPost, srv.URL+"/api/jobs", ownerToken, map[string]any{
+		"id":             deleteJobID,
+		"title":          "Delete original",
+		"sourceFilename": "source.docx",
+		"sourceHash":     hash,
+	}, http.StatusCreated)
+	putOriginal(t, srv.URL, deleteJobID, ownerToken, payload, "manual.docx", http.StatusOK)
+	originalPath := filepath.Join(backupDir, "job-originals", deleteJobID.String()+".docx")
+	if _, err := os.Stat(originalPath); err != nil {
+		t.Fatalf("original file before job delete: %v", err)
+	}
+	requestRaw(t, http.MethodDelete, srv.URL+"/api/jobs/"+deleteJobID.String(), ownerToken, nil, http.StatusNoContent)
+	if _, err := os.Stat(originalPath); !os.IsNotExist(err) {
+		t.Fatalf("original file after job delete: err = %v, want not exist", err)
+	}
 }
 
 func acceptInviteForRole(t *testing.T, baseURL string, jobID uuid.UUID, ownerToken, memberToken, role string) {
@@ -155,4 +180,21 @@ func getOriginal(t *testing.T, baseURL string, jobID uuid.UUID, token string, wa
 		t.Fatalf("GET original => %d, want %d: %s", res.StatusCode, wantStatus, raw)
 	}
 	return raw
+}
+
+func headOriginal(t *testing.T, baseURL string, jobID uuid.UUID, token string, wantStatus int) {
+	t.Helper()
+	req, err := http.NewRequest(http.MethodHead, baseURL+"/api/jobs/"+jobID.String()+"/original", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+	if res.StatusCode != wantStatus {
+		t.Fatalf("HEAD original => %d, want %d", res.StatusCode, wantStatus)
+	}
 }

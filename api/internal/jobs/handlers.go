@@ -154,12 +154,6 @@ func (h *Handler) Leave(w http.ResponseWriter, r *http.Request) {
 	case err != nil:
 		writeError(w, http.StatusInternalServerError, "server error")
 	default:
-		if _, abs, pathErr := h.originalAbsPath(jobID); pathErr == nil {
-			if removeErr := os.Remove(abs); removeErr != nil && !os.IsNotExist(removeErr) {
-				writeError(w, http.StatusInternalServerError, "server error")
-				return
-			}
-		}
 		w.WriteHeader(http.StatusNoContent)
 	}
 }
@@ -176,6 +170,12 @@ func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 	case err != nil:
 		writeError(w, http.StatusInternalServerError, "server error")
 	default:
+		if _, abs, pathErr := h.originalAbsPath(jobID); pathErr == nil {
+			if removeErr := os.Remove(abs); removeErr != nil && !os.IsNotExist(removeErr) {
+				writeError(w, http.StatusInternalServerError, "server error")
+				return
+			}
+		}
 		w.WriteHeader(http.StatusNoContent)
 	}
 }

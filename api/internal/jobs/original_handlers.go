@@ -197,6 +197,15 @@ func (h *Handler) DeleteOriginal(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusForbidden, "forbidden")
 		return
 	}
+	archived, err := h.Store.IsArchived(r.Context(), jobID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "server error")
+		return
+	}
+	if archived {
+		writeError(w, http.StatusBadRequest, "job archived")
+		return
+	}
 	if _, abs, err := h.originalAbsPath(jobID); err != nil {
 		writeError(w, http.StatusInternalServerError, "server error")
 		return
