@@ -43,12 +43,71 @@ describe('per-base TM sync', () => {
     await putTmUnit(local)
     apiFetch.mockResolvedValue({ ok: true, until: '2026-07-21T11:00:00.000Z' })
 
-    await markTmDirty(local.id)
+    markTmDirty(local.id)
     await syncTmBase(local.baseId, { pushOnly: true })
 
     expect(apiFetch).toHaveBeenCalledWith('/api/tm/bases/named-1/sync', {
       method: 'POST',
       body: JSON.stringify({ units: [local] }),
+    })
+  })
+
+  it('preserves dirty units added while a push is in flight', async () => {
+    const first = unit({ id: 'first-unit' })
+    const second = unit({ id: 'second-unit' })
+    await Promise.all([putTmUnit(first), putTmUnit(second)])
+    let releaseFirstPush!: () => void
+    const firstPush = new Promise<void>((resolve) => {
+      releaseFirstPush = resolve
+    })
+    apiFetch.mockImplementation(async (_path: string, init?: RequestInit) => {
+      if (init?.method === 'POST' && apiFetch.mock.calls.length === 1) {
+        await firstPush
+      }
+      return { ok: true, until: '2026-07-21T11:00:00.000Z' }
+    })
+
+    await markTmDirty(first.id)
+    const syncing = syncTmBase(first.baseId, { pushOnly: true })
+    await vi.waitFor(() => expect(apiFetch).toHaveBeenCalledTimes(1))
+    await markTmDirty(second.id)
+    releaseFirstPush()
+    await syncing
+
+    expect(apiFetch).toHaveBeenCalledTimes(2)
+    expect(JSON.parse(apiFetch.mock.calls[1]![1].body).units).toEqual([second])
+  })
+
+  it('pushes more than 500 dirty units in server-sized batches', async () => {
+    const units = Array.from({ length: 501 }, (_, index) =>
+      unit({ id: `unit-${index}` }),
+    )
+    await Promise.all(units.map((item) => putTmUnit(item)))
+    apiFetch.mockResolvedValue({ ok: true, until: '2026-07-21T11:00:00.000Z' })
+
+    await markTmDirty(...units.map((item) => item.id))
+    await syncTmBase('named-1', { pushOnly: true })
+
+    expect(apiFetch).toHaveBeenCalledTimes(2)
+    expect(JSON.parse(apiFetch.mock.calls[0]![1].body).units).toHaveLength(500)
+    expect(JSON.parse(apiFetch.mock.calls[1]![1].body).units).toHaveLength(1)
+  })
+
+  it('continues pushing other bases after one base fails', async () => {
+    const failed = unit({ id: 'failed-unit', baseId: 'base-a' })
+    const pushed = unit({ id: 'pushed-unit', baseId: 'base-b' })
+    await Promise.all([putTmUnit(failed), putTmUnit(pushed)])
+    apiFetch.mockImplementation(async (path: string) => {
+      if (path === '/api/tm/bases/base-a/sync') throw new Error('base failed')
+      return { ok: true, until: '2026-07-21T11:00:00.000Z' }
+    })
+
+    await markTmDirty(failed.id, pushed.id)
+    await syncTm({ pushOnly: true })
+
+    expect(apiFetch).toHaveBeenCalledWith('/api/tm/bases/base-b/sync', {
+      method: 'POST',
+      body: JSON.stringify({ units: [pushed] }),
     })
   })
 

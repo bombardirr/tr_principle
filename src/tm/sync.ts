@@ -7,7 +7,9 @@ import { PERSONAL_TM_ATTACHMENT_ID } from '@/tm/projectAttachments'
 
 const SINCE_BASE = 'appzac-tm-sync-since'
 const DIRTY_BASE = 'appzac-tm-sync-dirty'
+const DIRTY_UNITS_BASE = 'appzac-tm-sync-dirty-units'
 const EPOCH = '1970-01-01T00:00:00.000Z'
+const PUSH_PAGE_SIZE = 500
 
 let pushTimer: ReturnType<typeof setTimeout> | null = null
 let syncing = false
@@ -57,9 +59,31 @@ function addDirty(baseId: string, ids: string[], jobId?: string) {
   writeDirty(baseId, dirty, jobId)
 }
 
-export async function markTmDirty(...ids: string[]) {
+function readDirtyUnits(): Set<string> {
+  const key = syncKey(DIRTY_UNITS_BASE, 'all')
+  if (!key || typeof localStorage === 'undefined') return new Set()
+  try {
+    const raw = localStorage.getItem(key)
+    if (!raw) return new Set()
+    const arr = JSON.parse(raw) as unknown
+    if (!Array.isArray(arr)) return new Set()
+    return new Set(arr.filter((x): x is string => typeof x === 'string'))
+  } catch {
+    return new Set()
+  }
+}
+
+function writeDirtyUnits(ids: Set<string>) {
+  const key = syncKey(DIRTY_UNITS_BASE, 'all')
+  if (!key || typeof localStorage === 'undefined') return
+  localStorage.setItem(key, JSON.stringify([...ids]))
+}
+
+async function bucketDirtyUnits(): Promise<void> {
+  const pending = readDirtyUnits()
+  if (!pending.size) return
   const buckets = new Map<string, string[]>()
-  for (const id of ids) {
+  for (const id of pending) {
     const unit = await getTmUnit(id)
     if (!unit) continue
     const baseId = unit.baseId || PERSONAL_TM_ATTACHMENT_ID
@@ -70,6 +94,16 @@ export async function markTmDirty(...ids: string[]) {
   for (const [baseId, bucket] of buckets) {
     addDirty(baseId, bucket)
   }
+  const current = readDirtyUnits()
+  for (const id of pending) current.delete(id)
+  writeDirtyUnits(current)
+}
+
+export function markTmDirty(...ids: string[]) {
+  if (!ids.length) return
+  const dirty = readDirtyUnits()
+  for (const id of ids) dirty.add(id)
+  writeDirtyUnits(dirty)
   scheduleTmPush()
 }
 
@@ -117,28 +151,32 @@ async function pullAll(baseId: string, jobId?: string): Promise<void> {
 }
 
 async function pushDirty(baseId: string, jobId?: string): Promise<void> {
-  const dirty = readDirty(baseId, jobId)
-  if (!dirty.size) return
-  const units: TmUnit[] = []
-  const missing: string[] = []
-  for (const id of dirty) {
-    const unit = await getTmUnit(id)
-    if (!unit) {
-      missing.push(id)
-      continue
+  while (true) {
+    const dirty = readDirty(baseId, jobId)
+    if (!dirty.size) return
+    const units: TmUnit[] = []
+    const missing: string[] = []
+    for (const id of [...dirty].slice(0, PUSH_PAGE_SIZE)) {
+      const unit = await getTmUnit(id)
+      if (!unit) {
+        missing.push(id)
+        continue
+      }
+      units.push(unit)
     }
-    units.push(unit)
+    if (missing.length) {
+      const current = readDirty(baseId, jobId)
+      for (const id of missing) current.delete(id)
+      writeDirty(baseId, current, jobId)
+    }
+    if (units.length) {
+      await pushTmBaseSync(baseId, units, jobId)
+      const current = readDirty(baseId, jobId)
+      for (const unit of units) current.delete(unit.id)
+      writeDirty(baseId, current, jobId)
+    }
+    await bucketDirtyUnits()
   }
-  if (missing.length) {
-    for (const id of missing) dirty.delete(id)
-  }
-  if (!units.length) {
-    writeDirty(baseId, dirty, jobId)
-    return
-  }
-  await pushTmBaseSync(baseId, units, jobId)
-  for (const u of units) dirty.delete(u.id)
-  writeDirty(baseId, dirty, jobId)
 }
 
 function dirtyOwnedBaseIds(): string[] {
@@ -161,6 +199,7 @@ export async function syncTmBase(
 ): Promise<void> {
   if (!getStorageAccountId()) return
   if (!opts?.pushOnly) await pullAll(baseId, opts?.jobId)
+  await bucketDirtyUnits()
   await pushDirty(baseId, opts?.jobId)
 }
 
@@ -174,17 +213,33 @@ export async function syncTm(opts?: { pushOnly?: boolean }): Promise<void> {
   syncing = true
   try {
     if (!opts?.pushOnly) {
-      const bases = await listTmBasesApi()
-      await upsertTmBasesFromCloud(bases)
-      for (const base of bases) {
-        await pullAll(base.id)
+      try {
+        const bases = await listTmBasesApi()
+        await upsertTmBasesFromCloud(bases)
+        for (const base of bases) {
+          try {
+            await pullAll(base.id)
+          } catch {
+            // A failed base must not prevent other bases from syncing.
+          }
+        }
+      } catch {
+        // Catalog failure must not prevent locally dirty bases from pushing.
       }
     }
-    for (const baseId of dirtyOwnedBaseIds()) {
-      await pushDirty(baseId)
+    await bucketDirtyUnits()
+    const attempted = new Set<string>()
+    while (true) {
+      const baseId = dirtyOwnedBaseIds().find((id) => !attempted.has(id))
+      if (!baseId) break
+      attempted.add(baseId)
+      try {
+        await pushDirty(baseId)
+      } catch {
+        // Leave this base dirty and continue with the remaining bases.
+      }
+      await bucketDirtyUnits()
     }
-  } catch {
-    // Silent retry on next login / dirty write / schedule.
   } finally {
     syncing = false
   }
