@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref, shallowRef, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import MarqueeText from '@/components/MarqueeText.vue'
 import ProjectSettingsDialog from '@/components/ProjectSettingsDialog.vue'
@@ -30,7 +30,9 @@ import { readPreviewEnabled, writePreviewEnabled } from '@/editor/previewPrefere
 import { findTmMatches } from '@/tm/match'
 import { findLangPairPreset, langPairLabel } from '@/tm/langPairs'
 import { tmLookupKey } from '@/tm/normalize'
-import { canReadPersonalTm, canWritePersonalTm } from '@/tm/projectAttachments'
+import { resolvePersonalTmAccess } from '@/tm/personalTmAccess'
+import { listJobTmAttachments } from '@/tm/jobAttachments'
+import { listJobTmAttachmentsApi } from '@/jobs/tmAttachmentsApi'
 import { TM_COLLECTION_CHANGED_EVENT } from '@/tm/tmCollectionEvents'
 import { projectNeedsResegment, resegmentProjectRecord } from '@/tm/resegment'
 import { exportTmx, parseTmx } from '@/tm/tmx'
@@ -74,19 +76,39 @@ import {
   startJoinActivityPolling,
   stopJoinActivityPolling,
 } from '@/jobs/joinActivity'
-import type { Job, JobRole } from '@/types/job'
+import type { Job, JobRole, JobTmAttachment } from '@/types/job'
 import { reportJobMemberProgress } from '@/jobs/reportProgress'
 import { fingerprintDocx, fingerprintMismatch } from '@/jobs/fingerprint'
 
 const props = defineProps<{ id: string }>()
 const { t } = useI18n()
 const router = useRouter()
+const route = useRoute()
 const { user } = useAuth()
 
 /** shallowRef: deep ref() proxies break IndexedDB structured clone */
 const record = shallowRef<ProjectRecord | null>(null)
 const error = ref('')
 const notice = ref('')
+const jobSharedAttachments = ref<JobTmAttachment[]>([])
+
+const jobQueryId = computed(() => {
+  const raw = route.query.job
+  return typeof raw === 'string' && raw.trim() ? raw.trim() : null
+})
+
+const personalTmAccess = computed(() => {
+  if (!record.value) return { jobContext: false, canRead: false, canWrite: false }
+  const jobId = jobQueryId.value
+  return resolvePersonalTmAccess({
+    projectMeta: record.value.meta,
+    jobQueryId: jobId,
+    jobShared: jobSharedAttachments.value,
+    jobLocal: jobId ? listJobTmAttachments(jobId) : [],
+  })
+})
+const personalTmReadable = computed(() => personalTmAccess.value.canRead)
+const personalTmWritable = computed(() => personalTmAccess.value.canWrite)
 const saving = ref(false)
 const allSaved = ref(true)
 let saveTimer: ReturnType<typeof setTimeout> | null = null
@@ -134,12 +156,6 @@ function clearTmAutosave(segId: string) {
 const done = computed(() => (record.value ? countTranslatedSegments(record.value.segments) : 0))
 const total = computed(() => record.value?.segments.length ?? 0)
 const editorReadOnly = computed(() => projectLease.blocked.value || jobRole.value === 'viewer')
-const personalTmReadable = computed(() =>
-  record.value ? canReadPersonalTm(record.value.meta) : false
-)
-const personalTmWritable = computed(() =>
-  record.value ? canWritePersonalTm(record.value.meta) : false
-)
 const matchTmUnits = computed(() => (personalTmReadable.value ? tmUnits.value : []))
 
 const tmCoveragePct = computed(() => {
@@ -480,6 +496,24 @@ async function restorePageScroll() {
   }, 400)
 }
 
+async function refreshJobTmLayers() {
+  const jobId = jobQueryId.value
+  const metaJob = record.value?.meta.jobId
+  if (!jobId || !metaJob || jobId !== metaJob) {
+    jobSharedAttachments.value = []
+    return
+  }
+  try {
+    jobSharedAttachments.value = await listJobTmAttachmentsApi(jobId)
+  } catch {
+    jobSharedAttachments.value = []
+  }
+}
+
+async function reloadPersonalTmUnits() {
+  tmUnits.value = personalTmReadable.value ? await listTmUnits() : []
+}
+
 async function load() {
   const gen = ++loadGen
   error.value = ''
@@ -489,12 +523,15 @@ async function load() {
   if (!found) {
     error.value = t('editor.projectNotFound')
     record.value = null
+    jobSharedAttachments.value = []
     return
   }
   let loaded = withNormalizedRecord(found)
   if (gen !== loadGen) return
   record.value = loaded
-  tmUnits.value = canReadPersonalTm(loaded.meta) ? await listTmUnits() : []
+  await refreshJobTmLayers()
+  if (gen !== loadGen) return
+  await reloadPersonalTmUnits()
   if (gen !== loadGen) return
   await reloadJobMembership(loaded.meta.jobId)
   if (gen !== loadGen) return
@@ -516,7 +553,8 @@ async function onTmCollectionChanged() {
     ...record.value,
     meta: found.meta,
   }
-  if (!canReadPersonalTm(found.meta)) {
+  await refreshJobTmLayers()
+  if (!personalTmReadable.value) {
     tmUnits.value = []
     tmAutosaveIds.value = new Set()
     return
@@ -554,6 +592,15 @@ watch(
   () => {
     void load()
   }
+)
+
+watch(
+  () => [jobQueryId.value, record.value?.meta.jobId] as const,
+  async () => {
+    if (!record.value) return
+    await refreshJobTmLayers()
+    await reloadPersonalTmUnits()
+  },
 )
 
 watch(

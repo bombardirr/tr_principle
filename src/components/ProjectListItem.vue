@@ -27,6 +27,8 @@ import {
 const props = defineProps<{
   project: ProjectMeta
   glow?: boolean
+  /** When set, editor opens with `?job=` (job hub context). */
+  jobId?: string
   /** Fallback when project meta has no langs yet (e.g. job hub). */
   sourceLang?: string
   targetLang?: string
@@ -49,6 +51,12 @@ const collectionMode = ref<'pick' | 'browse'>('pick')
 const collectionReturnTo = ref<'project' | null>(null)
 const personalTmCount = ref(0)
 const personalTmUpdatedAt = ref<string | null>(null)
+
+const editorTo = computed(() =>
+  props.jobId
+    ? { name: 'editor' as const, params: { id: props.project.id }, query: { job: props.jobId } }
+    : { name: 'editor' as const, params: { id: props.project.id } },
+)
 
 const langPairText = computed(() => {
   const source = props.project.sourceLang || props.sourceLang
@@ -253,7 +261,7 @@ async function restoreFromCloud() {
         :personal-last-updated-at="personalTmUpdatedAt"
         @add="openBases"
       />
-      <router-link class="item-link" :to="{ name: 'editor', params: { id: project.id } }">
+      <router-link class="item-link" :to="editorTo">
         <span class="name">{{ project.name }}</span>
         <span class="sub">
           <template v-if="langPairText">{{ langPairText }} · </template>

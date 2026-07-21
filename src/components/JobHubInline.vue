@@ -572,6 +572,7 @@ async function onLangPairChange(payload: { sourceLang: string; targetLang: strin
       <ul v-if="linkedProject" class="list">
         <ProjectListItem
           :project="linkedProject"
+          :job-id="jobId"
           :source-lang="job?.sourceLang"
           :target-lang="job?.targetLang"
           glow
