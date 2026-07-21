@@ -55,7 +55,7 @@ func main() {
 		Store:     projects.NewStore(pool),
 		BackupDir: cfg.BackupDir,
 	}
-	jobsHandler := &jobs.Handler{Store: jobs.NewStore(pool), TM: tmStore}
+	jobsHandler := &jobs.Handler{Store: jobs.NewStore(pool), TM: tmStore, BackupDir: cfg.BackupDir}
 	api := httpapi.NewRouter(handler, tmHandler, glossaryHandler, projectsHandler, jobsHandler, cfg.AllowedOrigin)
 	handlerRoot := httpapi.MountSPA(api, cfg.PublicDir)
 

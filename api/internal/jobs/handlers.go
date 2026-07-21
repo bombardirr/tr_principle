@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -14,8 +15,9 @@ import (
 )
 
 type Handler struct {
-	Store *Store
-	TM    *tm.Store
+	Store     *Store
+	TM        *tm.Store
+	BackupDir string
 }
 
 func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
@@ -152,6 +154,12 @@ func (h *Handler) Leave(w http.ResponseWriter, r *http.Request) {
 	case err != nil:
 		writeError(w, http.StatusInternalServerError, "server error")
 	default:
+		if _, abs, pathErr := h.originalAbsPath(jobID); pathErr == nil {
+			if removeErr := os.Remove(abs); removeErr != nil && !os.IsNotExist(removeErr) {
+				writeError(w, http.StatusInternalServerError, "server error")
+				return
+			}
+		}
 		w.WriteHeader(http.StatusNoContent)
 	}
 }

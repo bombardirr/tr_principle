@@ -65,9 +65,22 @@ func TestJobsRouteRequiresAuthentication(t *testing.T) {
 		"http://localhost",
 	)
 
-	rec := httptest.NewRecorder()
-	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/jobs", nil))
-	if rec.Code != http.StatusUnauthorized {
-		t.Fatalf("GET /api/jobs without auth = %d, want 401", rec.Code)
+	tests := []struct {
+		method string
+		path   string
+	}{
+		{http.MethodGet, "/api/jobs"},
+		{http.MethodPut, "/api/jobs/test-id/original"},
+		{http.MethodGet, "/api/jobs/test-id/original"},
+		{http.MethodDelete, "/api/jobs/test-id/original"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.method+" "+tt.path, func(t *testing.T) {
+			rec := httptest.NewRecorder()
+			handler.ServeHTTP(rec, httptest.NewRequest(tt.method, tt.path, nil))
+			if rec.Code != http.StatusUnauthorized {
+				t.Fatalf("%s without auth = %d, want 401", tt.path, rec.Code)
+			}
+		})
 	}
 }
