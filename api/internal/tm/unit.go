@@ -5,6 +5,7 @@ import "time"
 // Unit is the JSON wire format for one TM row (camelCase for the SPA).
 type Unit struct {
 	ID            string  `json:"id"`
+	BaseID        string  `json:"baseId"`
 	Source        string  `json:"source"`
 	Target        string  `json:"target"`
 	SourceKey     string  `json:"sourceKey"`

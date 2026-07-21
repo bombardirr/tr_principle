@@ -141,6 +141,110 @@ func TestTmSyncFlow(t *testing.T) {
 	}
 }
 
+func TestTmSyncBaseID(t *testing.T) {
+	dbURL := os.Getenv("DATABASE_URL")
+	if dbURL == "" {
+		t.Skip("DATABASE_URL not set")
+	}
+	ctx := context.Background()
+	pool, err := db.Connect(ctx, dbURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(pool.Close)
+
+	migrations := filepath.Join("..", "..", "migrations")
+	if err := db.Migrate(ctx, pool, migrations); err != nil {
+		t.Fatal(err)
+	}
+
+	_, _ = pool.Exec(ctx, `DELETE FROM users WHERE email LIKE 'tmtest_base_%@example.com'`)
+
+	tokens := auth.NewTokenIssuer([]byte("test-secret-key-32bytes-minimum!!"), time.Hour)
+	authHandler := &auth.Handler{
+		Store:   auth.NewStore(pool),
+		Tokens:  tokens,
+		Limiter: auth.NewRateLimiter(100, time.Minute),
+	}
+	tmHandler := &tm.Handler{Store: tm.NewStore(pool)}
+	glossaryHandler := &glossary.Handler{Store: glossary.NewStore(pool)}
+	srv := httptest.NewServer(httpapi.NewRouter(authHandler, tmHandler, glossaryHandler, &projects.Handler{
+		Store:     projects.NewStore(pool),
+		BackupDir: t.TempDir(),
+	}, &jobs.Handler{Store: jobs.NewStore(pool)}, "http://localhost"))
+	t.Cleanup(srv.Close)
+
+	email := fmt.Sprintf("tmtest_base_%s@example.com", time.Now().Format("150405.000000000"))
+	token := mustAuth(t, srv.URL+"/api/auth/register", map[string]string{
+		"email": email, "password": "password1",
+	})
+
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+
+	// Push without baseId defaults to personal-tm
+	defaultID := uuid.NewString()
+	mustPush(t, srv.URL+"/api/tm/sync", token, []map[string]any{
+		{
+			"id":         defaultID,
+			"source":     "Hi",
+			"target":     "Привет",
+			"sourceKey":  "hi::en|ru",
+			"sourceLang": "en",
+			"targetLang": "ru",
+			"createdAt":  now,
+			"updatedAt":  now,
+		},
+	})
+	pull := mustPull(t, srv.URL+"/api/tm/sync?since=1970-01-01T00:00:00Z", token)
+	units := pull["units"].([]any)
+	var gotDefault map[string]any
+	for _, u := range units {
+		m := u.(map[string]any)
+		if m["id"] == defaultID {
+			gotDefault = m
+			break
+		}
+	}
+	if gotDefault == nil {
+		t.Fatalf("expected unit %s in pull: %v", defaultID, pull)
+	}
+	if gotDefault["baseId"] != "personal-tm" {
+		t.Fatalf("expected baseId personal-tm, got %v", gotDefault["baseId"])
+	}
+
+	// Push with explicit baseId
+	namedID := uuid.NewString()
+	mustPush(t, srv.URL+"/api/tm/sync", token, []map[string]any{
+		{
+			"id":         namedID,
+			"baseId":     "named-1",
+			"source":     "Bye",
+			"target":     "Пока",
+			"sourceKey":  "bye::en|ru",
+			"sourceLang": "en",
+			"targetLang": "ru",
+			"createdAt":  now,
+			"updatedAt":  now,
+		},
+	})
+	pull = mustPull(t, srv.URL+"/api/tm/sync?since=1970-01-01T00:00:00Z", token)
+	units = pull["units"].([]any)
+	var gotNamed map[string]any
+	for _, u := range units {
+		m := u.(map[string]any)
+		if m["id"] == namedID {
+			gotNamed = m
+			break
+		}
+	}
+	if gotNamed == nil {
+		t.Fatalf("expected unit %s in pull: %v", namedID, pull)
+	}
+	if gotNamed["baseId"] != "named-1" {
+		t.Fatalf("expected baseId named-1, got %v", gotNamed["baseId"])
+	}
+}
+
 func mustAuth(t *testing.T, url string, body map[string]string) string {
 	t.Helper()
 	res, err := doReq(http.MethodPost, url, "", body)
