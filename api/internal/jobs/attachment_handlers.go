@@ -69,13 +69,16 @@ func (h *Handler) CreateTMAttachment(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if h.TM != nil {
-		_ = h.TM.EnsureBase(
+		if err := h.TM.EnsureBase(
 			r.Context(),
 			user.ID,
 			body.TmBaseID,
 			attachmentLabel(body.TmBaseID, body.Label),
 			body.Color,
-		)
+		); err != nil {
+			writeError(w, http.StatusInternalServerError, "server error")
+			return
+		}
 	}
 	attachment, err := h.Store.CreateAttachment(r.Context(), jobID, user.ID, body.TmBaseID, flags)
 	switch {

@@ -23,6 +23,7 @@ type Attachment struct {
 	TmBaseID  string    `json:"tmBaseId"`
 	Label     string    `json:"label"`
 	Color     string    `json:"color"`
+	OwnerID   uuid.UUID `json:"ownerId"`
 	CanRead   bool      `json:"canRead"`
 	CanWrite  bool      `json:"canWrite"`
 	CanExport bool      `json:"canExport"`
@@ -57,6 +58,7 @@ func (s *Store) ListAttachments(
 		SELECT a.id, a.job_id, a.tm_base_id,
 		       COALESCE(b.label, a.tm_base_id),
 		       COALESCE(b.color, '#5b9fd4'),
+		       j.owner_user_id,
 		       a.can_read, a.can_write, a.can_export, a.can_clone,
 		       a.created_by, a.created_at, a.updated_at
 		FROM job_tm_attachments a
@@ -114,6 +116,7 @@ func (s *Store) CreateAttachment(
 		RETURNING id, job_id, tm_base_id,
 		          COALESCE((SELECT label FROM tm_bases WHERE owner_id = $7 AND id = tm_base_id AND deleted_at IS NULL), tm_base_id),
 		          COALESCE((SELECT color FROM tm_bases WHERE owner_id = $7 AND id = tm_base_id AND deleted_at IS NULL), '#5b9fd4'),
+		          $7::uuid,
 		          can_read, can_write, can_export, can_clone,
 		          created_by, created_at, updated_at
 	`, jobID, tmBaseID, flags.CanRead, flags.CanWrite, flags.CanExport, flags.CanClone, ownerID,
@@ -176,6 +179,7 @@ func (s *Store) UpdateAttachment(
 		            JOIN tm_bases b ON b.owner_id = j.owner_user_id
 		            WHERE j.id = job_id AND b.id = tm_base_id AND b.deleted_at IS NULL
 		          ), '#5b9fd4'),
+		          (SELECT owner_user_id FROM jobs WHERE id = job_id),
 		          can_read, can_write, can_export, can_clone,
 		          created_by, created_at, updated_at
 	`, attachmentID, jobID, patch.CanRead, patch.CanWrite, patch.CanExport, patch.CanClone).Scan(
@@ -184,6 +188,7 @@ func (s *Store) UpdateAttachment(
 		&attachment.TmBaseID,
 		&attachment.Label,
 		&attachment.Color,
+		&attachment.OwnerID,
 		&attachment.CanRead,
 		&attachment.CanWrite,
 		&attachment.CanExport,

@@ -34,6 +34,7 @@ vi.mock('../../src/jobs/tmAttachmentsApi', () => ({
 }))
 
 vi.mock('../../src/storage/tmBasesIdb', () => ({
+  sharedTmLocalId: (ownerId: string, tmBaseId: string) => `share:${ownerId}:${tmBaseId}`,
   upsertSharedTmBase: vi.fn(async () => undefined),
 }))
 
@@ -245,11 +246,14 @@ describe('JobMemoriesPanel', () => {
 
     await vi.waitFor(() => {
       expect(upsertSharedTmBase).toHaveBeenCalledWith({
-        id: 'shared-base',
+        id: 'share:owner-1:shared-base',
         label: 'Shared base',
         color: '#123456',
       })
-      expect(syncTmBase).toHaveBeenCalledWith('shared-base', { jobId: 'job-1' })
+      expect(syncTmBase).toHaveBeenCalledWith(
+        'share:owner-1:shared-base',
+        { jobId: 'job-1' },
+      )
     })
     expect(document.body.textContent).toContain('Shared base')
     expect(syncTmBase).not.toHaveBeenCalledWith('hidden-base', expect.anything())

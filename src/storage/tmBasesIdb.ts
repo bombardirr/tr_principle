@@ -21,6 +21,7 @@ interface TmBasesDb extends DBSchema {
 
 const DB_BASE = 'appzac-tm-bases'
 const DB_VERSION = 1
+const SHARED_TM_LOCAL_PREFIX = 'share:'
 
 let dbPromise: Promise<IDBPDatabase<TmBasesDb>> | null = null
 
@@ -74,6 +75,26 @@ export async function listTmBases(): Promise<TmBaseRecord[]> {
 export async function listOwnedTmBaseIds(): Promise<Set<string>> {
   const bases = await listTmBases()
   return new Set(bases.filter(base => base.sharedOnly !== true).map(base => base.id))
+}
+
+export function sharedTmLocalId(ownerId: string, tmBaseId: string): string {
+  return `${SHARED_TM_LOCAL_PREFIX}${ownerId}:${tmBaseId}`
+}
+
+export function parseSharedTmLocalId(
+  localId: string,
+): { ownerId: string; tmBaseId: string } | null {
+  if (!localId.startsWith(SHARED_TM_LOCAL_PREFIX)) return null
+  const separator = localId.indexOf(':', SHARED_TM_LOCAL_PREFIX.length)
+  if (separator === -1) return null
+  const ownerId = localId.slice(SHARED_TM_LOCAL_PREFIX.length, separator)
+  const tmBaseId = localId.slice(separator + 1)
+  return ownerId && tmBaseId ? { ownerId, tmBaseId } : null
+}
+
+/** Return the server catalog id for either an owned or namespaced shared base. */
+export function wireTmBaseId(localId: string): string {
+  return parseSharedTmLocalId(localId)?.tmBaseId ?? localId
 }
 
 export async function getTmBase(id: string): Promise<TmBaseRecord | undefined> {

@@ -110,6 +110,9 @@ func TestTMBaseCatalogAndSharedSync(t *testing.T) {
 	attachmentID := attachment["id"].(string)
 
 	sharedURL := srv.URL + "/api/tm/bases/" + baseID + "/sync?jobId=" + jobID.String()
+	requestTMJSON(t, http.MethodPost, srv.URL+"/api/tm/bases", memberToken, map[string]any{
+		"id": baseID, "label": "Member's local base", "color": "#aabbcc",
+	}, http.StatusCreated)
 	pull = requestTMJSON(t, http.MethodGet, sharedURL+"&since=1970-01-01T00:00:00Z", memberToken, nil, http.StatusOK)
 	assertPulledUnit(t, pull, ownerUnitID, baseID)
 	requestTMJSON(t, http.MethodPost, sharedURL, memberToken, map[string]any{

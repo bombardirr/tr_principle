@@ -1,8 +1,14 @@
 import { getStorageAccountId } from '@/storage/scope'
 import { getTmUnit, putTmUnit, removeTmUnit } from '@/storage/tmIdb'
-import { listOwnedTmBaseIds, upsertTmBasesFromCloud } from '@/storage/tmBasesIdb'
+import {
+  listOwnedTmBaseIds,
+  listTmBases,
+  parseSharedTmLocalId,
+  upsertTmBasesFromCloud,
+  wireTmBaseId,
+} from '@/storage/tmBasesIdb'
 import type { TmUnit } from '@/types/tm'
-import { listTmBasesApi, pullTmBaseSync, pushTmBaseSync } from '@/tm/api'
+import { listTmBasesApi, pullTmBaseSync, pushTmBaseSync, upsertTmBaseApi } from '@/tm/api'
 import { PERSONAL_TM_ATTACHMENT_ID } from '@/tm/projectAttachments'
 
 const SINCE_BASE = 'appzac-tm-sync-since'
@@ -89,7 +95,11 @@ function writeDirtyUnits(ids: Set<string>) {
   localStorage.setItem(key, JSON.stringify([...ids]))
 }
 
-async function bucketDirtyUnits(jobId?: string, ownedBaseIds?: Set<string>): Promise<void> {
+async function bucketDirtyUnits(
+  jobId?: string,
+  ownedBaseIds?: Set<string>,
+  forceJobBaseId?: string,
+): Promise<void> {
   const pending = readDirtyUnits()
   if (!pending.size) return
   const buckets = new Map<string, string[]>()
@@ -102,7 +112,11 @@ async function bucketDirtyUnits(jobId?: string, ownedBaseIds?: Set<string>): Pro
     buckets.set(baseId, bucket)
   }
   for (const [baseId, bucket] of buckets) {
-    const bucketJobId = jobId && !ownedBaseIds?.has(baseId) ? jobId : undefined
+    const isShared = Boolean(parseSharedTmLocalId(baseId))
+    const bucketJobId =
+      jobId && (baseId === forceJobBaseId || isShared || !ownedBaseIds?.has(baseId))
+        ? jobId
+        : undefined
     addDirty(baseId, bucket, bucketJobId)
   }
   const current = readDirtyUnits()
@@ -130,7 +144,7 @@ function newer(a: string, b: string): boolean {
   return a > b
 }
 
-async function mergeRemote(unit: TmUnit, jobId?: string) {
+async function mergeRemote(unit: TmUnit, localBaseId: string, jobId?: string) {
   const local = await getTmUnit(unit.id)
   if (local && newer(local.updatedAt, unit.updatedAt)) {
     addDirty(local.baseId || PERSONAL_TM_ATTACHMENT_ID, [local.id], jobId)
@@ -140,23 +154,24 @@ async function mergeRemote(unit: TmUnit, jobId?: string) {
     await removeTmUnit(unit.id)
     return
   }
-  await putTmUnit({ ...unit, deletedAt: unit.deletedAt ?? null })
+  await putTmUnit({ ...unit, baseId: localBaseId, deletedAt: unit.deletedAt ?? null })
 }
 
-async function pullAll(baseId: string, jobId?: string): Promise<void> {
-  let since = readSince(baseId, jobId)
+async function pullAll(localBaseId: string, jobId?: string): Promise<void> {
+  let since = readSince(localBaseId, jobId)
+  const baseId = wireTmBaseId(localBaseId)
   for (let i = 0; i < 50; i++) {
     const res = await pullTmBaseSync(baseId, since, jobId)
     for (const unit of res.units) {
-      await mergeRemote(unit, jobId)
+      await mergeRemote(unit, localBaseId, jobId)
     }
     if (res.hasMore && res.units.length) {
       const last = res.units[res.units.length - 1]!
       since = last.updatedAt
-      writeSince(baseId, since, jobId)
+      writeSince(localBaseId, since, jobId)
       continue
     }
-    writeSince(baseId, res.until, jobId)
+    writeSince(localBaseId, res.until, jobId)
     break
   }
 }
@@ -185,7 +200,11 @@ async function pushDirty(
       writeDirty(baseId, current, jobId)
     }
     if (units.length) {
-      await pushTmBaseSync(baseId, units, jobId)
+      await pushTmBaseSync(
+        wireTmBaseId(baseId),
+        units.map(unit => ({ ...unit, baseId: wireTmBaseId(unit.baseId || baseId) })),
+        jobId,
+      )
       const current = readDirty(baseId, jobId)
       for (const unit of units) current.delete(unit.id)
       writeDirty(baseId, current, jobId)
@@ -222,9 +241,9 @@ export async function syncTmBase(
   if (!getStorageAccountId()) return
   return runExclusive(async () => {
     const ownedBaseIds = await listOwnedTmBaseIds()
-    const baseJobId = opts?.jobId && !ownedBaseIds.has(baseId) ? opts.jobId : undefined
+    const baseJobId = opts?.jobId
     if (!opts?.pushOnly) await pullAll(baseId, baseJobId)
-    await bucketDirtyUnits(opts?.jobId, ownedBaseIds)
+    await bucketDirtyUnits(opts?.jobId, ownedBaseIds, baseId)
     await pushDirty(baseId, baseJobId, ownedBaseIds)
 
     const attempted = new Set<string>()
@@ -237,25 +256,43 @@ export async function syncTmBase(
   })
 }
 
+async function reconcileOwnedCatalog(serverBaseIds: Set<string>): Promise<void> {
+  const localBases = await listTmBases()
+  await Promise.all(
+    localBases
+      .filter(base => base.sharedOnly !== true && !serverBaseIds.has(base.id))
+      .map(async (base) => {
+        try {
+          await upsertTmBaseApi({ id: base.id, label: base.label, color: base.color })
+        } catch {
+          // Reconcile each offline local base independently.
+        }
+      }),
+  )
+}
+
 /** Pull then push (or push-only). Safe to call frequently; overlaps queue. */
 export async function syncTm(opts?: { pushOnly?: boolean; jobId?: string }): Promise<void> {
   if (!getStorageAccountId()) return
   return runExclusive(async () => {
     let ownedBaseIds: Set<string> | undefined
+    let catalogBases: Awaited<ReturnType<typeof listTmBasesApi>> | undefined
     if (opts?.jobId) {
       ownedBaseIds = await listOwnedTmBaseIds()
       try {
-        const bases = await listTmBasesApi()
-        for (const base of bases) ownedBaseIds.add(base.id)
-        await upsertTmBasesFromCloud(bases)
+        catalogBases = await listTmBasesApi()
+        for (const base of catalogBases) ownedBaseIds.add(base.id)
+        await upsertTmBasesFromCloud(catalogBases)
+        await reconcileOwnedCatalog(new Set(catalogBases.map(base => base.id)))
       } catch {
         // Catalog failure must not clear local owned ids.
       }
     }
     if (!opts?.pushOnly) {
       try {
-        const bases = await listTmBasesApi()
+        const bases = catalogBases ?? await listTmBasesApi()
         await upsertTmBasesFromCloud(bases)
+        await reconcileOwnedCatalog(new Set(bases.map(base => base.id)))
         for (const base of bases) {
           try {
             await pullAll(base.id)

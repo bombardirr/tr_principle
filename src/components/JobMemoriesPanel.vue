@@ -17,7 +17,7 @@ import {
 } from '@/tm/jobAttachments'
 import { PERSONAL_TM_ATTACHMENT_ID } from '@/tm/projectAttachments'
 import { listTmCatalog } from '@/tm/tmBasesCatalog'
-import { upsertSharedTmBase } from '@/storage/tmBasesIdb'
+import { sharedTmLocalId, upsertSharedTmBase } from '@/storage/tmBasesIdb'
 import { syncTmBase } from '@/tm/sync'
 import type { TmAttachmentCatalogItem } from '@/tm/projectAttachments'
 import type { JobRole, JobTmAttachment } from '@/types/job'
@@ -82,12 +82,16 @@ async function refreshShared(options: { keepError?: boolean } = {}) {
     for (const attachment of attachments) {
       if (!attachment.canRead) continue
       try {
+        const localId = sharedTmLocalId(
+          attachment.ownerId || attachment.createdBy,
+          attachment.tmBaseId,
+        )
         await upsertSharedTmBase({
-          id: attachment.tmBaseId,
+          id: localId,
           label: attachment.label ?? attachment.tmBaseId,
           color: attachment.color ?? '#5b9fd4',
         })
-        await syncTmBase(attachment.tmBaseId, { jobId })
+        await syncTmBase(localId, { jobId })
       } catch (error) {
         if (!isCurrentRequest(jobId, generation, requestGeneration)) return
         loadError.value = error instanceof Error ? error.message : String(error)

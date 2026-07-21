@@ -1,8 +1,11 @@
 import { normalizeProjectTmAttachments } from '@/tm/projectAttachments'
+import { sharedTmLocalId } from '@/storage/tmBasesIdb'
 import type { ProjectMeta, ProjectTmAttachment } from '@/types/project'
 
 export type JobTmAccessRow = {
   tmBaseId: string
+  ownerId?: string
+  createdBy?: string
   canRead: boolean
   canWrite: boolean
 }
@@ -56,7 +59,13 @@ export function resolveTmBaseAccess(input: TmBaseAccessInput): TmBaseAccess {
   if (jobContext) {
     for (const row of input.jobShared ?? []) {
       if (!row.tmBaseId) continue
-      addFlags(map, row.tmBaseId, row.canRead, row.canWrite)
+      const ownerId = row.ownerId || row.createdBy
+      addFlags(
+        map,
+        ownerId ? sharedTmLocalId(ownerId, row.tmBaseId) : row.tmBaseId,
+        row.canRead,
+        row.canWrite,
+      )
     }
     for (const row of input.jobLocal ?? []) {
       if (!row.id) continue

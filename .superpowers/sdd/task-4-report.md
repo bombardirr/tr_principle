@@ -47,3 +47,21 @@ Added regression: `listTmBasesApi` throws → `syncTm({ pushOnly: true, jobId })
 
 - `src/tm/sync.ts`
 - `tests/tm/sync.base.test.ts`
+
+## Final whole-branch review fixes
+
+- Job-attached bases are locally namespaced as `share:{ownerId}:{tmBaseId}`. Pulls rewrite
+  unit `baseId` to that namespace; pushes convert it back to the wire base id and keep `jobId`.
+- A direct `syncTmBase(baseId, { jobId })` always uses the supplied job context, including
+  `personal-tm` when the caller owns a local base with the same id.
+- Job attachment responses expose the job owner. Access resolution now uses the requested job
+  attachment before caller-owned catalog rows.
+- Attachment creation returns an error if TM catalog `EnsureBase` fails.
+- Successful catalog reads reconcile locally owned bases missing from the cloud catalog, with
+  individual upload failures ignored.
+
+Verification:
+
+- `go test ./internal/tm/ ./internal/jobs/ -count=1`
+- `npm test -- --pool=threads tests/tm/ tests/jobs/tmAttachmentsApi.test.ts tests/components/JobMemoriesPanel.test.ts`
+- `npm run build`

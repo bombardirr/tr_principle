@@ -1,7 +1,11 @@
 import 'fake-indexeddb/auto'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { getTmUnit, putTmUnit } from '@/storage/tmIdb'
-import { createTmBase, getTmBase } from '@/storage/tmBasesIdb'
+import {
+  createTmBase,
+  getTmBase,
+  sharedTmLocalId,
+} from '@/storage/tmBasesIdb'
 import { setStorageAccountId } from '@/storage/scope'
 import type { TmUnit } from '@/types/tm'
 import { markTmDirty, syncTm, syncTmBase } from '@/tm/sync'
@@ -139,7 +143,10 @@ describe('per-base TM sync', () => {
   })
 
   it('pushes a non-owned dirty base with its job context', async () => {
-    const shared = unit({ id: 'shared-unit', baseId: 'shared-base' })
+    const shared = unit({
+      id: 'shared-unit',
+      baseId: sharedTmLocalId('owner-1', 'shared-base'),
+    })
     await putTmUnit(shared)
     apiFetch.mockImplementation(async (path: string) => {
       if (path === '/api/tm/bases') return { bases: [] }
@@ -151,30 +158,29 @@ describe('per-base TM sync', () => {
 
     expect(apiFetch).toHaveBeenCalledWith('/api/tm/bases/shared-base/sync?jobId=job-1', {
       method: 'POST',
-      body: JSON.stringify({ units: [shared] }),
+      body: JSON.stringify({
+        units: [{ ...shared, baseId: 'shared-base' }],
+      }),
     })
   })
 
-  it('pushes owned dirty without jobId when catalog API fails during job sync', async () => {
-    const owned = unit({ id: 'owned-unit', baseId: 'owned-offline-base' })
-    await createTmBase({ id: owned.baseId, label: 'Owned offline base' })
-    await putTmUnit(owned)
-    apiFetch.mockImplementation(async (path: string) => {
-      if (path === '/api/tm/bases') throw new Error('catalog unavailable')
-      return { ok: true, until: '2026-07-21T11:00:00.000Z' }
+  it('keeps job context for personal-tm even when it is locally owned', async () => {
+    const shared = unit({
+      id: 'shared-personal-unit',
+      baseId: 'personal-tm',
     })
+    await putTmUnit(shared)
+    apiFetch.mockResolvedValue({ ok: true, until: '2026-07-21T11:00:00.000Z' })
 
-    markTmDirty(owned.id)
-    await syncTm({ pushOnly: true, jobId: 'job-1' })
+    markTmDirty(shared.id)
+    await syncTmBase(shared.baseId, { pushOnly: true, jobId: 'job-1' })
 
-    expect(apiFetch).toHaveBeenCalledWith('/api/tm/bases/owned-offline-base/sync', {
+    expect(apiFetch).toHaveBeenCalledWith('/api/tm/bases/personal-tm/sync?jobId=job-1', {
       method: 'POST',
-      body: JSON.stringify({ units: [owned] }),
+      body: JSON.stringify({
+        units: [{ ...shared, baseId: 'personal-tm' }],
+      }),
     })
-    expect(apiFetch).not.toHaveBeenCalledWith(
-      '/api/tm/bases/owned-offline-base/sync?jobId=job-1',
-      expect.anything(),
-    )
   })
 
   it('pushes an owned dirty base without job context during a shared base sync', async () => {
@@ -226,6 +232,25 @@ describe('per-base TM sync', () => {
     })
     expect(apiFetch).toHaveBeenCalledWith(
       '/api/tm/bases/named-1/sync?since=1970-01-01T00%3A00%3A00.000Z',
+    )
+  })
+
+  it('stores pulled shared personal units under the owner namespace', async () => {
+    const remote = unit({ id: 'shared-pulled-unit', baseId: 'personal-tm' })
+    apiFetch.mockResolvedValue({
+      until: '2026-07-21T12:00:01.000Z',
+      units: [remote],
+      hasMore: false,
+    })
+
+    await syncTmBase(sharedTmLocalId('owner-1', 'personal-tm'), { jobId: 'job-1' })
+
+    expect(await getTmUnit(remote.id)).toMatchObject({
+      ...remote,
+      baseId: sharedTmLocalId('owner-1', 'personal-tm'),
+    })
+    expect(apiFetch).toHaveBeenCalledWith(
+      '/api/tm/bases/personal-tm/sync?since=1970-01-01T00%3A00%3A00.000Z&jobId=job-1',
     )
   })
 

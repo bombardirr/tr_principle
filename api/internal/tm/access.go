@@ -20,12 +20,14 @@ func (s *Store) ResolveBaseAccess(
 	baseID string,
 	jobID *uuid.UUID,
 ) (owner uuid.UUID, canRead, canWrite bool, err error) {
-	owned, err := s.baseExists(ctx, caller, baseID)
-	if err != nil {
-		return uuid.Nil, false, false, err
-	}
-	if owned {
-		return caller, true, true, nil
+	if jobID == nil {
+		owned, err := s.baseExists(ctx, caller, baseID)
+		if err != nil {
+			return uuid.Nil, false, false, err
+		}
+		if owned {
+			return caller, true, true, nil
+		}
 	}
 	if baseID == personalBaseID && jobID == nil {
 		return uuid.Nil, false, false, ErrJobIDRequired

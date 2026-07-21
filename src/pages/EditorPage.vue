@@ -42,7 +42,7 @@ import {
   importTmUnits,
   deleteTmForSegmentSource,
 } from '@/storage/tmIdb'
-import { upsertSharedTmBase } from '@/storage/tmBasesIdb'
+import { sharedTmLocalId, upsertSharedTmBase } from '@/storage/tmBasesIdb'
 import { markTmDirty, scheduleTmPush, syncTmBase } from '@/tm/sync'
 import { listGlossaryTerms } from '@/storage/glossaryIdb'
 import type { GlossaryTerm } from '@/types/glossary'
@@ -521,12 +521,16 @@ async function refreshJobTmLayers() {
     for (const attachment of attachments) {
       if (!attachment.canRead) continue
       try {
+        const localId = sharedTmLocalId(
+          attachment.ownerId || attachment.createdBy,
+          attachment.tmBaseId,
+        )
         await upsertSharedTmBase({
-          id: attachment.tmBaseId,
+          id: localId,
           label: attachment.label ?? attachment.tmBaseId,
           color: attachment.color ?? '#5b9fd4',
         })
-        await syncTmBase(attachment.tmBaseId, { jobId })
+        await syncTmBase(localId, { jobId })
       } catch {
         // Keep other readable job bases available if one sync fails.
       }

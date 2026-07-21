@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { sharedTmLocalId } from '@/storage/tmBasesIdb'
 import { PERSONAL_TM_ATTACHMENT_ID } from '@/tm/projectAttachments'
 import { resolveTmBaseAccess } from '@/tm/tmAccess'
 import type { ProjectMeta } from '@/types/project'
@@ -35,16 +36,18 @@ describe('resolveTmBaseAccess', () => {
     expect(out.writableBaseIds).toEqual([PERSONAL_TM_ATTACHMENT_ID])
   })
 
-  it('ORs job layers only in job context', () => {
+  it('namespaces job shared layers by their owner in job context', () => {
     const out = resolveTmBaseAccess({
       projectMeta: meta({ jobId: 'j1', tmAttachments: [] }),
       jobQueryId: 'j1',
-      jobShared: [{ tmBaseId: 'named-b', canRead: true, canWrite: true }],
+      jobShared: [{ tmBaseId: 'named-b', ownerId: 'owner-1', canRead: true, canWrite: true }],
       jobLocal: [{ id: PERSONAL_TM_ATTACHMENT_ID, canRead: true, canWrite: false }],
     })
     expect(out.jobContext).toBe(true)
-    expect(out.readableBaseIds.sort()).toEqual([PERSONAL_TM_ATTACHMENT_ID, 'named-b'].sort())
-    expect(out.writableBaseIds).toEqual(['named-b'])
+    expect(out.readableBaseIds.sort()).toEqual(
+      [PERSONAL_TM_ATTACHMENT_ID, sharedTmLocalId('owner-1', 'named-b')].sort(),
+    )
+    expect(out.writableBaseIds).toEqual([sharedTmLocalId('owner-1', 'named-b')])
   })
 
   it('ignores job layers without matching job query', () => {
