@@ -12,7 +12,17 @@ const EPOCH = '1970-01-01T00:00:00.000Z'
 const PUSH_PAGE_SIZE = 500
 
 let pushTimer: ReturnType<typeof setTimeout> | null = null
-let syncing = false
+let syncTail: Promise<void> = Promise.resolve()
+
+/** Serialize syncTm / syncTmBase so pushDirty never overlaps. */
+function runExclusive<T>(fn: () => Promise<T>): Promise<T> {
+  const run = syncTail.then(fn, fn)
+  syncTail = run.then(
+    () => undefined,
+    () => undefined,
+  )
+  return run
+}
 
 function syncKey(base: string, baseId: string, jobId?: string): string | null {
   const id = getStorageAccountId()
@@ -198,20 +208,17 @@ export async function syncTmBase(
   opts?: { jobId?: string; pushOnly?: boolean },
 ): Promise<void> {
   if (!getStorageAccountId()) return
-  if (!opts?.pushOnly) await pullAll(baseId, opts?.jobId)
-  await bucketDirtyUnits()
-  await pushDirty(baseId, opts?.jobId)
+  return runExclusive(async () => {
+    if (!opts?.pushOnly) await pullAll(baseId, opts?.jobId)
+    await bucketDirtyUnits()
+    await pushDirty(baseId, opts?.jobId)
+  })
 }
 
-/** Pull then push (or push-only). Safe to call frequently; overlaps coalesce. */
+/** Pull then push (or push-only). Safe to call frequently; overlaps queue. */
 export async function syncTm(opts?: { pushOnly?: boolean }): Promise<void> {
   if (!getStorageAccountId()) return
-  if (syncing) {
-    if (!opts?.pushOnly) scheduleTmPush(500)
-    return
-  }
-  syncing = true
-  try {
+  return runExclusive(async () => {
     if (!opts?.pushOnly) {
       try {
         const bases = await listTmBasesApi()
@@ -240,7 +247,5 @@ export async function syncTm(opts?: { pushOnly?: boolean }): Promise<void> {
       }
       await bucketDirtyUnits()
     }
-  } finally {
-    syncing = false
-  }
+  })
 }

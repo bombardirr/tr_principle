@@ -52,6 +52,33 @@ describe('per-base TM sync', () => {
     })
   })
 
+  it('serializes syncTm and syncTmBase so stale pushes cannot drop newer dirty ids', async () => {
+    const first = unit({ id: 'first-unit' })
+    const second = unit({ id: 'second-unit' })
+    await Promise.all([putTmUnit(first), putTmUnit(second)])
+    let releaseFirstPush!: () => void
+    const firstPush = new Promise<void>((resolve) => {
+      releaseFirstPush = resolve
+    })
+    apiFetch.mockImplementation(async (_path: string, init?: RequestInit) => {
+      if (init?.method === 'POST' && apiFetch.mock.calls.length === 1) {
+        await firstPush
+      }
+      return { ok: true, until: '2026-07-21T11:00:00.000Z' }
+    })
+
+    markTmDirty(first.id)
+    const tmSync = syncTm({ pushOnly: true })
+    await vi.waitFor(() => expect(apiFetch).toHaveBeenCalledTimes(1))
+    markTmDirty(second.id)
+    const baseSync = syncTmBase(first.baseId, { pushOnly: true })
+    releaseFirstPush()
+    await Promise.all([tmSync, baseSync])
+
+    expect(apiFetch).toHaveBeenCalledTimes(2)
+    expect(JSON.parse(apiFetch.mock.calls[1]![1].body).units).toEqual([second])
+  })
+
   it('preserves dirty units added while a push is in flight', async () => {
     const first = unit({ id: 'first-unit' })
     const second = unit({ id: 'second-unit' })
