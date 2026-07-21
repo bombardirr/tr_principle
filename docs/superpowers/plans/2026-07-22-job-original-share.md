@@ -61,7 +61,7 @@
 - [ ] **Step 1: Add migration** `api/migrations/019_job_originals.sql`
 
 ```sql
--- +migrate Up
+-- +goose Up
 CREATE TABLE IF NOT EXISTS job_originals (
   job_id UUID PRIMARY KEY REFERENCES jobs(id) ON DELETE CASCADE,
   filename TEXT NOT NULL,
@@ -72,11 +72,9 @@ CREATE TABLE IF NOT EXISTS job_originals (
   uploaded_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- +migrate Down
+-- +goose Down
 DROP TABLE IF EXISTS job_originals;
 ```
-
-(Match the migrate comment style used in neighboring migrations — if the repo uses only `Up` without goose headers, copy `018_tm_bases.sql` exactly.)
 
 - [ ] **Step 2: Extend `Job` in `types.go`**
 
