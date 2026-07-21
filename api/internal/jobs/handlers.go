@@ -105,7 +105,7 @@ func (h *Handler) Patch(w http.ResponseWriter, r *http.Request) {
 	if !decodeJSON(w, r, &body) {
 		return
 	}
-	job, err := h.Store.UpdateJob(r.Context(), jobID, user.ID, JobPatch{
+	job, originalRevoked, err := h.Store.UpdateJob(r.Context(), jobID, user.ID, JobPatch{
 		Title:          body.Title,
 		SourceLang:     body.SourceLang,
 		TargetLang:     body.TargetLang,
@@ -120,6 +120,14 @@ func (h *Handler) Patch(w http.ResponseWriter, r *http.Request) {
 	case err != nil:
 		writeError(w, http.StatusInternalServerError, "server error")
 	default:
+		if originalRevoked {
+			if _, abs, pathErr := h.originalAbsPath(jobID); pathErr == nil {
+				if removeErr := os.Remove(abs); removeErr != nil && !os.IsNotExist(removeErr) {
+					writeError(w, http.StatusInternalServerError, "server error")
+					return
+				}
+			}
+		}
 		writeJSON(w, http.StatusOK, job)
 	}
 }

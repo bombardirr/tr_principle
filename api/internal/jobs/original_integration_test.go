@@ -126,6 +126,46 @@ func TestJobOriginalShare(t *testing.T) {
 	if _, err := os.Stat(originalPath); !os.IsNotExist(err) {
 		t.Fatalf("original file after job delete: err = %v, want not exist", err)
 	}
+
+	revokeOriginalID := uuid.New()
+	requestJSON(t, http.MethodPost, srv.URL+"/api/jobs", ownerToken, map[string]any{
+		"id":             revokeOriginalID,
+		"title":          "Revoke changed original",
+		"sourceFilename": "source.docx",
+		"sourceHash":     hash,
+	}, http.StatusCreated)
+	putOriginal(t, srv.URL, revokeOriginalID, ownerToken, payload, "manual.docx", http.StatusOK)
+	revokePath := filepath.Join(backupDir, "job-originals", revokeOriginalID.String()+".docx")
+
+	sameHash := requestJSON(t, http.MethodPatch, srv.URL+"/api/jobs/"+revokeOriginalID.String(), ownerToken, map[string]any{
+		"sourceHash": hash,
+	}, http.StatusOK)
+	if sameHash["hasOriginal"] != true {
+		t.Fatalf("same source hash hasOriginal = %v, want true", sameHash["hasOriginal"])
+	}
+	headOriginal(t, srv.URL, revokeOriginalID, ownerToken, http.StatusOK)
+
+	noHash := requestJSON(t, http.MethodPatch, srv.URL+"/api/jobs/"+revokeOriginalID.String(), ownerToken, map[string]any{
+		"title": "Original unchanged",
+	}, http.StatusOK)
+	if noHash["hasOriginal"] != true {
+		t.Fatalf("missing source hash hasOriginal = %v, want true", noHash["hasOriginal"])
+	}
+	headOriginal(t, srv.URL, revokeOriginalID, ownerToken, http.StatusOK)
+
+	updatedPayload := []byte("updated DOCX payload")
+	updatedSum := sha256.Sum256(updatedPayload)
+	updatedHash := hex.EncodeToString(updatedSum[:])
+	changedHash := requestJSON(t, http.MethodPatch, srv.URL+"/api/jobs/"+revokeOriginalID.String(), ownerToken, map[string]any{
+		"sourceHash": updatedHash,
+	}, http.StatusOK)
+	if changedHash["hasOriginal"] != false {
+		t.Fatalf("changed source hash hasOriginal = %v, want false", changedHash["hasOriginal"])
+	}
+	getOriginal(t, srv.URL, revokeOriginalID, ownerToken, http.StatusNotFound)
+	if _, err := os.Stat(revokePath); !os.IsNotExist(err) {
+		t.Fatalf("original file after source hash change: err = %v, want not exist", err)
+	}
 }
 
 func acceptInviteForRole(t *testing.T, baseURL string, jobID uuid.UUID, ownerToken, memberToken, role string) {
