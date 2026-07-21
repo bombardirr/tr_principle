@@ -8,6 +8,8 @@ export type Job = {
   targetLang: string
   sourceFilename: string
   sourceHash: string
+  hasOriginal?: boolean
+  originalFilename?: string
   createdAt: string
   updatedAt: string
   archivedAt?: string | null
