@@ -42,7 +42,8 @@ import {
   importTmUnits,
   deleteTmForSegmentSource,
 } from '@/storage/tmIdb'
-import { markTmDirty } from '@/tm/sync'
+import { upsertSharedTmBase } from '@/storage/tmBasesIdb'
+import { markTmDirty, scheduleTmPush, syncTmBase } from '@/tm/sync'
 import { listGlossaryTerms } from '@/storage/glossaryIdb'
 import type { GlossaryTerm } from '@/types/glossary'
 import {
@@ -155,6 +156,12 @@ function clearTmAutosave(segId: string) {
   const next = new Set(tmAutosaveIds.value)
   next.delete(segId)
   tmAutosaveIds.value = next
+}
+
+function markEditorTmDirty(...ids: string[]) {
+  markTmDirty(...ids)
+  const jobId = tmBaseAccess.value.jobContext ? (jobQueryId.value ?? undefined) : undefined
+  scheduleTmPush(1500, jobId)
 }
 
 const done = computed(() => (record.value ? countTranslatedSegments(record.value.segments) : 0))
@@ -446,7 +453,7 @@ async function persistNow(): Promise<void> {
         onlyIds,
       },
     )
-    markTmDirty(...dirty)
+    markEditorTmDirty(...dirty)
     await reloadPersonalTmUnits()
     tmAutosaveIds.value = new Set()
   }
@@ -509,7 +516,21 @@ async function refreshJobTmLayers() {
     return
   }
   try {
-    jobSharedAttachments.value = await listJobTmAttachmentsApi(jobId)
+    const attachments = await listJobTmAttachmentsApi(jobId)
+    jobSharedAttachments.value = attachments
+    for (const attachment of attachments) {
+      if (!attachment.canRead) continue
+      try {
+        await upsertSharedTmBase({
+          id: attachment.tmBaseId,
+          label: attachment.label ?? attachment.tmBaseId,
+          color: attachment.color ?? '#5b9fd4',
+        })
+        await syncTmBase(attachment.tmBaseId, { jobId })
+      } catch {
+        // Keep other readable job bases available if one sync fails.
+      }
+    }
   } catch {
     jobSharedAttachments.value = []
   }
@@ -828,7 +849,7 @@ async function removeSegmentFromTm(seg: Segment) {
       targetLang: record.value.meta.targetLang,
       baseIds: writableBaseIds.value,
     })
-    markTmDirty(...dirty)
+    markEditorTmDirty(...dirty)
     await reloadPersonalTmUnits()
   } catch (e) {
     setSaveError(e)
@@ -1206,7 +1227,7 @@ async function saveSegmentToTmById(segId: string) {
       actor: publicActorLabel(user.value),
       onlyIds: [segId],
     })
-    markTmDirty(...dirty)
+    markEditorTmDirty(...dirty)
     clearTmAutosave(segId)
     await reloadPersonalTmUnits()
   } catch (e) {
@@ -1250,7 +1271,7 @@ async function onTmxImportChange(e: Event) {
       const result = await importTmUnits(stamped, { baseId })
       allIds.push(...result.ids)
     }
-    markTmDirty(...allIds)
+    markEditorTmDirty(...allIds)
     await reloadPersonalTmUnits()
     notice.value = t('editor.tmxImported', { count: units.length })
     error.value = ''

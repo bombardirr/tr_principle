@@ -110,6 +110,9 @@ export type JobTmAttachment = {
   id: string
   jobId: string
   tmBaseId: string
+  label?: string
+  color?: string
+  ownerId?: string
   canRead: boolean
   canWrite: boolean
   canExport: boolean

@@ -17,6 +17,8 @@ import {
 } from '@/tm/jobAttachments'
 import { PERSONAL_TM_ATTACHMENT_ID } from '@/tm/projectAttachments'
 import { listTmCatalog } from '@/tm/tmBasesCatalog'
+import { upsertSharedTmBase } from '@/storage/tmBasesIdb'
+import { syncTmBase } from '@/tm/sync'
 import type { TmAttachmentCatalogItem } from '@/tm/projectAttachments'
 import type { JobRole, JobTmAttachment } from '@/types/job'
 import type { ProjectTmAttachmentId } from '@/types/project'
@@ -77,6 +79,16 @@ async function refreshShared(options: { keepError?: boolean } = {}) {
     const attachments = await listJobTmAttachmentsApi(jobId)
     if (!isCurrentRequest(jobId, generation, requestGeneration)) return
     shared.value = attachments
+    for (const attachment of attachments) {
+      if (!attachment.canRead) continue
+      await upsertSharedTmBase({
+        id: attachment.tmBaseId,
+        label: attachment.label ?? attachment.tmBaseId,
+        color: attachment.color ?? '#5b9fd4',
+      })
+      await syncTmBase(attachment.tmBaseId, { jobId })
+      if (!isCurrentRequest(jobId, generation, requestGeneration)) return
+    }
   } catch (error) {
     if (!isCurrentRequest(jobId, generation, requestGeneration)) return
     loadError.value = error instanceof Error ? error.message : String(error)
@@ -96,9 +108,11 @@ function catalogItem(id: string) {
   return catalog.value.find(item => item.id === id)
 }
 
-function itemLabel(id: string) {
+function itemLabel(id: string, sharedLabel?: string) {
   const item = catalogItem(id)
-  return id === PERSONAL_TM_ATTACHMENT_ID ? t('projects.tmPersonalBase') : (item?.label ?? id)
+  return id === PERSONAL_TM_ATTACHMENT_ID
+    ? t('projects.tmPersonalBase')
+    : (sharedLabel ?? item?.label ?? id)
 }
 
 function openPick(target: 'shared' | 'local') {
@@ -235,11 +249,16 @@ function toggleLocal(
         <article v-for="attachment in shared" :key="attachment.id" class="base-card">
           <span
             class="glyph"
-            :style="{ '--tm-color': catalogItem(attachment.tmBaseId)?.color ?? 'var(--accent)' }"
+            :style="{
+              '--tm-color':
+                attachment.color ?? catalogItem(attachment.tmBaseId)?.color ?? 'var(--accent)',
+            }"
           >
             <EditorGlyph :name="catalogItem(attachment.tmBaseId)?.glyph ?? 'tm'" />
           </span>
-          <strong class="base-name">{{ itemLabel(attachment.tmBaseId) }}</strong>
+          <strong class="base-name">
+            {{ itemLabel(attachment.tmBaseId, attachment.label) }}
+          </strong>
           <label class="permission" :title="t('projects.tmPermRead')">
             <span>{{ t('projects.tmPermReadShort') }}</span>
             <input

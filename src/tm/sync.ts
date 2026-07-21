@@ -89,7 +89,7 @@ function writeDirtyUnits(ids: Set<string>) {
   localStorage.setItem(key, JSON.stringify([...ids]))
 }
 
-async function bucketDirtyUnits(): Promise<void> {
+async function bucketDirtyUnits(jobId?: string, ownedBaseIds?: Set<string>): Promise<void> {
   const pending = readDirtyUnits()
   if (!pending.size) return
   const buckets = new Map<string, string[]>()
@@ -102,7 +102,8 @@ async function bucketDirtyUnits(): Promise<void> {
     buckets.set(baseId, bucket)
   }
   for (const [baseId, bucket] of buckets) {
-    addDirty(baseId, bucket)
+    const bucketJobId = jobId && !ownedBaseIds?.has(baseId) ? jobId : undefined
+    addDirty(baseId, bucket, bucketJobId)
   }
   const current = readDirtyUnits()
   for (const id of pending) current.delete(id)
@@ -117,11 +118,11 @@ export function markTmDirty(...ids: string[]) {
   scheduleTmPush()
 }
 
-export function scheduleTmPush(delayMs = 1500) {
+export function scheduleTmPush(delayMs = 1500, jobId?: string) {
   if (pushTimer) clearTimeout(pushTimer)
   pushTimer = setTimeout(() => {
     pushTimer = null
-    void syncTm({ pushOnly: true })
+    void syncTm({ pushOnly: true, jobId })
   }, delayMs)
 }
 
@@ -160,7 +161,11 @@ async function pullAll(baseId: string, jobId?: string): Promise<void> {
   }
 }
 
-async function pushDirty(baseId: string, jobId?: string): Promise<void> {
+async function pushDirty(
+  baseId: string,
+  jobId?: string,
+  ownedBaseIds?: Set<string>,
+): Promise<void> {
   while (true) {
     const dirty = readDirty(baseId, jobId)
     if (!dirty.size) return
@@ -185,11 +190,11 @@ async function pushDirty(baseId: string, jobId?: string): Promise<void> {
       for (const unit of units) current.delete(unit.id)
       writeDirty(baseId, current, jobId)
     }
-    await bucketDirtyUnits()
+    await bucketDirtyUnits(jobId, ownedBaseIds)
   }
 }
 
-function dirtyOwnedBaseIds(): string[] {
+function dirtyBaseIds(jobId?: string): string[] {
   const accountId = getStorageAccountId()
   if (!accountId || typeof localStorage === 'undefined') return []
   const prefix = `${DIRTY_BASE}:${accountId}:`
@@ -198,7 +203,14 @@ function dirtyOwnedBaseIds(): string[] {
     const key = localStorage.key(i)
     if (!key?.startsWith(prefix)) continue
     const suffix = key.slice(prefix.length)
-    if (suffix && !suffix.includes(':') && readDirty(suffix).size) ids.add(suffix)
+    if (jobId) {
+      const jobSuffix = `:${jobId}`
+      if (!suffix.endsWith(jobSuffix)) continue
+      const baseId = suffix.slice(0, -jobSuffix.length)
+      if (baseId && readDirty(baseId, jobId).size) ids.add(baseId)
+    } else if (suffix && !suffix.includes(':') && readDirty(suffix).size) {
+      ids.add(suffix)
+    }
   }
   return [...ids]
 }
@@ -210,15 +222,25 @@ export async function syncTmBase(
   if (!getStorageAccountId()) return
   return runExclusive(async () => {
     if (!opts?.pushOnly) await pullAll(baseId, opts?.jobId)
-    await bucketDirtyUnits()
+    await bucketDirtyUnits(opts?.jobId)
     await pushDirty(baseId, opts?.jobId)
   })
 }
 
 /** Pull then push (or push-only). Safe to call frequently; overlaps queue. */
-export async function syncTm(opts?: { pushOnly?: boolean }): Promise<void> {
+export async function syncTm(opts?: { pushOnly?: boolean; jobId?: string }): Promise<void> {
   if (!getStorageAccountId()) return
   return runExclusive(async () => {
+    let ownedBaseIds: Set<string> | undefined
+    if (opts?.jobId) {
+      try {
+        const bases = await listTmBasesApi()
+        ownedBaseIds = new Set(bases.map(base => base.id))
+        await upsertTmBasesFromCloud(bases)
+      } catch {
+        ownedBaseIds = new Set()
+      }
+    }
     if (!opts?.pushOnly) {
       try {
         const bases = await listTmBasesApi()
@@ -234,18 +256,23 @@ export async function syncTm(opts?: { pushOnly?: boolean }): Promise<void> {
         // Catalog failure must not prevent locally dirty bases from pushing.
       }
     }
-    await bucketDirtyUnits()
+    await bucketDirtyUnits(opts?.jobId, ownedBaseIds)
     const attempted = new Set<string>()
     while (true) {
-      const baseId = dirtyOwnedBaseIds().find((id) => !attempted.has(id))
+      const ownedBaseId = dirtyBaseIds().find((id) => !attempted.has(`owned:${id}`))
+      const sharedBaseId = opts?.jobId
+        ? dirtyBaseIds(opts.jobId).find((id) => !attempted.has(`shared:${id}`))
+        : undefined
+      const baseId = ownedBaseId ?? sharedBaseId
       if (!baseId) break
-      attempted.add(baseId)
+      const jobId = ownedBaseId ? undefined : opts?.jobId
+      attempted.add(`${jobId ? 'shared' : 'owned'}:${baseId}`)
       try {
-        await pushDirty(baseId)
+        await pushDirty(baseId, jobId, ownedBaseIds)
       } catch {
         // Leave this base dirty and continue with the remaining bases.
       }
-      await bucketDirtyUnits()
+      await bucketDirtyUnits(opts?.jobId, ownedBaseIds)
     }
   })
 }

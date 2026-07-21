@@ -1,4 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+
+const { syncTmBase } = vi.hoisted(() => ({
+  syncTmBase: vi.fn(),
+}))
+
+vi.mock('../../src/tm/sync', () => ({ syncTmBase }))
+
 import {
   createJobTmAttachment,
   deleteJobTmAttachment,
@@ -11,6 +18,8 @@ vi.stubGlobal('fetch', fetchMock)
 
 beforeEach(() => {
   fetchMock.mockReset()
+  syncTmBase.mockReset()
+  syncTmBase.mockResolvedValue(undefined)
   localStorage.setItem('appzac-auth-token', 'tok')
 })
 
@@ -65,6 +74,7 @@ describe('tmAttachmentsApi', () => {
     const item = await createJobTmAttachment('j1', { tmBaseId: 'personal-tm', canWrite: true })
     expect(item.id).toBe('a1')
     expect(fetchMock.mock.calls[0]![1]).toMatchObject({ method: 'POST' })
+    expect(syncTmBase).toHaveBeenCalledWith('personal-tm', { pushOnly: true })
   })
 
   it('patches and deletes', async () => {

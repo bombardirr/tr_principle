@@ -138,6 +138,23 @@ describe('per-base TM sync', () => {
     })
   })
 
+  it('pushes a non-owned dirty base with its job context', async () => {
+    const shared = unit({ id: 'shared-unit', baseId: 'shared-base' })
+    await putTmUnit(shared)
+    apiFetch.mockImplementation(async (path: string) => {
+      if (path === '/api/tm/bases') return { bases: [] }
+      return { ok: true, until: '2026-07-21T11:00:00.000Z' }
+    })
+
+    markTmDirty(shared.id)
+    await syncTm({ pushOnly: true, jobId: 'job-1' })
+
+    expect(apiFetch).toHaveBeenCalledWith('/api/tm/bases/shared-base/sync?jobId=job-1', {
+      method: 'POST',
+      body: JSON.stringify({ units: [shared] }),
+    })
+  })
+
   it('merges a newer remote unit with last-write-wins', async () => {
     const local = unit({ id: 'shared-unit', target: 'old' })
     const remote = unit({

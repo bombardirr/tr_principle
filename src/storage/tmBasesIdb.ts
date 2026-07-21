@@ -83,6 +83,26 @@ export async function upsertTmBasesFromCloud(bases: TmBaseApiRecord[]): Promise<
   await tx.done
 }
 
+/** Cache catalog metadata for a readable job-shared base. Detach does not remove it. */
+export async function upsertSharedTmBase(input: {
+  id: string
+  label: string
+  color: string
+}): Promise<TmBaseRecord> {
+  const db = await getDb()
+  const existing = await db.get('bases', input.id)
+  const now = new Date().toISOString()
+  const row: TmBaseRecord = {
+    id: input.id,
+    label: input.label,
+    color: input.color,
+    createdAt: existing?.createdAt ?? now,
+    updatedAt: now,
+  }
+  await db.put('bases', row)
+  return row
+}
+
 export async function createTmBase(input: { label: string; id?: string }): Promise<TmBaseRecord> {
   await ensurePersonalTmBase()
   const label = input.label.trim()

@@ -33,7 +33,17 @@ vi.mock('../../src/jobs/tmAttachmentsApi', () => ({
   deleteJobTmAttachment: vi.fn(async () => undefined),
 }))
 
+vi.mock('../../src/storage/tmBasesIdb', () => ({
+  upsertSharedTmBase: vi.fn(async () => undefined),
+}))
+
+vi.mock('../../src/tm/sync', () => ({
+  syncTmBase: vi.fn(async () => undefined),
+}))
+
 import JobMemoriesPanel from '../../src/components/JobMemoriesPanel.vue'
+import { upsertSharedTmBase } from '../../src/storage/tmBasesIdb'
+import { syncTmBase } from '../../src/tm/sync'
 import {
   createJobTmAttachment,
   deleteJobTmAttachment,
@@ -198,6 +208,51 @@ describe('JobMemoriesPanel', () => {
     ownerHost.querySelector<HTMLButtonElement>('[data-testid="job-tm-shared-detach"]')!.click()
     await settle()
     expect(deleteJobTmAttachment).toHaveBeenCalledWith('job-1', 'att-server')
+  })
+
+  it('caches and pulls each readable shared base in the job context', async () => {
+    vi.mocked(listJobTmAttachmentsApi).mockResolvedValue([
+      {
+        id: 'att-readable',
+        jobId: 'job-1',
+        tmBaseId: 'shared-base',
+        label: 'Shared base',
+        color: '#123456',
+        ownerId: 'owner-1',
+        canRead: true,
+        canWrite: false,
+        canExport: false,
+        canClone: false,
+        createdBy: 'owner-1',
+        createdAt: '2026-01-01T00:00:00Z',
+        updatedAt: '2026-01-01T00:00:00Z',
+      },
+      {
+        id: 'att-hidden',
+        jobId: 'job-1',
+        tmBaseId: 'hidden-base',
+        canRead: false,
+        canWrite: false,
+        canExport: false,
+        canClone: false,
+        createdBy: 'owner-1',
+        createdAt: '2026-01-01T00:00:00Z',
+        updatedAt: '2026-01-01T00:00:00Z',
+      },
+    ])
+
+    mountPanel()
+
+    await vi.waitFor(() => {
+      expect(upsertSharedTmBase).toHaveBeenCalledWith({
+        id: 'shared-base',
+        label: 'Shared base',
+        color: '#123456',
+      })
+      expect(syncTmBase).toHaveBeenCalledWith('shared-base', { jobId: 'job-1' })
+    })
+    expect(document.body.textContent).toContain('Shared base')
+    expect(syncTmBase).not.toHaveBeenCalledWith('hidden-base', expect.anything())
   })
 
   it('lets a member attach and mutate a local extra without server writes', async () => {

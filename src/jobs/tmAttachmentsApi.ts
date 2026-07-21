@@ -1,4 +1,5 @@
 import { apiFetch } from '@/auth/api'
+import { syncTmBase } from '@/tm/sync'
 import type {
   CreateJobTmAttachmentInput,
   JobTmAttachment,
@@ -13,10 +14,12 @@ export async function listJobTmAttachmentsApi(jobId: string) {
 }
 
 export async function createJobTmAttachment(jobId: string, input: CreateJobTmAttachmentInput) {
-  return apiFetch<JobTmAttachment>(`/api/jobs/${jobId}/tm-attachments`, {
+  const row = await apiFetch<JobTmAttachment>(`/api/jobs/${jobId}/tm-attachments`, {
     method: 'POST',
     body: JSON.stringify(input),
   })
+  await syncTmBase(input.tmBaseId, { pushOnly: true })
+  return row
 }
 
 export async function patchJobTmAttachment(
