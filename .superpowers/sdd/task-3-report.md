@@ -80,3 +80,16 @@ After the fixes:
 - IDE diagnostics reported no errors in `src/tm/sync.ts` or `tests/tm/sync.base.test.ts`.
 
 Task 4 was not started.
+
+## Concurrency fix (sync mutex)
+
+- Replaced the `syncing` boolean with a shared `syncTail` promise chain (`runExclusive`) so `syncTm` and `syncTmBase` never run `pushDirty` concurrently.
+- Overlapping callers now queue and await the in-flight sync instead of returning early or racing.
+- Added regression test: overlapping `syncTm({ pushOnly: true })` and `syncTmBase(..., { pushOnly: true })` with a unit dirtied mid-push.
+
+Commit: `897ecb0 fix: serialize TM sync so pushDirty never overlaps`
+
+### Concurrency TDD evidence
+
+- `node node_modules/vitest/vitest.mjs run --pool=threads tests/tm/sync.base.test.ts`
+  - 1 file passed, 8 tests passed
