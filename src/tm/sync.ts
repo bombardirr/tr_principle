@@ -1,7 +1,9 @@
 import { getStorageAccountId } from '@/storage/scope'
 import { getTmUnit, putTmUnit, removeTmUnit } from '@/storage/tmIdb'
+import { upsertTmBasesFromCloud } from '@/storage/tmBasesIdb'
 import type { TmUnit } from '@/types/tm'
-import { pullTmSync, pushTmSync } from '@/tm/api'
+import { listTmBasesApi, pullTmBaseSync, pushTmBaseSync } from '@/tm/api'
+import { PERSONAL_TM_ATTACHMENT_ID } from '@/tm/projectAttachments'
 
 const SINCE_BASE = 'appzac-tm-sync-since'
 const DIRTY_BASE = 'appzac-tm-sync-dirty'
@@ -10,26 +12,26 @@ const EPOCH = '1970-01-01T00:00:00.000Z'
 let pushTimer: ReturnType<typeof setTimeout> | null = null
 let syncing = false
 
-function accountKey(base: string): string | null {
+function syncKey(base: string, baseId: string, jobId?: string): string | null {
   const id = getStorageAccountId()
   if (!id) return null
-  return `${base}:${id}`
+  return `${base}:${id}:${baseId}${jobId ? `:${jobId}` : ''}`
 }
 
-function readSince(): string {
-  const key = accountKey(SINCE_BASE)
+function readSince(baseId: string, jobId?: string): string {
+  const key = syncKey(SINCE_BASE, baseId, jobId)
   if (!key || typeof localStorage === 'undefined') return EPOCH
   return localStorage.getItem(key) || EPOCH
 }
 
-function writeSince(until: string) {
-  const key = accountKey(SINCE_BASE)
+function writeSince(baseId: string, until: string, jobId?: string) {
+  const key = syncKey(SINCE_BASE, baseId, jobId)
   if (!key || typeof localStorage === 'undefined') return
   localStorage.setItem(key, until)
 }
 
-function readDirty(): Set<string> {
-  const key = accountKey(DIRTY_BASE)
+function readDirty(baseId: string, jobId?: string): Set<string> {
+  const key = syncKey(DIRTY_BASE, baseId, jobId)
   if (!key || typeof localStorage === 'undefined') return new Set()
   try {
     const raw = localStorage.getItem(key)
@@ -42,21 +44,32 @@ function readDirty(): Set<string> {
   }
 }
 
-function writeDirty(ids: Set<string>) {
-  const key = accountKey(DIRTY_BASE)
+function writeDirty(baseId: string, ids: Set<string>, jobId?: string) {
+  const key = syncKey(DIRTY_BASE, baseId, jobId)
   if (!key || typeof localStorage === 'undefined') return
   localStorage.setItem(key, JSON.stringify([...ids]))
 }
 
-function addDirty(...ids: string[]) {
+function addDirty(baseId: string, ids: string[], jobId?: string) {
   if (!ids.length) return
-  const dirty = readDirty()
+  const dirty = readDirty(baseId, jobId)
   for (const id of ids) dirty.add(id)
-  writeDirty(dirty)
+  writeDirty(baseId, dirty, jobId)
 }
 
-export function markTmDirty(...ids: string[]) {
-  addDirty(...ids)
+export async function markTmDirty(...ids: string[]) {
+  const buckets = new Map<string, string[]>()
+  for (const id of ids) {
+    const unit = await getTmUnit(id)
+    if (!unit) continue
+    const baseId = unit.baseId || PERSONAL_TM_ATTACHMENT_ID
+    const bucket = buckets.get(baseId) ?? []
+    bucket.push(id)
+    buckets.set(baseId, bucket)
+  }
+  for (const [baseId, bucket] of buckets) {
+    addDirty(baseId, bucket)
+  }
   scheduleTmPush()
 }
 
@@ -72,10 +85,10 @@ function newer(a: string, b: string): boolean {
   return a > b
 }
 
-async function mergeRemote(unit: TmUnit) {
+async function mergeRemote(unit: TmUnit, jobId?: string) {
   const local = await getTmUnit(unit.id)
   if (local && newer(local.updatedAt, unit.updatedAt)) {
-    addDirty(local.id)
+    addDirty(local.baseId || PERSONAL_TM_ATTACHMENT_ID, [local.id], jobId)
     return
   }
   if (unit.deletedAt) {
@@ -85,26 +98,26 @@ async function mergeRemote(unit: TmUnit) {
   await putTmUnit({ ...unit, deletedAt: unit.deletedAt ?? null })
 }
 
-async function pullAll(): Promise<void> {
-  let since = readSince()
+async function pullAll(baseId: string, jobId?: string): Promise<void> {
+  let since = readSince(baseId, jobId)
   for (let i = 0; i < 50; i++) {
-    const res = await pullTmSync(since)
+    const res = await pullTmBaseSync(baseId, since, jobId)
     for (const unit of res.units) {
-      await mergeRemote(unit)
+      await mergeRemote(unit, jobId)
     }
     if (res.hasMore && res.units.length) {
       const last = res.units[res.units.length - 1]!
       since = last.updatedAt
-      writeSince(since)
+      writeSince(baseId, since, jobId)
       continue
     }
-    writeSince(res.until)
+    writeSince(baseId, res.until, jobId)
     break
   }
 }
 
-async function pushDirty(): Promise<void> {
-  const dirty = readDirty()
+async function pushDirty(baseId: string, jobId?: string): Promise<void> {
+  const dirty = readDirty(baseId, jobId)
   if (!dirty.size) return
   const units: TmUnit[] = []
   const missing: string[] = []
@@ -120,12 +133,35 @@ async function pushDirty(): Promise<void> {
     for (const id of missing) dirty.delete(id)
   }
   if (!units.length) {
-    writeDirty(dirty)
+    writeDirty(baseId, dirty, jobId)
     return
   }
-  await pushTmSync(units)
+  await pushTmBaseSync(baseId, units, jobId)
   for (const u of units) dirty.delete(u.id)
-  writeDirty(dirty)
+  writeDirty(baseId, dirty, jobId)
+}
+
+function dirtyOwnedBaseIds(): string[] {
+  const accountId = getStorageAccountId()
+  if (!accountId || typeof localStorage === 'undefined') return []
+  const prefix = `${DIRTY_BASE}:${accountId}:`
+  const ids = new Set<string>()
+  for (let i = 0; i < localStorage.length; i++) {
+    const key = localStorage.key(i)
+    if (!key?.startsWith(prefix)) continue
+    const suffix = key.slice(prefix.length)
+    if (suffix && !suffix.includes(':') && readDirty(suffix).size) ids.add(suffix)
+  }
+  return [...ids]
+}
+
+export async function syncTmBase(
+  baseId: string,
+  opts?: { jobId?: string; pushOnly?: boolean },
+): Promise<void> {
+  if (!getStorageAccountId()) return
+  if (!opts?.pushOnly) await pullAll(baseId, opts?.jobId)
+  await pushDirty(baseId, opts?.jobId)
 }
 
 /** Pull then push (or push-only). Safe to call frequently; overlaps coalesce. */
@@ -138,9 +174,15 @@ export async function syncTm(opts?: { pushOnly?: boolean }): Promise<void> {
   syncing = true
   try {
     if (!opts?.pushOnly) {
-      await pullAll()
+      const bases = await listTmBasesApi()
+      await upsertTmBasesFromCloud(bases)
+      for (const base of bases) {
+        await pullAll(base.id)
+      }
     }
-    await pushDirty()
+    for (const baseId of dirtyOwnedBaseIds()) {
+      await pushDirty(baseId)
+    }
   } catch {
     // Silent retry on next login / dirty write / schedule.
   } finally {

@@ -1,6 +1,7 @@
 import { openDB, type DBSchema, type IDBPDatabase } from 'idb'
 import { onStorageAccountChange, scopedDbName } from '@/storage/scope'
 import { PERSONAL_TM_ATTACHMENT_ID, TM_BASE_COLORS } from '@/tm/projectAttachments'
+import { upsertTmBaseApi, type TmBaseApiRecord } from '@/tm/api'
 
 export type TmBaseRecord = {
   id: string
@@ -73,6 +74,15 @@ export async function getTmBase(id: string): Promise<TmBaseRecord | undefined> {
   return db.get('bases', id)
 }
 
+export async function upsertTmBasesFromCloud(bases: TmBaseApiRecord[]): Promise<void> {
+  const db = await getDb()
+  const tx = db.transaction('bases', 'readwrite')
+  for (const base of bases) {
+    await tx.store.put(base)
+  }
+  await tx.done
+}
+
 export async function createTmBase(input: { label: string; id?: string }): Promise<TmBaseRecord> {
   await ensurePersonalTmBase()
   const label = input.label.trim()
@@ -86,6 +96,11 @@ export async function createTmBase(input: { label: string; id?: string }): Promi
   const color = TM_BASE_COLORS[bases.length % TM_BASE_COLORS.length]!
   const row: TmBaseRecord = { id, label, color, createdAt: now, updatedAt: now }
   await db.put('bases', row)
+  try {
+    await upsertTmBaseApi({ id, label, color })
+  } catch {
+    // Keep local creation usable offline.
+  }
   return row
 }
 
