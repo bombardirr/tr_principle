@@ -87,18 +87,6 @@ func (s *Store) PullByBase(ctx context.Context, ownerID uuid.UUID, baseID string
 	return out, hasMore, nil
 }
 
-func (s *Store) EnsureBase(ctx context.Context, ownerID uuid.UUID, id, label, color string) error {
-	if color == "" {
-		color = "#5b9fd4"
-	}
-	_, err := s.pool.Exec(ctx, `
-		INSERT INTO tm_bases (owner_id, id, label, color, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, now(), now())
-		ON CONFLICT (owner_id, id) DO NOTHING`,
-		ownerID, id, label, color)
-	return err
-}
-
 func (s *Store) UpsertLWW(ctx context.Context, userID uuid.UUID, unit Unit) error {
 	id, err := uuid.Parse(unit.ID)
 	if err != nil {

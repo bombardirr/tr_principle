@@ -48,13 +48,14 @@ func main() {
 		Tokens:  tokens,
 		Limiter: auth.NewRateLimiter(30, time.Minute),
 	}
-	tmHandler := &tm.Handler{Store: tm.NewStore(pool)}
+	tmStore := tm.NewStore(pool)
+	tmHandler := &tm.Handler{Store: tmStore}
 	glossaryHandler := &glossary.Handler{Store: glossary.NewStore(pool)}
 	projectsHandler := &projects.Handler{
 		Store:     projects.NewStore(pool),
 		BackupDir: cfg.BackupDir,
 	}
-	jobsHandler := &jobs.Handler{Store: jobs.NewStore(pool)}
+	jobsHandler := &jobs.Handler{Store: jobs.NewStore(pool), TM: tmStore}
 	api := httpapi.NewRouter(handler, tmHandler, glossaryHandler, projectsHandler, jobsHandler, cfg.AllowedOrigin)
 	handlerRoot := httpapi.MountSPA(api, cfg.PublicDir)
 

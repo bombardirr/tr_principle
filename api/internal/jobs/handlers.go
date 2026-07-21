@@ -8,12 +8,14 @@ import (
 	"time"
 
 	"github.com/bombardirr/tr_principle/api/internal/auth"
+	"github.com/bombardirr/tr_principle/api/internal/tm"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 )
 
 type Handler struct {
 	Store *Store
+	TM    *tm.Store
 }
 
 func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {

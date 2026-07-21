@@ -10,6 +10,8 @@ import (
 
 type attachmentCreateRequest struct {
 	TmBaseID  string `json:"tmBaseId"`
+	Label     string `json:"label"`
+	Color     string `json:"color"`
 	CanRead   *bool  `json:"canRead"`
 	CanWrite  *bool  `json:"canWrite"`
 	CanExport *bool  `json:"canExport"`
@@ -66,6 +68,15 @@ func (h *Handler) CreateTMAttachment(w http.ResponseWriter, r *http.Request) {
 		flags.CanClone = *body.CanClone
 	}
 
+	if h.TM != nil {
+		_ = h.TM.EnsureBase(
+			r.Context(),
+			user.ID,
+			body.TmBaseID,
+			attachmentLabel(body.TmBaseID, body.Label),
+			body.Color,
+		)
+	}
 	attachment, err := h.Store.CreateAttachment(r.Context(), jobID, user.ID, body.TmBaseID, flags)
 	switch {
 	case errors.Is(err, ErrInvalidAttachment):
@@ -77,6 +88,16 @@ func (h *Handler) CreateTMAttachment(w http.ResponseWriter, r *http.Request) {
 	default:
 		writeJSON(w, http.StatusCreated, attachment)
 	}
+}
+
+func attachmentLabel(baseID, label string) string {
+	if label != "" {
+		return label
+	}
+	if baseID == "personal-tm" {
+		return "Personal TM"
+	}
+	return baseID
 }
 
 func (h *Handler) PatchTMAttachment(w http.ResponseWriter, r *http.Request) {

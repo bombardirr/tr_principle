@@ -21,6 +21,8 @@ type Attachment struct {
 	ID        uuid.UUID `json:"id"`
 	JobID     uuid.UUID `json:"jobId"`
 	TmBaseID  string    `json:"tmBaseId"`
+	Label     string    `json:"label"`
+	Color     string    `json:"color"`
 	CanRead   bool      `json:"canRead"`
 	CanWrite  bool      `json:"canWrite"`
 	CanExport bool      `json:"canExport"`
@@ -52,11 +54,19 @@ func (s *Store) ListAttachments(
 	}
 
 	rows, err := s.pool.Query(ctx, `
-		SELECT id, job_id, tm_base_id, can_read, can_write, can_export, can_clone,
-		       created_by, created_at, updated_at
-		FROM job_tm_attachments
-		WHERE job_id = $1
-		ORDER BY created_at ASC, id ASC
+		SELECT a.id, a.job_id, a.tm_base_id,
+		       COALESCE(b.label, a.tm_base_id),
+		       COALESCE(b.color, '#5b9fd4'),
+		       a.can_read, a.can_write, a.can_export, a.can_clone,
+		       a.created_by, a.created_at, a.updated_at
+		FROM job_tm_attachments a
+		JOIN jobs j ON j.id = a.job_id
+		LEFT JOIN tm_bases b
+		  ON b.owner_id = j.owner_user_id
+		 AND b.id = a.tm_base_id
+		 AND b.deleted_at IS NULL
+		WHERE a.job_id = $1
+		ORDER BY a.created_at ASC, a.id ASC
 	`, jobID)
 	if err != nil {
 		return nil, err
@@ -101,13 +111,18 @@ func (s *Store) CreateAttachment(
 		INSERT INTO job_tm_attachments (
 			job_id, tm_base_id, can_read, can_write, can_export, can_clone, created_by
 		) VALUES ($1, $2, $3, $4, $5, $6, $7)
-		RETURNING id, job_id, tm_base_id, can_read, can_write, can_export, can_clone,
+		RETURNING id, job_id, tm_base_id,
+		          COALESCE((SELECT label FROM tm_bases WHERE owner_id = $7 AND id = tm_base_id AND deleted_at IS NULL), tm_base_id),
+		          COALESCE((SELECT color FROM tm_bases WHERE owner_id = $7 AND id = tm_base_id AND deleted_at IS NULL), '#5b9fd4'),
+		          can_read, can_write, can_export, can_clone,
 		          created_by, created_at, updated_at
 	`, jobID, tmBaseID, flags.CanRead, flags.CanWrite, flags.CanExport, flags.CanClone, ownerID,
 	).Scan(
 		&attachment.ID,
 		&attachment.JobID,
 		&attachment.TmBaseID,
+		&attachment.Label,
+		&attachment.Color,
 		&attachment.CanRead,
 		&attachment.CanWrite,
 		&attachment.CanExport,
@@ -148,12 +163,27 @@ func (s *Store) UpdateAttachment(
 			can_clone = COALESCE($6, can_clone),
 			updated_at = now()
 		WHERE id = $1 AND job_id = $2
-		RETURNING id, job_id, tm_base_id, can_read, can_write, can_export, can_clone,
+		RETURNING id, job_id, tm_base_id,
+		          COALESCE((
+		            SELECT b.label
+		            FROM jobs j
+		            JOIN tm_bases b ON b.owner_id = j.owner_user_id
+		            WHERE j.id = job_id AND b.id = tm_base_id AND b.deleted_at IS NULL
+		          ), tm_base_id),
+		          COALESCE((
+		            SELECT b.color
+		            FROM jobs j
+		            JOIN tm_bases b ON b.owner_id = j.owner_user_id
+		            WHERE j.id = job_id AND b.id = tm_base_id AND b.deleted_at IS NULL
+		          ), '#5b9fd4'),
+		          can_read, can_write, can_export, can_clone,
 		          created_by, created_at, updated_at
 	`, attachmentID, jobID, patch.CanRead, patch.CanWrite, patch.CanExport, patch.CanClone).Scan(
 		&attachment.ID,
 		&attachment.JobID,
 		&attachment.TmBaseID,
+		&attachment.Label,
+		&attachment.Color,
 		&attachment.CanRead,
 		&attachment.CanWrite,
 		&attachment.CanExport,
@@ -197,6 +227,8 @@ func scanAttachment(row interface{ Scan(dest ...any) error }, attachment *Attach
 		&attachment.ID,
 		&attachment.JobID,
 		&attachment.TmBaseID,
+		&attachment.Label,
+		&attachment.Color,
 		&attachment.CanRead,
 		&attachment.CanWrite,
 		&attachment.CanExport,
