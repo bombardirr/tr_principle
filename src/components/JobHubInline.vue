@@ -11,11 +11,13 @@ import JobTmBasesDialog from '@/components/JobTmBasesDialog.vue'
 import SharedWorkPanel from '@/components/SharedWorkPanel.vue'
 import TmAttachmentStrip from '@/components/TmAttachmentStrip.vue'
 import TmCollectionDialog from '@/components/TmCollectionDialog.vue'
+import { downloadBlob } from '@/docx/exportDocx'
 import { openDocx } from '@/docx/openDocx'
 import { createEmptyJobProject } from '@/jobs/createProject'
-import { fingerprintMismatch } from '@/jobs/fingerprint'
+import { fingerprintDocx, fingerprintMismatch } from '@/jobs/fingerprint'
 import { bindProjectToJob, projectFingerprint, unlinkLocalProjectsFromJob } from '@/jobs/localProject'
 import { getJob, listMembers, deleteJob, archiveJob, leaveJob, patchJob } from '@/jobs/api'
+import { deleteJobOriginal, getJobOriginal, putJobOriginal } from '@/jobs/originalApi'
 import {
   createJobTmAttachment,
   listJobTmAttachmentsApi,
@@ -54,11 +56,12 @@ const members = ref<JobMember[]>([])
 const projects = ref<ProjectMeta[]>([])
 const selectedId = ref('')
 const docxInput = ref<HTMLInputElement | null>(null)
+const originalInput = ref<HTMLInputElement | null>(null)
 const projectInput = ref<HTMLInputElement | null>(null)
 const panelOpen = ref(false)
 const busy = ref(false)
 const error = ref('')
-const pendingAction = ref<'leave' | 'archive' | 'delete' | null>(null)
+const pendingAction = ref<'leave' | 'archive' | 'delete' | 'remove-original' | null>(null)
 const pendingProject = ref<ProjectRecord | null>(null)
 const mismatchOpen = ref(false)
 /** Live local progress for current user (overrides stale server roster). */
@@ -267,7 +270,10 @@ async function confirmPendingAction() {
   if (!job.value || !pendingAction.value || busy.value) return
   const kind = pendingAction.value
   if (kind === 'leave' && isOwner.value) return
-  if ((kind === 'archive' || kind === 'delete') && !isOwner.value) return
+  if ((kind === 'archive' || kind === 'delete' || kind === 'remove-original') && !isOwner.value) {
+    return
+  }
+  if (kind === 'remove-original' && isArchived.value) return
   busy.value = true
   error.value = ''
   try {
@@ -285,13 +291,75 @@ async function confirmPendingAction() {
       emit('changed')
       return
     }
+    if (kind === 'remove-original') {
+      await deleteJobOriginal(job.value.id)
+      job.value = { ...job.value, hasOriginal: false, originalFilename: undefined }
+      pendingAction.value = null
+      emit('changed')
+      return
+    }
     await deleteJob(job.value.id)
     await unlinkLocalProjectsFromJob(job.value.id, projects.value)
     pendingAction.value = null
     emit('changed')
     emit('close')
   } catch (err) {
-    error.value = err instanceof Error ? err.message : String(err)
+    error.value =
+      kind === 'remove-original'
+        ? t('jobs.originalRemoveFailed')
+        : err instanceof Error
+          ? err.message
+          : String(err)
+  } finally {
+    busy.value = false
+  }
+}
+
+async function onOriginalFile(file: File) {
+  if (!job.value?.sourceHash) {
+    error.value = t('jobs.originalMissingSourceHash')
+    return
+  }
+
+  busy.value = true
+  error.value = ''
+  try {
+    const buffer = await file.arrayBuffer()
+    const fingerprint = await fingerprintDocx(file.name, buffer)
+    if (fingerprint.hash !== job.value.sourceHash) {
+      error.value = t('jobs.originalHashMismatch')
+      return
+    }
+    const result = await putJobOriginal(job.value.id, new Blob([buffer]), fingerprint.filename)
+    job.value = {
+      ...job.value,
+      hasOriginal: true,
+      originalFilename: result.filename,
+    }
+    emit('changed')
+  } catch {
+    error.value = t('jobs.originalShareFailed')
+  } finally {
+    busy.value = false
+  }
+}
+
+function onOriginalSelected(event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  input.value = ''
+  if (file) void onOriginalFile(file)
+}
+
+async function downloadOriginal() {
+  if (!job.value || busy.value) return
+  busy.value = true
+  error.value = ''
+  try {
+    const blob = await getJobOriginal(job.value.id)
+    downloadBlob(blob, job.value.originalFilename || job.value.sourceFilename || 'original.docx')
+  } catch {
+    error.value = t('jobs.originalDownloadFailed')
   } finally {
     busy.value = false
   }
@@ -477,7 +545,9 @@ async function onLangPairChange(payload: { sourceLang: string; targetLang: strin
                 ? t('jobs.confirmLeave', { name: job.title })
                 : pendingAction === 'archive'
                   ? t('jobs.confirmArchive', { name: job.title })
-                  : t('jobs.confirmDeleteForever', { name: job.title })
+                  : pendingAction === 'remove-original'
+                    ? t('jobs.confirmRemoveOriginal')
+                    : t('jobs.confirmDeleteForever', { name: job.title })
             "
             :disabled="busy"
             @click="confirmPendingAction"
@@ -492,34 +562,77 @@ async function onLangPairChange(payload: { sourceLang: string; targetLang: strin
             <EditorGlyph name="close" />
           </IconButton>
         </template>
-        <template v-else-if="isOwner">
+        <template v-else>
           <IconButton
-            v-if="!isArchived"
-            :title="t('jobs.archive')"
+            v-if="job.hasOriginal"
+            :title="t('jobs.downloadOriginal')"
             :disabled="busy"
-            @click="pendingAction = 'archive'"
+            @click="downloadOriginal"
           >
-            <EditorGlyph name="archive" />
+            <EditorGlyph name="download-docx" />
           </IconButton>
+          <template v-if="isOwner">
+            <IconButton
+              v-if="!isArchived && !job.hasOriginal"
+              :title="t('jobs.shareOriginal')"
+              :disabled="busy"
+              @click="originalInput?.click()"
+            >
+              <EditorGlyph name="cloud-upload" />
+            </IconButton>
+            <IconButton
+              v-if="!isArchived && job.hasOriginal"
+              :title="t('jobs.replaceOriginal')"
+              :disabled="busy"
+              @click="originalInput?.click()"
+            >
+              <EditorGlyph name="cloud-upload" />
+            </IconButton>
+            <IconButton
+              v-if="!isArchived && job.hasOriginal"
+              danger
+              :title="t('jobs.removeOriginal')"
+              :disabled="busy"
+              @click="pendingAction = 'remove-original'"
+            >
+              <EditorGlyph name="trash" />
+            </IconButton>
+            <IconButton
+              v-if="!isArchived"
+              :title="t('jobs.archive')"
+              :disabled="busy"
+              @click="pendingAction = 'archive'"
+            >
+              <EditorGlyph name="archive" />
+            </IconButton>
+            <IconButton
+              danger
+              :title="t('jobs.deleteForever')"
+              :disabled="busy"
+              @click="pendingAction = 'delete'"
+            >
+              <EditorGlyph name="trash" />
+            </IconButton>
+          </template>
           <IconButton
-            danger
-            :title="t('jobs.deleteForever')"
+            v-else
+            :title="t('jobs.leave')"
             :disabled="busy"
-            @click="pendingAction = 'delete'"
+            @click="pendingAction = 'leave'"
           >
-            <EditorGlyph name="trash" />
+            <EditorGlyph name="leave" />
           </IconButton>
         </template>
-        <IconButton
-          v-else
-          :title="t('jobs.leave')"
-          :disabled="busy"
-          @click="pendingAction = 'leave'"
-        >
-          <EditorGlyph name="leave" />
-        </IconButton>
       </div>
     </header>
+
+    <input
+      ref="originalInput"
+      type="file"
+      accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+      hidden
+      @change="onOriginalSelected"
+    />
 
     <p v-if="error" class="error" role="alert">{{ error }}</p>
     <p v-if="busy && !job" class="muted">{{ t('jobs.loading') }}</p>
