@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -164,6 +165,28 @@ func TestTMBaseCatalogAndSharedSync(t *testing.T) {
 	requestTMJSON(t, http.MethodDelete, srv.URL+"/api/tm/bases/"+promotedID, ownerToken, nil, http.StatusNoContent)
 	catalog = requestTMJSON(t, http.MethodGet, srv.URL+"/api/tm/bases", ownerToken, nil, http.StatusOK)
 	assertCatalogMissing(t, catalog, promotedID)
+
+	revivedID := "revived-" + uuid.NewString()
+	requestTMJSON(t, http.MethodPost, srv.URL+"/api/tm/bases", ownerToken, map[string]any{
+		"id": revivedID, "label": "Original", "color": "#111111",
+	}, http.StatusCreated)
+	requestTMJSON(t, http.MethodDelete, srv.URL+"/api/tm/bases/"+revivedID, ownerToken, nil, http.StatusNoContent)
+	catalog = requestTMJSON(t, http.MethodGet, srv.URL+"/api/tm/bases", ownerToken, nil, http.StatusOK)
+	assertCatalogMissing(t, catalog, revivedID)
+	requestTMJSON(t, http.MethodPost, srv.URL+"/api/jobs/"+jobID.String()+"/tm-attachments", ownerToken, map[string]any{
+		"tmBaseId": revivedID, "label": "Revived label", "color": "#222222",
+	}, http.StatusCreated)
+	catalog = requestTMJSON(t, http.MethodGet, srv.URL+"/api/tm/bases", ownerToken, nil, http.StatusOK)
+	assertCatalogBase(t, catalog, revivedID, "Revived label", "#222222")
+
+	trimmedID := "  trimmed-" + uuid.NewString() + "  "
+	created := requestTMJSON(t, http.MethodPost, srv.URL+"/api/tm/bases", ownerToken, map[string]any{
+		"id": trimmedID, "label": "Trimmed", "color": "#333333",
+	}, http.StatusCreated)
+	if created["id"] != strings.TrimSpace(trimmedID) {
+		t.Fatalf("CreateBase id = %q, want trimmed %q", created["id"], strings.TrimSpace(trimmedID))
+	}
+
 	requestTMJSON(t, http.MethodDelete, srv.URL+"/api/tm/bases/personal-tm", ownerToken, nil, http.StatusBadRequest)
 }
 

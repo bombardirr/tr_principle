@@ -50,7 +50,12 @@ func (s *Store) EnsureBase(ctx context.Context, ownerID uuid.UUID, id, label, co
 	_, err := s.pool.Exec(ctx, `
 		INSERT INTO tm_bases (owner_id, id, label, color, created_at, updated_at)
 		VALUES ($1, $2, $3, $4, now(), now())
-		ON CONFLICT (owner_id, id) DO NOTHING`,
+		ON CONFLICT (owner_id, id) DO UPDATE SET
+			label = EXCLUDED.label,
+			color = EXCLUDED.color,
+			updated_at = now(),
+			deleted_at = NULL
+		WHERE tm_bases.deleted_at IS NOT NULL`,
 		ownerID, id, label, color)
 	return err
 }

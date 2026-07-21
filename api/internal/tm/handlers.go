@@ -114,7 +114,8 @@ func (h *Handler) CreateBase(w http.ResponseWriter, r *http.Request) {
 	if !decodeBody(w, r, &body) {
 		return
 	}
-	if strings.TrimSpace(body.ID) == "" {
+	body.ID = strings.TrimSpace(body.ID)
+	if body.ID == "" {
 		body.ID = uuid.NewString()
 	}
 	if err := h.Store.UpsertBase(r.Context(), user.ID, body.ID, body.Label, body.Color); err != nil {
