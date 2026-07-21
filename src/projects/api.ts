@@ -1,4 +1,4 @@
-import { apiFetch, getStoredToken, ApiError } from '@/auth/api'
+import { apiBase, apiFetch, getStoredToken, ApiError } from '@/auth/api'
 
 export type CloudLockResponse = {
   holderId: string
@@ -33,8 +33,7 @@ export async function putProjectBackup(projectId: string, blob: Blob) {
   const token = getStoredToken()
   if (token) headers.set('Authorization', `Bearer ${token}`)
   headers.set('Content-Type', 'application/zip')
-  const base = (import.meta.env.VITE_API_BASE as string | undefined)?.replace(/\/$/, '') ?? ''
-  const res = await fetch(`${base}/api/projects/${projectId}/backup`, {
+  const res = await fetch(`${apiBase()}/api/projects/${projectId}/backup`, {
     method: 'PUT',
     headers,
     body: blob,
@@ -57,8 +56,7 @@ export async function getProjectBackup(projectId: string): Promise<ArrayBuffer> 
   const headers = new Headers()
   const token = getStoredToken()
   if (token) headers.set('Authorization', `Bearer ${token}`)
-  const base = (import.meta.env.VITE_API_BASE as string | undefined)?.replace(/\/$/, '') ?? ''
-  const res = await fetch(`${base}/api/projects/${projectId}/backup`, { headers })
+  const res = await fetch(`${apiBase()}/api/projects/${projectId}/backup`, { headers })
   if (!res.ok) {
     throw new ApiError(res.status, res.status === 404 ? 'no backup' : res.statusText)
   }
@@ -69,8 +67,7 @@ export async function hasProjectBackup(projectId: string): Promise<boolean> {
   const headers = new Headers()
   const token = getStoredToken()
   if (token) headers.set('Authorization', `Bearer ${token}`)
-  const base = (import.meta.env.VITE_API_BASE as string | undefined)?.replace(/\/$/, '') ?? ''
-  const res = await fetch(`${base}/api/projects/${projectId}/backup`, {
+  const res = await fetch(`${apiBase()}/api/projects/${projectId}/backup`, {
     method: 'HEAD',
     headers,
   })

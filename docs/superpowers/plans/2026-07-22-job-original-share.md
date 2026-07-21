@@ -2,6 +2,8 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+**Status:** Implemented on `feature/job-original-share` (Tasks 1–4 + integrity/security hardening).
+
 **Goal:** Job owner uploads the original DOCX to the server; any member can download it from the job hub; owner can replace/revoke — per [`2026-07-22-job-original-share-design.md`](../specs/2026-07-22-job-original-share-design.md).
 
 **Architecture:** Store bytes on disk under `BACKUP_DIR/job-originals/{jobId}.docx` with metadata in `job_originals`. SHA-256 of body must match `jobs.source_hash`. Job JSON gains `hasOriginal` / `originalFilename`. Thin client helpers mirror project backup upload/download; UI only in `JobHubInline`.
@@ -18,6 +20,8 @@
 - UI: `JobHubInline` only
 - Pro / quotas: out of scope
 - Disk path: `{BACKUP_DIR}/job-originals/{job_id}.docx`
+- PATCH that changes `source_hash` revokes original (meta + disk)
+- Filenames sanitized before `Content-Disposition` / storage meta
 
 ## File map
 
@@ -25,18 +29,33 @@
 |------|------|
 | `api/migrations/019_job_originals.sql` | Table `job_originals` |
 | `api/internal/jobs/types.go` | `HasOriginal`, `OriginalFilename` on `Job`; `OriginalMeta` |
-| `api/internal/jobs/operations.go` | Extend all `scanJob` SELECTs; original store CRUD |
-| `api/internal/jobs/original.go` | Store helpers for meta + path (optional split from operations) |
+| `api/internal/jobs/operations.go` | Extend all `scanJob` SELECTs; original store CRUD; revoke on hash change |
+| `api/internal/jobs/original.go` | Store helpers for meta |
 | `api/internal/jobs/original_handlers.go` | `PutOriginal`, `GetOriginal`, `DeleteOriginal` |
-| `api/internal/jobs/handlers.go` | `Handler.BackupDir`; clean file on job `Delete` |
+| `api/internal/jobs/handlers.go` | `Handler.BackupDir`; clean file on job `Delete` / hash revoke |
 | `api/internal/httpapi/router.go` | Register PUT/GET/HEAD/DELETE `/api/jobs/{id}/original` |
 | `api/cmd/server/main.go` | Pass `cfg.BackupDir` into `jobs.Handler` |
 | `api/internal/jobs/original_integration_test.go` | HTTP ACL + hash + roundtrip |
 | `api/internal/httpapi/router_test.go` | Route registration smoke for `/original` |
 | `src/types/job.ts` | `hasOriginal?`, `originalFilename?` |
 | `src/jobs/originalApi.ts` | put / get / delete helpers |
+| `src/auth/api.ts` | shared exported `apiBase()` |
 | `src/components/JobHubInline.vue` | Share / Download / Replace / Remove |
 | `src/i18n/locales/{en,ru}.ts` | Copy + errors |
+
+## Done checklist
+
+- [x] Task 1: Migration + Job JSON fields + store meta
+- [x] Task 2: HTTP handlers + routes + integration tests
+- [x] Task 3: Client API + types
+- [x] Task 4: Job hub UI + i18n
+- [x] Integrity: revoke original when `source_hash` changes
+- [x] Hardening: filename sanitization, meta-fail cleanup, shared `apiBase`
+
+---
+
+_Historical task steps below were used during implementation; keep for audit trail._
+
 
 ---
 

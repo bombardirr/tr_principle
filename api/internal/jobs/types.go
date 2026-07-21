@@ -20,16 +20,18 @@ type Langs struct {
 }
 
 type Job struct {
-	ID             uuid.UUID  `json:"id"`
-	OwnerUserID    uuid.UUID  `json:"ownerUserId"`
-	Title          string     `json:"title"`
-	SourceLang     string     `json:"sourceLang"`
-	TargetLang     string     `json:"targetLang"`
-	SourceFilename string     `json:"sourceFilename"`
-	SourceHash     string     `json:"sourceHash"`
-	CreatedAt      time.Time  `json:"createdAt"`
-	UpdatedAt      time.Time  `json:"updatedAt"`
-	ArchivedAt     *time.Time `json:"archivedAt,omitempty"`
+	ID               uuid.UUID  `json:"id"`
+	OwnerUserID      uuid.UUID  `json:"ownerUserId"`
+	Title            string     `json:"title"`
+	SourceLang       string     `json:"sourceLang"`
+	TargetLang       string     `json:"targetLang"`
+	SourceFilename   string     `json:"sourceFilename"`
+	SourceHash       string     `json:"sourceHash"`
+	HasOriginal      bool       `json:"hasOriginal"`
+	OriginalFilename string     `json:"originalFilename,omitempty"`
+	CreatedAt        time.Time  `json:"createdAt"`
+	UpdatedAt        time.Time  `json:"updatedAt"`
+	ArchivedAt       *time.Time `json:"archivedAt,omitempty"`
 }
 
 type Member struct {
