@@ -2,6 +2,7 @@ export type GlossaryTermStatus = 'approved' | 'forbidden'
 
 export interface GlossaryTerm {
   id: string
+  baseId: string
   sourceLang: string
   targetLang: string
   sourceTerm: string

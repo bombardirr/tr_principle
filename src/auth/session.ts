@@ -12,7 +12,8 @@ import {
 } from '@/auth/api'
 import { setStorageAccountId } from '@/storage/scope'
 import { syncTm } from '@/tm/sync'
-import { syncGlossary } from '@/glossary/sync'
+import { syncGlossaryBase } from '@/glossary/sync'
+import { ensurePersonalGlossaryBase, listGlossaryBases } from '@/storage/glossaryBasesIdb'
 import { publicActorRef } from '@/utils/actorLabel'
 import { isPro } from '@/auth/plan'
 
@@ -26,7 +27,14 @@ async function applySession(token: string | null, next: AuthUser | null) {
   setStorageAccountId(next?.id ?? null)
   if (next) {
     void syncTm()
-    void syncGlossary()
+    void ensurePersonalGlossaryBase().then(async () => {
+      const bases = await listGlossaryBases()
+      await Promise.all(
+        bases
+          .filter(base => base.sharedOnly !== true)
+          .map(base => syncGlossaryBase(base.id).catch(() => undefined)),
+      )
+    })
   }
 }
 

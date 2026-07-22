@@ -4,6 +4,7 @@ import type { GlossaryTerm } from '@/types/glossary'
 
 const sample: GlossaryTerm = {
   id: '11111111-1111-4111-8111-111111111111',
+  baseId: 'personal-glossary',
   sourceLang: 'en',
   targetLang: 'ru',
   sourceTerm: 'invoice',

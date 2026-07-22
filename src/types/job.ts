@@ -138,3 +138,34 @@ export type PatchJobTmAttachmentInput = {
   canExport?: boolean
   canClone?: boolean
 }
+
+export type JobGlossaryAttachment = {
+  id: string
+  jobId: string
+  glossaryBaseId: string
+  label?: string
+  color?: string
+  ownerId?: string
+  canRead: boolean
+  canWrite: boolean
+  canExport: boolean
+  canClone: boolean
+  createdBy: string
+  createdAt: string
+  updatedAt: string
+}
+
+export type CreateJobGlossaryAttachmentInput = {
+  glossaryBaseId: string
+  canRead?: boolean
+  canWrite?: boolean
+  canExport?: boolean
+  canClone?: boolean
+}
+
+export type PatchJobGlossaryAttachmentInput = {
+  canRead?: boolean
+  canWrite?: boolean
+  canExport?: boolean
+  canClone?: boolean
+}

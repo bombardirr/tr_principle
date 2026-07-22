@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/bombardirr/tr_principle/api/internal/auth"
+	"github.com/bombardirr/tr_principle/api/internal/glossary"
 	"github.com/bombardirr/tr_principle/api/internal/tm"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -17,6 +18,7 @@ import (
 type Handler struct {
 	Store     *Store
 	TM        *tm.Store
+	Glossary  *glossary.Store
 	BackupDir string
 }
 

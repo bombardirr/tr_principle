@@ -14,13 +14,14 @@ import { inviteLink } from '@/jobs/localProject'
 import { useAuth } from '@/auth/session'
 import type { Job, JobInvite, JobMember } from '@/types/job'
 import JobMemoriesPanel from '@/components/JobMemoriesPanel.vue'
+import JobGlossaryPanel from '@/components/JobGlossaryPanel.vue'
 
 const props = defineProps<{
   open: boolean
   jobId: string
 }>()
 
-const emit = defineEmits<{ close: [] }>()
+const emit = defineEmits<{ close: []; 'glossary-attachments-changed': [] }>()
 const { t } = useI18n()
 const { user } = useAuth()
 
@@ -251,6 +252,12 @@ async function transferOwnership() {
           :job-id="jobId"
           :is-owner="isOwner"
           :my-role="myMember?.role ?? null"
+        />
+        <JobGlossaryPanel
+          v-if="job"
+          :job-id="jobId"
+          :is-owner="isOwner"
+          @glossary-attachments-changed="emit('glossary-attachments-changed')"
         />
 
         <section v-if="isOwner">

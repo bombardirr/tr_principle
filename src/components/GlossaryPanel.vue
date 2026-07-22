@@ -7,7 +7,11 @@ import {
   putGlossaryTerm,
   softDeleteGlossaryTerm,
 } from '@/storage/glossaryIdb'
-import { markGlossaryDirty, syncGlossary } from '@/glossary/sync'
+import {
+  listOwnedGlossaryBaseIds,
+  PERSONAL_GLOSSARY_BASE_ID,
+} from '@/storage/glossaryBasesIdb'
+import { markGlossaryDirty, markJobGlossaryDirty, syncGlossaryBase } from '@/glossary/sync'
 import { exportTbx, parseTbx } from '@/glossary/tbx'
 import { publicActorLabel, useAuth } from '@/auth/session'
 import { downloadBlob } from '@/docx/exportDocx'
@@ -16,12 +20,17 @@ import IconButton from '@/components/IconButton.vue'
 import TooltipWrap from '@/components/TooltipWrap.vue'
 import AppCheck from '@/components/AppCheck.vue'
 import GlossaryStatusToggle from '@/components/GlossaryStatusToggle.vue'
+import GlossaryCollectionDialog from '@/components/GlossaryCollectionDialog.vue'
 import { langPairLabel } from '@/tm/langPairs'
 
 const props = defineProps<{
   open: boolean
   sourceLang?: string
   targetLang?: string
+  readableBaseIds?: string[]
+  writableBaseIds?: string[]
+  exportableBaseIds?: string[]
+  jobId?: string
 }>()
 
 const emit = defineEmits<{
@@ -46,6 +55,7 @@ const draftCase = ref(false)
 const editingId = ref<string | null>(null)
 
 const importInput = ref<HTMLInputElement | null>(null)
+const collectionOpen = ref(false)
 const listEl = ref<HTMLElement | null>(null)
 const searchInput = ref<HTMLInputElement | null>(null)
 const targetInput = ref<HTMLInputElement | null>(null)
@@ -81,6 +91,10 @@ const draftSource = computed(() => query.value.trim())
 const draftReady = computed(
   () => Boolean(draftSource.value && draftTarget.value.trim()),
 )
+const writableBaseIds = computed(() => props.writableBaseIds ?? [PERSONAL_GLOSSARY_BASE_ID])
+const writableBaseIdSet = computed(() => new Set(writableBaseIds.value))
+const hasWritableBase = computed(() => writableBaseIds.value.length > 0)
+const canExport = computed(() => !props.jobId || (props.exportableBaseIds?.length ?? 0) > 0)
 
 const pairLabel = computed(() => {
   if (!props.sourceLang || !props.targetLang) return ''
@@ -104,11 +118,12 @@ async function reload() {
   loading.value = true
   error.value = ''
   try {
-    await syncGlossary()
-    terms.value = await listGlossaryTerms()
+    const baseIds = props.readableBaseIds ?? [PERSONAL_GLOSSARY_BASE_ID]
+    await Promise.all(baseIds.map(baseId => syncGlossaryBase(baseId, { jobId: props.jobId })))
+    terms.value = await listGlossaryTerms({ baseIds })
   } catch {
     error.value = t('glossary.loadFail')
-    terms.value = await listGlossaryTerms()
+    terms.value = await listGlossaryTerms({ baseIds: props.readableBaseIds ?? [PERSONAL_GLOSSARY_BASE_ID] })
   } finally {
     loading.value = false
   }
@@ -142,6 +157,7 @@ function closeCompose() {
 }
 
 function openCompose() {
+  if (!editingId.value && !hasWritableBase.value) return
   const q = query.value.trim()
   if (!q && !editingId.value) return
   composing.value = true
@@ -161,6 +177,7 @@ function toggleCompose() {
 }
 
 function startEdit(term: GlossaryTerm) {
+  if (!writableBaseIdSet.value.has(term.baseId)) return
   editingId.value = term.id
   query.value = term.sourceTerm
   draftTarget.value = term.targetTerm
@@ -184,8 +201,12 @@ async function saveDraft() {
   const existing = editingId.value
     ? terms.value.find((x) => x.id === editingId.value)
     : undefined
-  const row: GlossaryTerm = {
+  if (existing && !writableBaseIdSet.value.has(existing.baseId)) return
+  const baseIds = existing ? [existing.baseId] : writableBaseIds.value
+  if (!baseIds.length) return
+  const rows: GlossaryTerm[] = baseIds.map(baseId => ({
     id: existing?.id ?? crypto.randomUUID(),
+    baseId,
     sourceLang: existing?.sourceLang ?? sourceLang,
     targetLang: existing?.targetLang ?? targetLang,
     sourceTerm,
@@ -197,11 +218,12 @@ async function saveDraft() {
     updatedAt: now,
     deletedAt: null,
     createdBy: existing?.createdBy ?? (publicActorLabel(user.value) || 'local'),
-  }
-  await putGlossaryTerm(row)
-  markGlossaryDirty(row.id)
+  }))
+  for (const row of rows) await putGlossaryTerm(row)
+  if (props.jobId) markJobGlossaryDirty(props.jobId, ...rows.map(row => row.id))
+  else markGlossaryDirty(...rows.map(row => row.id))
   closeCompose()
-  terms.value = await listGlossaryTerms()
+  terms.value = await listGlossaryTerms({ baseIds: props.readableBaseIds ?? [PERSONAL_GLOSSARY_BASE_ID] })
   emit('changed')
   error.value = ''
   nextTick(() => {
@@ -212,34 +234,42 @@ async function saveDraft() {
 
 async function setTermStatus(termId: string, status: GlossaryTermStatus) {
   const term = terms.value.find((x) => x.id === termId)
-  if (!term || term.status === status) return
+  if (!term || !writableBaseIdSet.value.has(term.baseId) || term.status === status) return
   const now = new Date().toISOString()
   const row: GlossaryTerm = { ...term, status, updatedAt: now, deletedAt: null }
   terms.value = terms.value.map((x) => (x.id === termId ? row : x))
   if (editingId.value === termId) draftStatus.value = status
   // Persist before notifying the editor — otherwise reloadGlossary races and reads stale IDB.
   await putGlossaryTerm(row)
-  markGlossaryDirty(row.id)
+  if (props.jobId) markJobGlossaryDirty(props.jobId, row.id)
+  else markGlossaryDirty(row.id)
   emit('changed')
 }
 
 async function removeTerm(id: string) {
+  const term = terms.value.find((x) => x.id === id)
+  if (!term || !writableBaseIdSet.value.has(term.baseId)) return
   const row = await softDeleteGlossaryTerm(id)
   if (row) {
-    markGlossaryDirty(row.id)
-    terms.value = await listGlossaryTerms()
+    if (props.jobId) markJobGlossaryDirty(props.jobId, row.id)
+    else markGlossaryDirty(row.id)
+    terms.value = await listGlossaryTerms({ baseIds: props.readableBaseIds ?? [PERSONAL_GLOSSARY_BASE_ID] })
     if (editingId.value === id) closeCompose()
     emit('changed')
   }
 }
 
-function exportFile() {
-  const xml = exportTbx(terms.value)
+async function exportFile() {
+  const exportableBaseIds = props.jobId
+    ? new Set(props.exportableBaseIds ?? [])
+    : await listOwnedGlossaryBaseIds()
+  const xml = exportTbx(terms.value.filter(term => exportableBaseIds.has(term.baseId)))
   const blob = new Blob([xml], { type: 'application/xml' })
   downloadBlob(blob, 'glossary.tbx')
 }
 
 function openImport() {
+  if (!hasWritableBase.value) return
   importInput.value?.click()
 }
 
@@ -247,7 +277,7 @@ async function onImportChange(e: Event) {
   const input = e.target as HTMLInputElement
   const file = input.files?.[0]
   input.value = ''
-  if (!file) return
+  if (!file || !hasWritableBase.value) return
   try {
     const text = await file.text()
     const parsed = parseTbx(text)
@@ -258,18 +288,23 @@ async function onImportChange(e: Event) {
     const actor = publicActorLabel(user.value) || 'local'
     const now = new Date().toISOString()
     const dirty: string[] = []
-    for (const term of parsed) {
-      const row: GlossaryTerm = {
-        ...term,
-        createdBy: actor,
-        createdAt: term.createdAt || now,
-        updatedAt: now,
+    for (const baseId of writableBaseIds.value) {
+      for (const term of parsed) {
+        const row: GlossaryTerm = {
+          ...term,
+          id: crypto.randomUUID(),
+          baseId,
+          createdBy: actor,
+          createdAt: term.createdAt || now,
+          updatedAt: now,
+        }
+        await putGlossaryTerm(row)
+        dirty.push(row.id)
       }
-      await putGlossaryTerm(row)
-      dirty.push(row.id)
     }
-    markGlossaryDirty(...dirty)
-    terms.value = await listGlossaryTerms()
+    if (props.jobId) markJobGlossaryDirty(props.jobId, ...dirty)
+    else markGlossaryDirty(...dirty)
+    terms.value = await listGlossaryTerms({ baseIds: props.readableBaseIds ?? [PERSONAL_GLOSSARY_BASE_ID] })
     emit('changed')
     error.value = ''
   } catch {
@@ -303,10 +338,13 @@ async function onImportChange(e: Event) {
             </TooltipWrap>
           </div>
           <div class="icons-top">
-            <IconButton :title="t('glossary.importTbx')" @click="openImport">
+            <IconButton :title="t('glossary.collectionTitle')" @click="collectionOpen = true">
+              <EditorGlyph name="plus" />
+            </IconButton>
+            <IconButton :title="t('glossary.importTbx')" :disabled="!hasWritableBase" @click="openImport">
               <EditorGlyph name="import" />
             </IconButton>
-            <IconButton :title="t('glossary.exportTbx')" @click="exportFile">
+            <IconButton v-if="canExport" :title="t('glossary.exportTbx')" @click="exportFile">
               <EditorGlyph name="export" />
             </IconButton>
             <IconButton :title="t('glossary.close')" @click="emit('close')">
@@ -364,7 +402,7 @@ async function onImportChange(e: Event) {
                   />
                   <IconButton
                     :title="editingId ? t('glossary.saveEdit') : t('glossary.add')"
-                    :disabled="!draftReady"
+                    :disabled="!draftReady || (!editingId && !hasWritableBase)"
                     primary
                     @click="saveDraft"
                   >
@@ -376,7 +414,7 @@ async function onImportChange(e: Event) {
             <IconButton
               :title="composing ? t('glossary.cancelEdit') : t('glossary.add')"
               :active="composing"
-              :disabled="!composing && !query.trim()"
+              :disabled="(!composing && (!query.trim() || !hasWritableBase))"
               @click="toggleCompose"
             >
               <EditorGlyph :name="composing ? 'close' : 'plus'" />
@@ -414,14 +452,24 @@ async function onImportChange(e: Event) {
                   :key="term.id"
                   compact
                   :model-value="term.status"
+                  :disabled="!writableBaseIdSet.has(term.baseId)"
                   @update:model-value="setTermStatus(term.id, $event)"
                 />
               </td>
               <td class="col-actions">
-                <IconButton :title="t('glossary.edit')" @click="startEdit(term)">
+                <IconButton
+                  :title="t('glossary.edit')"
+                  :disabled="!writableBaseIdSet.has(term.baseId)"
+                  @click="startEdit(term)"
+                >
                   <EditorGlyph name="edit" />
                 </IconButton>
-                <IconButton :title="t('glossary.delete')" danger @click="removeTerm(term.id)">
+                <IconButton
+                  :title="t('glossary.delete')"
+                  :disabled="!writableBaseIdSet.has(term.baseId)"
+                  danger
+                  @click="removeTerm(term.id)"
+                >
                   <EditorGlyph name="trash" />
                 </IconButton>
               </td>
@@ -431,6 +479,13 @@ async function onImportChange(e: Event) {
         <p v-else-if="!loading" class="muted empty">{{ t('glossary.empty') }}</p>
       </div>
     </div>
+    <GlossaryCollectionDialog
+      :open="collectionOpen"
+      mode="browse"
+      :attached-ids="[]"
+      @close="collectionOpen = false"
+      @changed="reload"
+    />
   </div>
 </template>
 

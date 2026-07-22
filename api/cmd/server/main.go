@@ -50,12 +50,15 @@ func main() {
 	}
 	tmStore := tm.NewStore(pool)
 	tmHandler := &tm.Handler{Store: tmStore}
-	glossaryHandler := &glossary.Handler{Store: glossary.NewStore(pool)}
+	glossaryStore := glossary.NewStore(pool)
+	glossaryHandler := &glossary.Handler{Store: glossaryStore}
 	projectsHandler := &projects.Handler{
 		Store:     projects.NewStore(pool),
 		BackupDir: cfg.BackupDir,
 	}
-	jobsHandler := &jobs.Handler{Store: jobs.NewStore(pool), TM: tmStore, BackupDir: cfg.BackupDir}
+	jobsHandler := &jobs.Handler{
+		Store: jobs.NewStore(pool), TM: tmStore, Glossary: glossaryStore, BackupDir: cfg.BackupDir,
+	}
 	api := httpapi.NewRouter(handler, tmHandler, glossaryHandler, projectsHandler, jobsHandler, cfg.AllowedOrigin)
 	handlerRoot := httpapi.MountSPA(api, cfg.PublicDir)
 

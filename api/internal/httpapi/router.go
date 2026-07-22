@@ -58,8 +58,12 @@ func NewRouter(
 
 	r.Route("/api/glossary", func(r chi.Router) {
 		r.Use(authHandler.Middleware)
-		r.Get("/sync", glossaryHandler.Pull)
-		r.Post("/sync", glossaryHandler.Push)
+		r.Get("/bases", glossaryHandler.ListBases)
+		r.Post("/bases", glossaryHandler.CreateBase)
+		r.Patch("/bases/{baseId}", glossaryHandler.PatchBase)
+		r.Delete("/bases/{baseId}", glossaryHandler.DeleteBase)
+		r.Get("/bases/{baseId}/sync", glossaryHandler.PullBase)
+		r.Post("/bases/{baseId}/sync", glossaryHandler.PushBase)
 	})
 
 	r.Route("/api/projects/{projectID}", func(r chi.Router) {
@@ -100,6 +104,10 @@ func NewRouter(
 		r.Post("/api/jobs/{id}/tm-attachments", jobsHandler.CreateTMAttachment)
 		r.Patch("/api/jobs/{id}/tm-attachments/{attachmentId}", jobsHandler.PatchTMAttachment)
 		r.Delete("/api/jobs/{id}/tm-attachments/{attachmentId}", jobsHandler.DeleteTMAttachment)
+		r.Get("/api/jobs/{id}/glossary-attachments", jobsHandler.ListGlossaryAttachments)
+		r.Post("/api/jobs/{id}/glossary-attachments", jobsHandler.CreateGlossaryAttachment)
+		r.Patch("/api/jobs/{id}/glossary-attachments/{attachmentId}", jobsHandler.PatchGlossaryAttachment)
+		r.Delete("/api/jobs/{id}/glossary-attachments/{attachmentId}", jobsHandler.DeleteGlossaryAttachment)
 		r.Post("/api/job-invites/accept", jobsHandler.AcceptInvite)
 	})
 
