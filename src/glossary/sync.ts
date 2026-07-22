@@ -165,7 +165,7 @@ async function pushDirty(baseId: string, jobId?: string): Promise<void> {
   }
 }
 
-function dirtyBaseIds(): string[] {
+function dirtyBaseIds(jobId?: string): string[] {
   const accountId = getStorageAccountId()
   if (!accountId || typeof localStorage === 'undefined') return []
   const prefix = `${DIRTY_BASE}:${accountId}:`
@@ -173,8 +173,15 @@ function dirtyBaseIds(): string[] {
   for (let i = 0; i < localStorage.length; i++) {
     const key = localStorage.key(i)
     if (!key?.startsWith(prefix)) continue
-    const baseId = key.slice(prefix.length)
-    if (baseId && !baseId.includes(':') && readDirty(baseId).size) ids.add(baseId)
+    const suffix = key.slice(prefix.length)
+    if (jobId) {
+      const jobSuffix = `:${jobId}`
+      if (!suffix.endsWith(jobSuffix)) continue
+      const baseId = suffix.slice(0, -jobSuffix.length)
+      if (baseId && readDirty(baseId, jobId).size) ids.add(baseId)
+    } else if (suffix && !suffix.includes(':') && readDirty(suffix).size) {
+      ids.add(suffix)
+    }
   }
   return [...ids]
 }
@@ -216,7 +223,7 @@ export async function syncGlossaryBase(
 }
 
 /** Pull then push each owned catalog base. */
-export async function syncGlossary(opts?: { pushOnly?: boolean }): Promise<void> {
+export async function syncGlossary(opts?: { pushOnly?: boolean; jobId?: string }): Promise<void> {
   if (!getStorageAccountId()) return
   return runExclusive(async () => {
     const ownedBaseIds = await listOwnedGlossaryBaseIds()
@@ -236,10 +243,20 @@ export async function syncGlossary(opts?: { pushOnly?: boolean }): Promise<void>
         // Catalog failure must not prevent locally dirty bases from pushing.
       }
     }
-    for (const baseId of dirtyBaseIds()) {
-      if (!ownedBaseIds.has(baseId)) continue
+    const attempted = new Set<string>()
+    while (true) {
+      const ownedBaseId = dirtyBaseIds().find(
+        id => !attempted.has(`owned:${id}`) && ownedBaseIds.has(id),
+      )
+      const sharedBaseId = opts?.jobId
+        ? dirtyBaseIds(opts.jobId).find(id => !attempted.has(`shared:${id}`))
+        : undefined
+      const baseId = ownedBaseId ?? sharedBaseId
+      if (!baseId) break
+      const jobId = ownedBaseId ? undefined : opts?.jobId
+      attempted.add(`${jobId ? 'shared' : 'owned'}:${baseId}`)
       try {
-        await pushDirty(baseId)
+        await pushDirty(baseId, jobId)
       } catch {
         // Leave this base dirty for a later retry.
       }
