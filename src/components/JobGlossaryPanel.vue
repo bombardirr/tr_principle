@@ -13,6 +13,7 @@ import { listGlossaryBases, type GlossaryBaseRecord } from '@/storage/glossaryBa
 import type { JobGlossaryAttachment } from '@/types/job'
 
 const props = defineProps<{ jobId: string; isOwner: boolean }>()
+const emit = defineEmits<{ 'glossary-attachments-changed': [] }>()
 const { t } = useI18n()
 const attachments = ref<JobGlossaryAttachment[]>([])
 const error = ref('')
@@ -23,13 +24,21 @@ const cloneSource = ref<JobGlossaryAttachment | null>(null)
 const cloneTargets = ref<GlossaryBaseRecord[]>([])
 const cloneTargetId = ref('')
 
+function notifyAttachmentsChanged() {
+  emit('glossary-attachments-changed')
+}
+
 async function refresh() {
   try { attachments.value = await listJobGlossaryAttachments(props.jobId); error.value = '' }
   catch (e) { error.value = e instanceof Error ? e.message : String(e) }
 }
 onMounted(() => void refresh())
 async function attach(glossaryBaseId: string) {
-  try { attachments.value.push(await createJobGlossaryAttachment(props.jobId, { glossaryBaseId, canRead: true })); pickerOpen.value = false }
+  try {
+    attachments.value.push(await createJobGlossaryAttachment(props.jobId, { glossaryBaseId, canRead: true }))
+    pickerOpen.value = false
+    notifyAttachmentsChanged()
+  }
   catch (e) { error.value = e instanceof Error ? e.message : String(e) }
 }
 async function toggle(item: JobGlossaryAttachment, flag: 'canRead' | 'canWrite' | 'canExport' | 'canClone', event: Event) {
@@ -37,10 +46,15 @@ async function toggle(item: JobGlossaryAttachment, flag: 'canRead' | 'canWrite' 
   try {
     const updated = await patchJobGlossaryAttachment(props.jobId, item.id, { [flag]: (event.target as HTMLInputElement).checked })
     attachments.value = attachments.value.map(row => row.id === item.id ? updated : row)
+    notifyAttachmentsChanged()
   } catch (e) { error.value = e instanceof Error ? e.message : String(e) }
 }
 async function detach(item: JobGlossaryAttachment) {
-  try { await deleteJobGlossaryAttachment(props.jobId, item.id); attachments.value = attachments.value.filter(row => row.id !== item.id) }
+  try {
+    await deleteJobGlossaryAttachment(props.jobId, item.id)
+    attachments.value = attachments.value.filter(row => row.id !== item.id)
+    notifyAttachmentsChanged()
+  }
   catch (e) { error.value = e instanceof Error ? e.message : String(e) }
 }
 async function exportTbx(item: JobGlossaryAttachment) {

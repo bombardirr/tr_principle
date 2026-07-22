@@ -21,7 +21,7 @@ const props = defineProps<{
   jobId: string
 }>()
 
-const emit = defineEmits<{ close: [] }>()
+const emit = defineEmits<{ close: []; 'glossary-attachments-changed': [] }>()
 const { t } = useI18n()
 const { user } = useAuth()
 
@@ -253,7 +253,12 @@ async function transferOwnership() {
           :is-owner="isOwner"
           :my-role="myMember?.role ?? null"
         />
-        <JobGlossaryPanel v-if="job" :job-id="jobId" :is-owner="isOwner" />
+        <JobGlossaryPanel
+          v-if="job"
+          :job-id="jobId"
+          :is-owner="isOwner"
+          @glossary-attachments-changed="emit('glossary-attachments-changed')"
+        />
 
         <section v-if="isOwner">
           <h3>{{ t('jobs.inviteTitle') }}</h3>

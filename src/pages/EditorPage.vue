@@ -554,6 +554,11 @@ async function refreshJobTmLayers() {
   }
 }
 
+async function onJobGlossaryAttachmentsChanged() {
+  await refreshJobGlossaryLayers()
+  await reloadGlossary()
+}
+
 async function refreshJobGlossaryLayers() {
   const jobId = jobQueryId.value
   const metaJob = record.value?.meta.jobId
@@ -2080,6 +2085,7 @@ async function goBack() {
       :open="sharedPanelOpen"
       :job-id="record.meta.jobId"
       @close="sharedPanelOpen = false"
+      @glossary-attachments-changed="onJobGlossaryAttachmentsChanged"
     />
   </section>
   <p v-else-if="error" class="error">{{ error }}</p>
