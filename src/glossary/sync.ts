@@ -91,6 +91,16 @@ export function markGlossaryDirty(...ids: string[]) {
   scheduleGlossaryPush()
 }
 
+/** Mark writes to a job-shared base against that job ACL context. */
+export function markJobGlossaryDirty(jobId: string, ...ids: string[]) {
+  for (const id of ids) {
+    void getGlossaryTerm(id).then(term => {
+      if (term) addDirty(term.baseId, [id], jobId)
+    })
+  }
+  scheduleGlossaryPush(1500, jobId)
+}
+
 export function scheduleGlossaryPush(delayMs = 1500, jobId?: string) {
   if (pushTimer) clearTimeout(pushTimer)
   pushTimer = setTimeout(() => {

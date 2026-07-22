@@ -8,7 +8,7 @@ import {
   softDeleteGlossaryTerm,
 } from '@/storage/glossaryIdb'
 import { PERSONAL_GLOSSARY_BASE_ID } from '@/storage/glossaryBasesIdb'
-import { markGlossaryDirty, scheduleGlossaryPush, syncGlossaryBase } from '@/glossary/sync'
+import { markGlossaryDirty, markJobGlossaryDirty, syncGlossaryBase } from '@/glossary/sync'
 import { exportTbx, parseTbx } from '@/glossary/tbx'
 import { publicActorLabel, useAuth } from '@/auth/session'
 import { downloadBlob } from '@/docx/exportDocx'
@@ -209,8 +209,8 @@ async function saveDraft() {
     createdBy: existing?.createdBy ?? (publicActorLabel(user.value) || 'local'),
   }))
   for (const row of rows) await putGlossaryTerm(row)
-  markGlossaryDirty(...rows.map(row => row.id))
-  if (props.jobId) scheduleGlossaryPush(1500, props.jobId)
+  if (props.jobId) markJobGlossaryDirty(props.jobId, ...rows.map(row => row.id))
+  else markGlossaryDirty(...rows.map(row => row.id))
   closeCompose()
   terms.value = await listGlossaryTerms({ baseIds: props.readableBaseIds ?? [PERSONAL_GLOSSARY_BASE_ID] })
   emit('changed')
@@ -230,16 +230,16 @@ async function setTermStatus(termId: string, status: GlossaryTermStatus) {
   if (editingId.value === termId) draftStatus.value = status
   // Persist before notifying the editor — otherwise reloadGlossary races and reads stale IDB.
   await putGlossaryTerm(row)
-  markGlossaryDirty(row.id)
-  if (props.jobId) scheduleGlossaryPush(1500, props.jobId)
+  if (props.jobId) markJobGlossaryDirty(props.jobId, row.id)
+  else markGlossaryDirty(row.id)
   emit('changed')
 }
 
 async function removeTerm(id: string) {
   const row = await softDeleteGlossaryTerm(id)
   if (row) {
-    markGlossaryDirty(row.id)
-    if (props.jobId) scheduleGlossaryPush(1500, props.jobId)
+    if (props.jobId) markJobGlossaryDirty(props.jobId, row.id)
+    else markGlossaryDirty(row.id)
     terms.value = await listGlossaryTerms({ baseIds: props.readableBaseIds ?? [PERSONAL_GLOSSARY_BASE_ID] })
     if (editingId.value === id) closeCompose()
     emit('changed')
