@@ -26,11 +26,13 @@ Ship a real CAT **termbase** (separate from TM): personal glossary per account, 
 - Admin CRUD UI separate from in-app glossary panel
 - Server-side term lookup API for matching (match stays local on IDB cache)
 
-## C2 (next, still MVP — sketched only)
+## C2 (superseded sketch)
 
-- Attach personal and/or project termbase to a project
-- When phase F lands, project termbase is shared with members
-- Entry schema unchanged; only ownership / ACL changes
+Replaced by full named-bases + job share design:
+
+→ [`2026-07-22-glossary-named-bases-design.md`](./2026-07-22-glossary-named-bases-design.md)
+
+(Entry fields unchanged; storage gains `base_id` + catalog + job attachments like TM.)
 
 ---
 
