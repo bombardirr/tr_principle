@@ -94,6 +94,7 @@ const draftReady = computed(
 const writableBaseIds = computed(() => props.writableBaseIds ?? [PERSONAL_GLOSSARY_BASE_ID])
 const writableBaseIdSet = computed(() => new Set(writableBaseIds.value))
 const hasWritableBase = computed(() => writableBaseIds.value.length > 0)
+const canExport = computed(() => !props.jobId || (props.exportableBaseIds?.length ?? 0) > 0)
 
 const pairLabel = computed(() => {
   if (!props.sourceLang || !props.targetLang) return ''
@@ -343,7 +344,7 @@ async function onImportChange(e: Event) {
             <IconButton :title="t('glossary.importTbx')" :disabled="!hasWritableBase" @click="openImport">
               <EditorGlyph name="import" />
             </IconButton>
-            <IconButton :title="t('glossary.exportTbx')" @click="exportFile">
+            <IconButton v-if="canExport" :title="t('glossary.exportTbx')" @click="exportFile">
               <EditorGlyph name="export" />
             </IconButton>
             <IconButton :title="t('glossary.close')" @click="emit('close')">

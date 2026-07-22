@@ -1,6 +1,7 @@
 import { getStorageAccountId } from '@/storage/scope'
 import {
   getGlossaryTerm,
+  listGlossaryTerms,
   putGlossaryTerm,
   removeGlossaryTerm,
 } from '@/storage/glossaryIdb'
@@ -99,6 +100,12 @@ export function markJobGlossaryDirty(jobId: string, ...ids: string[]) {
     })
   }
   scheduleGlossaryPush(1500, jobId)
+}
+
+/** Mark all active local terms dirty before a base is promoted to a job attachment. */
+export async function markGlossaryBaseDirty(baseId: string): Promise<void> {
+  const terms = await listGlossaryTerms({ baseIds: [baseId] })
+  addDirty(baseId, terms.map(term => term.id))
 }
 
 export function scheduleGlossaryPush(delayMs = 1500, jobId?: string) {

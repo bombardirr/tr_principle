@@ -20,18 +20,6 @@ export type GlossaryBaseApiRecord = {
   updatedAt: string
 }
 
-export async function pullGlossarySync(since: string) {
-  const q = encodeURIComponent(since)
-  return apiFetch<GlossaryPullResponse>(`/api/glossary/sync?since=${q}`)
-}
-
-export async function pushGlossarySync(terms: GlossaryTerm[]) {
-  return apiFetch<GlossaryPushResponse>('/api/glossary/sync', {
-    method: 'POST',
-    body: JSON.stringify({ terms }),
-  })
-}
-
 function baseSyncPath(baseId: string): string {
   return `/api/glossary/bases/${encodeURIComponent(baseId)}/sync`
 }

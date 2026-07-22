@@ -1,5 +1,5 @@
 import { apiFetch } from '@/auth/api'
-import { syncGlossaryBase } from '@/glossary/sync'
+import { markGlossaryBaseDirty, syncGlossaryBase } from '@/glossary/sync'
 import { ensureGlossaryBase } from '@/storage/glossaryBasesIdb'
 import type {
   CreateJobGlossaryAttachmentInput,
@@ -20,6 +20,7 @@ export async function createJobGlossaryAttachment(
   input: CreateJobGlossaryAttachmentInput,
 ) {
   const base = await ensureGlossaryBase(input.glossaryBaseId)
+  await markGlossaryBaseDirty(base.id)
   await syncGlossaryBase(base.id, { pushOnly: true })
   return apiFetch<JobGlossaryAttachment>(`/api/jobs/${jobId}/glossary-attachments`, {
     method: 'POST',
