@@ -14,6 +14,7 @@ import { inviteLink } from '@/jobs/localProject'
 import { useAuth } from '@/auth/session'
 import type { Job, JobInvite, JobMember } from '@/types/job'
 import JobMemoriesPanel from '@/components/JobMemoriesPanel.vue'
+import JobGlossaryPanel from '@/components/JobGlossaryPanel.vue'
 
 const props = defineProps<{
   open: boolean
@@ -252,6 +253,7 @@ async function transferOwnership() {
           :is-owner="isOwner"
           :my-role="myMember?.role ?? null"
         />
+        <JobGlossaryPanel v-if="job" :job-id="jobId" :is-owner="isOwner" />
 
         <section v-if="isOwner">
           <h3>{{ t('jobs.inviteTitle') }}</h3>

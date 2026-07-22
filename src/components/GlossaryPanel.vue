@@ -8,7 +8,7 @@ import {
   softDeleteGlossaryTerm,
 } from '@/storage/glossaryIdb'
 import { PERSONAL_GLOSSARY_BASE_ID } from '@/storage/glossaryBasesIdb'
-import { markGlossaryDirty, syncGlossaryBase } from '@/glossary/sync'
+import { markGlossaryDirty, scheduleGlossaryPush, syncGlossaryBase } from '@/glossary/sync'
 import { exportTbx, parseTbx } from '@/glossary/tbx'
 import { publicActorLabel, useAuth } from '@/auth/session'
 import { downloadBlob } from '@/docx/exportDocx'
@@ -17,12 +17,16 @@ import IconButton from '@/components/IconButton.vue'
 import TooltipWrap from '@/components/TooltipWrap.vue'
 import AppCheck from '@/components/AppCheck.vue'
 import GlossaryStatusToggle from '@/components/GlossaryStatusToggle.vue'
+import GlossaryCollectionDialog from '@/components/GlossaryCollectionDialog.vue'
 import { langPairLabel } from '@/tm/langPairs'
 
 const props = defineProps<{
   open: boolean
   sourceLang?: string
   targetLang?: string
+  readableBaseIds?: string[]
+  writableBaseIds?: string[]
+  jobId?: string
 }>()
 
 const emit = defineEmits<{
@@ -47,6 +51,7 @@ const draftCase = ref(false)
 const editingId = ref<string | null>(null)
 
 const importInput = ref<HTMLInputElement | null>(null)
+const collectionOpen = ref(false)
 const listEl = ref<HTMLElement | null>(null)
 const searchInput = ref<HTMLInputElement | null>(null)
 const targetInput = ref<HTMLInputElement | null>(null)
@@ -105,11 +110,12 @@ async function reload() {
   loading.value = true
   error.value = ''
   try {
-    await syncGlossaryBase(PERSONAL_GLOSSARY_BASE_ID)
-    terms.value = await listGlossaryTerms()
+    const baseIds = props.readableBaseIds ?? [PERSONAL_GLOSSARY_BASE_ID]
+    await Promise.all(baseIds.map(baseId => syncGlossaryBase(baseId, { jobId: props.jobId })))
+    terms.value = await listGlossaryTerms({ baseIds })
   } catch {
     error.value = t('glossary.loadFail')
-    terms.value = await listGlossaryTerms()
+    terms.value = await listGlossaryTerms({ baseIds: props.readableBaseIds ?? [PERSONAL_GLOSSARY_BASE_ID] })
   } finally {
     loading.value = false
   }
@@ -185,9 +191,11 @@ async function saveDraft() {
   const existing = editingId.value
     ? terms.value.find((x) => x.id === editingId.value)
     : undefined
-  const row: GlossaryTerm = {
-    id: existing?.id ?? crypto.randomUUID(),
-    baseId: existing?.baseId ?? PERSONAL_GLOSSARY_BASE_ID,
+  const baseIds = existing ? [existing.baseId] : (props.writableBaseIds ?? [PERSONAL_GLOSSARY_BASE_ID])
+  if (!baseIds.length) return
+  const rows: GlossaryTerm[] = baseIds.map((baseId, index) => ({
+    id: existing?.id ?? (index === 0 ? crypto.randomUUID() : crypto.randomUUID()),
+    baseId,
     sourceLang: existing?.sourceLang ?? sourceLang,
     targetLang: existing?.targetLang ?? targetLang,
     sourceTerm,
@@ -199,11 +207,12 @@ async function saveDraft() {
     updatedAt: now,
     deletedAt: null,
     createdBy: existing?.createdBy ?? (publicActorLabel(user.value) || 'local'),
-  }
-  await putGlossaryTerm(row)
-  markGlossaryDirty(row.id)
+  }))
+  for (const row of rows) await putGlossaryTerm(row)
+  markGlossaryDirty(...rows.map(row => row.id))
+  if (props.jobId) scheduleGlossaryPush(1500, props.jobId)
   closeCompose()
-  terms.value = await listGlossaryTerms()
+  terms.value = await listGlossaryTerms({ baseIds: props.readableBaseIds ?? [PERSONAL_GLOSSARY_BASE_ID] })
   emit('changed')
   error.value = ''
   nextTick(() => {
@@ -222,6 +231,7 @@ async function setTermStatus(termId: string, status: GlossaryTermStatus) {
   // Persist before notifying the editor — otherwise reloadGlossary races and reads stale IDB.
   await putGlossaryTerm(row)
   markGlossaryDirty(row.id)
+  if (props.jobId) scheduleGlossaryPush(1500, props.jobId)
   emit('changed')
 }
 
@@ -229,7 +239,8 @@ async function removeTerm(id: string) {
   const row = await softDeleteGlossaryTerm(id)
   if (row) {
     markGlossaryDirty(row.id)
-    terms.value = await listGlossaryTerms()
+    if (props.jobId) scheduleGlossaryPush(1500, props.jobId)
+    terms.value = await listGlossaryTerms({ baseIds: props.readableBaseIds ?? [PERSONAL_GLOSSARY_BASE_ID] })
     if (editingId.value === id) closeCompose()
     emit('changed')
   }
@@ -271,7 +282,7 @@ async function onImportChange(e: Event) {
       dirty.push(row.id)
     }
     markGlossaryDirty(...dirty)
-    terms.value = await listGlossaryTerms()
+    terms.value = await listGlossaryTerms({ baseIds: props.readableBaseIds ?? [PERSONAL_GLOSSARY_BASE_ID] })
     emit('changed')
     error.value = ''
   } catch {
@@ -305,6 +316,9 @@ async function onImportChange(e: Event) {
             </TooltipWrap>
           </div>
           <div class="icons-top">
+            <IconButton :title="t('glossary.collectionTitle')" @click="collectionOpen = true">
+              <EditorGlyph name="plus" />
+            </IconButton>
             <IconButton :title="t('glossary.importTbx')" @click="openImport">
               <EditorGlyph name="import" />
             </IconButton>
@@ -433,6 +447,13 @@ async function onImportChange(e: Event) {
         <p v-else-if="!loading" class="muted empty">{{ t('glossary.empty') }}</p>
       </div>
     </div>
+    <GlossaryCollectionDialog
+      :open="collectionOpen"
+      mode="browse"
+      :attached-ids="[]"
+      @close="collectionOpen = false"
+      @changed="reload"
+    />
   </div>
 </template>
 

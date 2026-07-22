@@ -45,6 +45,10 @@ import {
 import { sharedTmLocalId, upsertSharedTmBase } from '@/storage/tmBasesIdb'
 import { markTmDirty, scheduleTmPush, syncTmBase } from '@/tm/sync'
 import { listGlossaryTerms } from '@/storage/glossaryIdb'
+import { resolveGlossaryAccess } from '@/glossary/glossaryAccess'
+import { listJobGlossaryAttachments } from '@/jobs/glossaryAttachmentsApi'
+import { sharedGlossaryLocalId } from '@/storage/glossaryBasesIdb'
+import { syncGlossaryBase } from '@/glossary/sync'
 import type { GlossaryTerm } from '@/types/glossary'
 import {
   countTranslatedSegments,
@@ -77,7 +81,7 @@ import {
   startJoinActivityPolling,
   stopJoinActivityPolling,
 } from '@/jobs/joinActivity'
-import type { Job, JobRole, JobTmAttachment } from '@/types/job'
+import type { Job, JobGlossaryAttachment, JobRole, JobTmAttachment } from '@/types/job'
 import { reportJobMemberProgress } from '@/jobs/reportProgress'
 import { fingerprintDocx, fingerprintMismatch } from '@/jobs/fingerprint'
 
@@ -92,6 +96,7 @@ const record = shallowRef<ProjectRecord | null>(null)
 const error = ref('')
 const notice = ref('')
 const jobSharedAttachments = ref<JobTmAttachment[]>([])
+const jobGlossaryAttachments = ref<JobGlossaryAttachment[]>([])
 
 const jobQueryId = computed(() => {
   const raw = route.query.job
@@ -112,6 +117,15 @@ const tmBaseAccess = computed(() => {
 })
 const readableBaseIds = computed(() => tmBaseAccess.value.readableBaseIds)
 const writableBaseIds = computed(() => tmBaseAccess.value.writableBaseIds)
+const glossaryBaseAccess = computed(() =>
+  record.value
+    ? resolveGlossaryAccess({
+        projectMeta: record.value.meta,
+        jobQueryId: jobQueryId.value,
+        jobShared: jobGlossaryAttachments.value,
+      })
+    : { jobContext: false, readableBaseIds: [], writableBaseIds: [], exportableBaseIds: [], cloneableBaseIds: [] },
+)
 const personalTmReadable = computed(() => readableBaseIds.value.length > 0)
 const personalTmWritable = computed(() => writableBaseIds.value.length > 0)
 const saving = ref(false)
@@ -540,6 +554,26 @@ async function refreshJobTmLayers() {
   }
 }
 
+async function refreshJobGlossaryLayers() {
+  const jobId = jobQueryId.value
+  const metaJob = record.value?.meta.jobId
+  if (!jobId || !metaJob || jobId !== metaJob) {
+    jobGlossaryAttachments.value = []
+    return
+  }
+  try {
+    const attachments = await listJobGlossaryAttachments(jobId)
+    jobGlossaryAttachments.value = attachments
+    await Promise.all(
+      attachments.filter(item => item.canRead && item.ownerId).map(item =>
+        syncGlossaryBase(sharedGlossaryLocalId(item.ownerId!, item.glossaryBaseId), { jobId }),
+      ),
+    )
+  } catch {
+    jobGlossaryAttachments.value = []
+  }
+}
+
 async function reloadPersonalTmUnits() {
   tmUnits.value = await listTmUnits({ baseIds: readableBaseIds.value })
 }
@@ -560,6 +594,8 @@ async function load() {
   if (gen !== loadGen) return
   record.value = loaded
   await refreshJobTmLayers()
+  await refreshJobGlossaryLayers()
+  await reloadGlossary()
   if (gen !== loadGen) return
   await reloadPersonalTmUnits()
   if (gen !== loadGen) return
@@ -584,6 +620,7 @@ async function onTmCollectionChanged() {
     meta: found.meta,
   }
   await refreshJobTmLayers()
+  await refreshJobGlossaryLayers()
   if (!personalTmReadable.value) {
     tmUnits.value = []
     tmAutosaveIds.value = new Set()
@@ -629,6 +666,7 @@ watch(
   async () => {
     if (!record.value) return
     await refreshJobTmLayers()
+    await refreshJobGlossaryLayers()
     await reloadPersonalTmUnits()
   },
 )
@@ -939,7 +977,7 @@ const glossaryForPair = computed(() => {
 })
 
 async function reloadGlossary() {
-  glossaryTerms.value = await listGlossaryTerms()
+  glossaryTerms.value = await listGlossaryTerms({ baseIds: glossaryBaseAccess.value.readableBaseIds })
 }
 
 function insertGlossaryTarget(segId: string, targetTerm: string) {
@@ -2007,6 +2045,9 @@ async function goBack() {
       :open="glossaryOpen"
       :source-lang="record.meta.sourceLang"
       :target-lang="record.meta.targetLang"
+      :readable-base-ids="glossaryBaseAccess.readableBaseIds"
+      :writable-base-ids="glossaryBaseAccess.writableBaseIds"
+      :job-id="glossaryBaseAccess.jobContext ? jobQueryId ?? undefined : undefined"
       @close="glossaryOpen = false"
       @changed="reloadGlossary"
     />
