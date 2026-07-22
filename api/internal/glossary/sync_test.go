@@ -66,6 +66,9 @@ func TestGlossarySyncFlow(t *testing.T) {
 	tokenB := mustAuth(t, srv.URL+"/api/auth/register", map[string]string{
 		"email": emailB, "password": "password1",
 	})
+	baseURL := srv.URL + "/api/glossary/bases/personal-glossary/sync"
+	mustPull(t, srv.URL+"/api/glossary/bases", tokenA)
+	mustPull(t, srv.URL+"/api/glossary/bases", tokenB)
 
 	termID := uuid.NewString()
 	now := time.Now().UTC()
@@ -84,9 +87,9 @@ func TestGlossarySyncFlow(t *testing.T) {
 		"createdBy":     "local",
 	}
 
-	mustPush(t, srv.URL+"/api/glossary/sync", tokenA, []map[string]any{term})
+	mustPush(t, baseURL, tokenA, []map[string]any{term})
 
-	pull := mustPull(t, srv.URL+"/api/glossary/sync?since=1970-01-01T00:00:00Z", tokenA)
+	pull := mustPull(t, baseURL+"?since=1970-01-01T00:00:00Z", tokenA)
 	terms, _ := pull["terms"].([]any)
 	if len(terms) != 1 {
 		t.Fatalf("pull terms=%v", pull)
@@ -98,8 +101,8 @@ func TestGlossarySyncFlow(t *testing.T) {
 	}
 	stale["targetTerm"] = "WRONG"
 	stale["updatedAt"] = older
-	mustPush(t, srv.URL+"/api/glossary/sync", tokenA, []map[string]any{stale})
-	pull = mustPull(t, srv.URL+"/api/glossary/sync?since=1970-01-01T00:00:00Z", tokenA)
+	mustPush(t, baseURL, tokenA, []map[string]any{stale})
+	pull = mustPull(t, baseURL+"?since=1970-01-01T00:00:00Z", tokenA)
 	got := pull["terms"].([]any)[0].(map[string]any)
 	if got["targetTerm"] != "счёт" {
 		t.Fatalf("LWW failed: %v", got)
@@ -111,8 +114,8 @@ func TestGlossarySyncFlow(t *testing.T) {
 	}
 	fresh["targetTerm"] = "инвойс"
 	fresh["updatedAt"] = newer
-	mustPush(t, srv.URL+"/api/glossary/sync", tokenA, []map[string]any{fresh})
-	pull = mustPull(t, srv.URL+"/api/glossary/sync?since=1970-01-01T00:00:00Z", tokenA)
+	mustPush(t, baseURL, tokenA, []map[string]any{fresh})
+	pull = mustPull(t, baseURL+"?since=1970-01-01T00:00:00Z", tokenA)
 	got = pull["terms"].([]any)[0].(map[string]any)
 	if got["targetTerm"] != "инвойс" {
 		t.Fatalf("newer LWW failed: %v", got)
@@ -125,18 +128,14 @@ func TestGlossarySyncFlow(t *testing.T) {
 	delAt := now.Add(time.Second).Format(time.RFC3339Nano)
 	tomb["deletedAt"] = delAt
 	tomb["updatedAt"] = delAt
-	mustPush(t, srv.URL+"/api/glossary/sync", tokenA, []map[string]any{tomb})
-	pull = mustPull(t, srv.URL+"/api/glossary/sync?since=1970-01-01T00:00:00Z", tokenA)
+	mustPush(t, baseURL, tokenA, []map[string]any{tomb})
+	pull = mustPull(t, baseURL+"?since=1970-01-01T00:00:00Z", tokenA)
 	got = pull["terms"].([]any)[0].(map[string]any)
 	if got["deletedAt"] == nil {
 		t.Fatalf("expected tombstone: %v", got)
 	}
 
-	pullB := mustPull(t, srv.URL+"/api/glossary/sync?since=1970-01-01T00:00:00Z", tokenB)
-	termsB, _ := pullB["terms"].([]any)
-	if len(termsB) != 0 {
-		t.Fatalf("user B should see 0 terms, got %v", pullB)
-	}
+	glossaryRequest(t, http.MethodGet, baseURL+"?since=1970-01-01T00:00:00Z", tokenB, nil, http.StatusBadRequest)
 }
 
 func mustAuth(t *testing.T, url string, body map[string]string) string {

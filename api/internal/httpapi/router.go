@@ -58,8 +58,12 @@ func NewRouter(
 
 	r.Route("/api/glossary", func(r chi.Router) {
 		r.Use(authHandler.Middleware)
-		r.Get("/sync", glossaryHandler.Pull)
-		r.Post("/sync", glossaryHandler.Push)
+		r.Get("/bases", glossaryHandler.ListBases)
+		r.Post("/bases", glossaryHandler.CreateBase)
+		r.Patch("/bases/{baseId}", glossaryHandler.PatchBase)
+		r.Delete("/bases/{baseId}", glossaryHandler.DeleteBase)
+		r.Get("/bases/{baseId}/sync", glossaryHandler.PullBase)
+		r.Post("/bases/{baseId}/sync", glossaryHandler.PushBase)
 	})
 
 	r.Route("/api/projects/{projectID}", func(r chi.Router) {

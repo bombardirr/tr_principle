@@ -4,6 +4,7 @@ import "time"
 
 type Term struct {
 	ID            string  `json:"id"`
+	BaseID        string  `json:"baseId"`
 	SourceLang    string  `json:"sourceLang"`
 	TargetLang    string  `json:"targetLang"`
 	SourceTerm    string  `json:"sourceTerm"`
