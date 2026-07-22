@@ -17,3 +17,14 @@
 ## Notes
 
 - Existing unrelated modification: `.superpowers/sdd/task-4-report.md` was preserved.
+
+## Review fixes
+
+- Enforced writable-base ACLs for glossary create, edit, status, delete, and TBX import; imports now fan out new UUID-tagged copies to every writable base.
+- Scoped panel TBX export to job-exportable bases, or locally owned bases outside a job, and passed all glossary access sets from the editor.
+- Refreshing job glossary attachments now reloads glossary hits to remove entries from detached/unreadable bases.
+
+## Review verification
+
+- `npm test` — 61 files / 262 tests passed.
+- `npm run build` remains blocked by the local Windows Node/esbuild process terminating with exit code `-4048` before diagnostics.

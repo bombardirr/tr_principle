@@ -621,6 +621,7 @@ async function onTmCollectionChanged() {
   }
   await refreshJobTmLayers()
   await refreshJobGlossaryLayers()
+  await reloadGlossary()
   if (!personalTmReadable.value) {
     tmUnits.value = []
     tmAutosaveIds.value = new Set()
@@ -667,6 +668,7 @@ watch(
     if (!record.value) return
     await refreshJobTmLayers()
     await refreshJobGlossaryLayers()
+    await reloadGlossary()
     await reloadPersonalTmUnits()
   },
 )
@@ -2047,6 +2049,7 @@ async function goBack() {
       :target-lang="record.meta.targetLang"
       :readable-base-ids="glossaryBaseAccess.readableBaseIds"
       :writable-base-ids="glossaryBaseAccess.writableBaseIds"
+      :exportable-base-ids="glossaryBaseAccess.exportableBaseIds"
       :job-id="glossaryBaseAccess.jobContext ? jobQueryId ?? undefined : undefined"
       @close="glossaryOpen = false"
       @changed="reloadGlossary"
