@@ -1,4 +1,5 @@
 import type { GlossaryTerm, GlossaryTermStatus } from '@/types/glossary'
+import { PERSONAL_GLOSSARY_BASE_ID } from '@/storage/glossaryBasesIdb'
 
 function xmlEscape(s: string): string {
   return s
@@ -80,6 +81,7 @@ export function parseTbx(xml: string): GlossaryTerm[] {
         : crypto.randomUUID()
     out.push({
       id,
+      baseId: PERSONAL_GLOSSARY_BASE_ID,
       sourceLang,
       targetLang,
       sourceTerm,

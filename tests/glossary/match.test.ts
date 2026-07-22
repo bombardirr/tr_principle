@@ -6,6 +6,7 @@ function term(partial: Partial<GlossaryTerm> & Pick<GlossaryTerm, 'sourceTerm' |
   const now = '2026-01-01T00:00:00.000Z'
   return {
     id: partial.id ?? crypto.randomUUID(),
+    baseId: partial.baseId ?? 'personal-glossary',
     sourceLang: partial.sourceLang ?? 'en',
     targetLang: partial.targetLang ?? 'ru',
     sourceTerm: partial.sourceTerm,

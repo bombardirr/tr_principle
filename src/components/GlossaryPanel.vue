@@ -7,6 +7,7 @@ import {
   putGlossaryTerm,
   softDeleteGlossaryTerm,
 } from '@/storage/glossaryIdb'
+import { PERSONAL_GLOSSARY_BASE_ID } from '@/storage/glossaryBasesIdb'
 import { markGlossaryDirty, syncGlossary } from '@/glossary/sync'
 import { exportTbx, parseTbx } from '@/glossary/tbx'
 import { publicActorLabel, useAuth } from '@/auth/session'
@@ -186,6 +187,7 @@ async function saveDraft() {
     : undefined
   const row: GlossaryTerm = {
     id: existing?.id ?? crypto.randomUUID(),
+    baseId: existing?.baseId ?? PERSONAL_GLOSSARY_BASE_ID,
     sourceLang: existing?.sourceLang ?? sourceLang,
     targetLang: existing?.targetLang ?? targetLang,
     sourceTerm,
