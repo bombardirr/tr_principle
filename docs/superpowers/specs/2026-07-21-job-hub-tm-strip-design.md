@@ -1,7 +1,7 @@
 # Job hub — TM strip on unbound project card
 
 Date: 2026-07-21  
-Status: Approved  
+Status: Implemented (main)  
 Related:
 
 - [`2026-07-20-job-tm-attachments-part2-design.md`](./2026-07-20-job-tm-attachments-part2-design.md) — server job attachments

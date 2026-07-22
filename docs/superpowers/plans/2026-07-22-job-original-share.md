@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Status:** Implemented on `feature/job-original-share` (Tasks 1–4 + integrity/security hardening).
+**Status:** Implemented on `main` (merged `feature/job-original-share`; Tasks 1–4 + integrity/security hardening).
 
 **Goal:** Job owner uploads the original DOCX to the server; any member can download it from the job hub; owner can replace/revoke — per [`2026-07-22-job-original-share-design.md`](../specs/2026-07-22-job-original-share-design.md).
 

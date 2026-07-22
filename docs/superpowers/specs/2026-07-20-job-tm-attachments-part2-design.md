@@ -1,7 +1,7 @@
 # Job TM attachments — Part 2 (API + sync list)
 
 Date: 2026-07-20  
-Status: Approved  
+Status: Implemented (main)  
 Related:
 
 - [`2026-07-20-job-tm-attach-only-design.md`](./2026-07-20-job-tm-attach-only-design.md) — attach-only product model

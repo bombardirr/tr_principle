@@ -1,7 +1,7 @@
 # Job TM — attach-only model (no shared pool)
 
 Date: 2026-07-20  
-Status: Approved  
+Status: Implemented (main)  
 Supersedes: [`2026-07-20-job-tm-attach-design.md`](./2026-07-20-job-tm-attach-design.md) Model A («ТМ работы»)
 
 ## Decision
