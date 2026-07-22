@@ -1,6 +1,7 @@
 import { openDB, type DBSchema, type IDBPDatabase } from 'idb'
 import { clearGlossaryTerms } from '@/storage/glossaryIdb'
 import { onStorageAccountChange, scopedDbName } from '@/storage/scope'
+import type { GlossaryBaseApiRecord } from '@/glossary/api'
 
 export const PERSONAL_GLOSSARY_BASE_ID = 'personal-glossary'
 export const GLOSSARY_BASE_COLORS = [
@@ -83,8 +84,61 @@ export async function listGlossaryBases(): Promise<GlossaryBaseRecord[]> {
   })
 }
 
+export async function listOwnedGlossaryBaseIds(): Promise<Set<string>> {
+  const bases = await listGlossaryBases()
+  return new Set(bases.filter(base => base.sharedOnly !== true).map(base => base.id))
+}
+
 export function sharedGlossaryLocalId(ownerId: string, baseId: string): string {
   return `${SHARED_GLOSSARY_LOCAL_PREFIX}${ownerId}:${baseId}`
+}
+
+export function parseSharedGlossaryLocalId(
+  localId: string,
+): { ownerId: string; glossaryBaseId: string } | null {
+  if (!localId.startsWith(SHARED_GLOSSARY_LOCAL_PREFIX)) return null
+  const separator = localId.indexOf(':', SHARED_GLOSSARY_LOCAL_PREFIX.length)
+  if (separator === -1) return null
+  const ownerId = localId.slice(SHARED_GLOSSARY_LOCAL_PREFIX.length, separator)
+  const glossaryBaseId = localId.slice(separator + 1)
+  return ownerId && glossaryBaseId ? { ownerId, glossaryBaseId } : null
+}
+
+/** Return the server catalog id for either an owned or namespaced shared base. */
+export function wireGlossaryBaseId(localId: string): string {
+  return parseSharedGlossaryLocalId(localId)?.glossaryBaseId ?? localId
+}
+
+export async function getGlossaryBase(id: string): Promise<GlossaryBaseRecord | undefined> {
+  const db = await getDb()
+  return db.get('bases', id)
+}
+
+export async function upsertGlossaryBasesFromCloud(bases: GlossaryBaseApiRecord[]): Promise<void> {
+  const db = await getDb()
+  const tx = db.transaction('bases', 'readwrite')
+  for (const base of bases) {
+    await tx.store.put({ ...base, sharedOnly: false })
+  }
+  await tx.done
+}
+
+/** Ensure a local catalog row before promoting an attachment to the cloud. */
+export async function ensureGlossaryBase(id: string): Promise<GlossaryBaseRecord> {
+  const existing = await getGlossaryBase(id)
+  if (existing) return existing
+  const now = new Date().toISOString()
+  const row: GlossaryBaseRecord = {
+    id,
+    label: id === PERSONAL_GLOSSARY_BASE_ID ? 'Personal glossary' : id,
+    color: GLOSSARY_BASE_COLORS[0],
+    createdAt: now,
+    updatedAt: now,
+    sharedOnly: false,
+  }
+  const db = await getDb()
+  await db.put('bases', row)
+  return row
 }
 
 export async function createGlossaryBase(input: {

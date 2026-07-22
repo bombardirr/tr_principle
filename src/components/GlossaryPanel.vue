@@ -8,7 +8,7 @@ import {
   softDeleteGlossaryTerm,
 } from '@/storage/glossaryIdb'
 import { PERSONAL_GLOSSARY_BASE_ID } from '@/storage/glossaryBasesIdb'
-import { markGlossaryDirty, syncGlossary } from '@/glossary/sync'
+import { markGlossaryDirty, syncGlossaryBase } from '@/glossary/sync'
 import { exportTbx, parseTbx } from '@/glossary/tbx'
 import { publicActorLabel, useAuth } from '@/auth/session'
 import { downloadBlob } from '@/docx/exportDocx'
@@ -105,7 +105,7 @@ async function reload() {
   loading.value = true
   error.value = ''
   try {
-    await syncGlossary()
+    await syncGlossaryBase(PERSONAL_GLOSSARY_BASE_ID)
     terms.value = await listGlossaryTerms()
   } catch {
     error.value = t('glossary.loadFail')
