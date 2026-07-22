@@ -179,6 +179,12 @@ func (h *Handler) PullBase(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	if baseID == personalBaseID && jobID == nil {
+		if err := h.Store.EnsureBase(r.Context(), user.ID, personalBaseID, "Personal glossary", defaultColor); err != nil {
+			writeError(w, http.StatusInternalServerError, "server error")
+			return
+		}
+	}
 	ownerID, canRead, _, err := h.Store.ResolveBaseAccess(r.Context(), user.ID, baseID, jobID)
 	if !writeAccessError(w, err) {
 		return
@@ -213,6 +219,12 @@ func (h *Handler) PushBase(w http.ResponseWriter, r *http.Request) {
 	jobID, ok := parseJobID(w, r)
 	if !ok {
 		return
+	}
+	if baseID == personalBaseID && jobID == nil {
+		if err := h.Store.EnsureBase(r.Context(), user.ID, personalBaseID, "Personal glossary", defaultColor); err != nil {
+			writeError(w, http.StatusInternalServerError, "server error")
+			return
+		}
 	}
 	ownerID, _, canWrite, err := h.Store.ResolveBaseAccess(r.Context(), user.ID, baseID, jobID)
 	if !writeAccessError(w, err) {

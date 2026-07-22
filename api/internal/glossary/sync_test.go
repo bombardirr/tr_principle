@@ -67,8 +67,6 @@ func TestGlossarySyncFlow(t *testing.T) {
 		"email": emailB, "password": "password1",
 	})
 	baseURL := srv.URL + "/api/glossary/bases/personal-glossary/sync"
-	mustPull(t, srv.URL+"/api/glossary/bases", tokenA)
-	mustPull(t, srv.URL+"/api/glossary/bases", tokenB)
 
 	termID := uuid.NewString()
 	now := time.Now().UTC()
@@ -135,7 +133,11 @@ func TestGlossarySyncFlow(t *testing.T) {
 		t.Fatalf("expected tombstone: %v", got)
 	}
 
-	glossaryRequest(t, http.MethodGet, baseURL+"?since=1970-01-01T00:00:00Z", tokenB, nil, http.StatusBadRequest)
+	pullB := mustPull(t, baseURL+"?since=1970-01-01T00:00:00Z", tokenB)
+	termsB, _ := pullB["terms"].([]any)
+	if len(termsB) != 0 {
+		t.Fatalf("user B should see 0 terms, got %v", pullB)
+	}
 }
 
 func mustAuth(t *testing.T, url string, body map[string]string) string {

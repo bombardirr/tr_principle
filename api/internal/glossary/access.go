@@ -37,6 +37,9 @@ func (s *Store) ResolveBaseAccess(
 		FROM job_glossary_attachments a
 		JOIN jobs j ON j.id = a.job_id
 		JOIN job_members m ON m.job_id = j.id AND m.user_id = $1
+		JOIN glossary_bases b ON b.owner_id = j.owner_user_id
+			AND b.id = a.glossary_base_id
+			AND b.deleted_at IS NULL
 		WHERE a.glossary_base_id = $2 AND ($3::uuid IS NULL OR j.id = $3)
 		GROUP BY j.owner_user_id
 		ORDER BY j.owner_user_id`, caller, baseID, jobID)
