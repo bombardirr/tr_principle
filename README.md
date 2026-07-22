@@ -1,37 +1,41 @@
-# Translation Tool
+# Translation Tool (appzac)
 
-Лёгкий веб-CAT для фрилансеров и малого бизнеса: перевод DOCX в браузере с сохранением разметки.
+Лёгкий веб-CAT для фрилансеров и малого бизнеса: перевод DOCX в браузере с сохранением разметки, облачный аккаунт, общие работы и живые TM/глоссарии.
 
-## Статус (фаза A — MVP)
+## Статус
 
-Работает локально в браузере:
+**Cloud MVP почти закрыт по фичам** (на `main`). До **tag** остаётся QA/полировка: Word-checklist, метрики, опционально soft-warn / HTTPS.
 
-1. Открыть DOCX → сегменты по абзацам (тело, таблицы, колонтитулы)
-2. Перевод в двухпанельном редакторе (маркеры форматирования `{1}…{2}`)
-3. Автосохранение в IndexedDB + скачивание файла проекта `.tcat.zip`
-4. Экспорт DOCX с прежней структурой/форматированием
+Работает:
 
-Спека: [`docs/superpowers/specs/2026-07-13-web-cat-mvp-design.md`](docs/superpowers/specs/2026-07-13-web-cat-mvp-design.md)  
-План: [`PLAN.md`](PLAN.md)
+1. Auth-first лендинг → проекты / общие работы → редактор
+2. DOCX import → sentence-сегменты → стили → экспорт с сохранением разметки
+3. Локальный IndexedDB + `.tcat.zip`; cloud lock/backup
+4. Именованные **TM** и **глоссарии** + attach на job (R/W/E/C) + sync
+5. Shared work: invites, прогресс, шаринг оригинала DOCX
+
+Актуальный план: [`PLAN.md`](PLAN.md)  
+Корневая спека фазы A: [`docs/superpowers/specs/2026-07-13-web-cat-mvp-design.md`](docs/superpowers/specs/2026-07-13-web-cat-mvp-design.md)
 
 ## Запуск
 
 ```bash
 npm install
-npm run dev
+npm run dev          # SPA http://localhost:5173
 ```
 
-Откройте http://localhost:5173
+API (локально): см. `api/` и `docker-compose.local.yml` / `.env.local.example`.
 
 ```bash
-npm test      # unit-тесты DOCX/маркеров
-npm run build # production-сборка в dist/
+npm test
+npm run build
 ```
 
 ## Стек
 
-Vue 3 + TypeScript + Vite + vue-i18n + JSZip + IndexedDB (`idb`). Всё на клиенте, без сервера.
+- **Клиент:** Vue 3 + TypeScript + Vite + vue-i18n + IndexedDB (`idb`) + JSZip
+- **Сервер:** Go (chi) + Postgres; JWT; SPA может отдаваться из того же бинаря в prod
 
 ## Дальше
 
-См. актуальный [`PLAN.md`](PLAN.md): дозакрытие cloud MVP → tag; затем глоссарий / общий проект.
+См. блок **«Осталось до tag MVP»** в [`PLAN.md`](PLAN.md).

@@ -1,8 +1,8 @@
 # Glossary (termbase) — design
 
 Date: 2026-07-16  
-Status: Approved for planning  
-Slice: Phase C — MVP (industry-shaped, personal first)
+Status: Implemented (main)  
+Slice: Phase C — C1 personal termbase (storage/sync shape superseded by C2 named bases)
 
 ## Goal
 

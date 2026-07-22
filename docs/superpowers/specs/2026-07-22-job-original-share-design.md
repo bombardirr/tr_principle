@@ -1,7 +1,7 @@
 # Job original DOCX — share / download
 
 Date: 2026-07-22  
-Status: Implemented (feature/job-original-share)  
+Status: Implemented (main)  
 Related:
 
 - [`2026-07-17-shared-work-jobs-design.md`](./2026-07-17-shared-work-jobs-design.md) — jobs store fingerprint only (`source_filename`, `source_hash`), not DOCX bytes

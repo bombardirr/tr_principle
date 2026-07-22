@@ -1,7 +1,7 @@
 # Plan entitlement (free / Pro) — design
 
 Date: 2026-07-16  
-Status: Approved for planning  
+Status: Implemented (main)  
 Slice: cloud MVP closeout §2 (contract + UI; no paywall)
 
 ## Goal

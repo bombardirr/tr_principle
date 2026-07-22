@@ -1,7 +1,7 @@
 # Cloud TM bases — job share + unit sync
 
 Date: 2026-07-21  
-Status: Approved (brainstorm)  
+Status: Implemented (main)  
 Related:
 
 - [`2026-07-14-cloud-tm-sync-design.md`](./2026-07-14-cloud-tm-sync-design.md) — existing per-account unit sync (extend, do not replace)

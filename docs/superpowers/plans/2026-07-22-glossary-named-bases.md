@@ -2,6 +2,8 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+**Status:** Implemented on `main` (merged `feature/glossary-named-bases`).
+
 **Goal:** Named glossary bases mirroring TM — local catalog + `baseId`, cloud per-base sync, job attachments R/W/E/C, editor highlight ∪ Readable / write → Writable, Export TBX / Clone — per [`2026-07-22-glossary-named-bases-design.md`](../specs/2026-07-22-glossary-named-bases-design.md).
 
 **Architecture:** Copy TM patterns into `glossary_*` (not a shared ResourceStore). Remove legacy bulk `/api/glossary/sync`. Personal id = `personal-glossary` (not special). Shared local ids `share:{ownerId}:{baseId}`. Promote on job attach; member sync via `?jobId=`.

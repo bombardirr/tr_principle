@@ -1,7 +1,7 @@
 # Job TM — Export / Clone ACL UI
 
 Date: 2026-07-22  
-Status: Approved (brainstorm)  
+Status: Implemented (main)  
 Related:
 
 - [`2026-07-20-job-tm-attachments-part2-design.md`](./2026-07-20-job-tm-attachments-part2-design.md) — flags in API, UI was R/W only

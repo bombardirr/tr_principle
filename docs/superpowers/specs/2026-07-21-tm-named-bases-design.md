@@ -1,7 +1,7 @@
 # TM collection — named local bases (Create / Import + multi-pool)
 
 Date: 2026-07-21  
-Status: Approved  
+Status: Implemented (main)  
 Related:
 
 - [`2026-07-20-tm-collection-part1-design.md`](./2026-07-20-tm-collection-part1-design.md)

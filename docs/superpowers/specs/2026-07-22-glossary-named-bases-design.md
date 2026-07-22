@@ -1,7 +1,7 @@
 # Glossary — named bases + job share (C2)
 
 Date: 2026-07-22  
-Status: Approved (brainstorm)  
+Status: Implemented (main)  
 Related:
 
 - [`2026-07-16-glossary-termbase-design.md`](./2026-07-16-glossary-termbase-design.md) — C1 personal termbase (superseded for storage/sync shape by this slice)
