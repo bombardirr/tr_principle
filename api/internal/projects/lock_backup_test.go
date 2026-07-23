@@ -54,6 +54,7 @@ func TestProjectLockAndBackup(t *testing.T) {
 		&projects.Handler{Store: projects.NewStore(pool), BackupDir: backupDir},
 		&jobs.Handler{Store: jobs.NewStore(pool)},
 		"http://localhost",
+		"",
 	))
 	t.Cleanup(srv.Close)
 

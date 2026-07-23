@@ -21,6 +21,8 @@ export default {
     settingsGlossaryHint: 'Create, import, and delete your glossary bases.',
     settingsOpenTmCollection: 'Open TM collection',
     settingsOpenGlossaryCollection: 'Open glossary collection',
+    settingsOpenMetrics: 'Open metrics',
+    settingsMetricsHint: 'Prometheus text for admins (ops).',
     shortcutClearFocus: 'Clear focus',
     shortcutClearFocusHint: 'Clear the active segment and blur the translation field.',
     shortcutPressKey: 'Press a key…',
@@ -559,5 +561,15 @@ export default {
     jobCloneTitle: 'Clone into your glossary',
     jobExported: 'Exported {count} terms',
     jobCloned: 'Cloned {count} terms',
+  },
+  ops: {
+    metricsTitle: 'Server metrics',
+    metricsHint:
+      'Prometheus text from this app. Admins only. Scrapers use METRICS_TOKEN; this page uses your login.',
+    metricsRefresh: 'Refresh',
+    metricsBack: 'Back to projects',
+    metricsLoading: 'Loading…',
+    metricsForbidden: 'Admin access required.',
+    metricsLoadError: 'Could not load metrics (HTTP {status}).',
   },
 }

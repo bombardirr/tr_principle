@@ -54,4 +54,10 @@ func TestMountSPA_FallsBackToIndex(t *testing.T) {
 	if res.Code != http.StatusTeapot {
 		t.Fatalf("api: %d", res.Code)
 	}
+
+	res = httptest.NewRecorder()
+	h.ServeHTTP(res, httptest.NewRequest(http.MethodGet, "/metrics", nil))
+	if res.Code != http.StatusTeapot {
+		t.Fatalf("metrics should hit api: %d", res.Code)
+	}
 }

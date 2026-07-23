@@ -21,6 +21,8 @@ export default {
     settingsGlossaryHint: 'Создание, импорт и удаление ваших глоссарных баз.',
     settingsOpenTmCollection: 'Открыть коллекцию ТМ',
     settingsOpenGlossaryCollection: 'Открыть коллекцию глоссариев',
+    settingsOpenMetrics: 'Открыть метрики',
+    settingsMetricsHint: 'Текст Prometheus для админов (ops).',
     shortcutClearFocus: 'Снять фокус',
     shortcutClearFocusHint: 'Убрать активный сегмент и курсор из поля перевода.',
     shortcutPressKey: 'Нажмите клавишу…',
@@ -563,5 +565,15 @@ export default {
     jobCloneTitle: 'Клонировать в ваш глоссарий',
     jobExported: 'Экспортировано терминов: {count}',
     jobCloned: 'Склонировано терминов: {count}',
+  },
+  ops: {
+    metricsTitle: 'Метрики сервера',
+    metricsHint:
+      'Текст Prometheus этого приложения. Только для админов. Скрейперы — METRICS_TOKEN; эта страница — ваш логин.',
+    metricsRefresh: 'Обновить',
+    metricsBack: 'К проектам',
+    metricsLoading: 'Загрузка…',
+    metricsForbidden: 'Нужен доступ администратора.',
+    metricsLoadError: 'Не удалось загрузить метрики (HTTP {status}).',
   },
 }

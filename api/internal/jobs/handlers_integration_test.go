@@ -52,6 +52,7 @@ func TestHTTPCreateInviteAcceptAndListMembers(t *testing.T) {
 		&projects.Handler{Store: projects.NewStore(pool), BackupDir: t.TempDir()},
 		&jobs.Handler{Store: jobs.NewStore(pool)},
 		"http://localhost",
+		"",
 	))
 	t.Cleanup(srv.Close)
 
@@ -202,6 +203,7 @@ func TestHTTPDeleteJobOwnerOnly(t *testing.T) {
 		&projects.Handler{Store: projects.NewStore(pool), BackupDir: t.TempDir()},
 		&jobs.Handler{Store: jobs.NewStore(pool)},
 		"http://localhost",
+		"",
 	))
 	t.Cleanup(srv.Close)
 

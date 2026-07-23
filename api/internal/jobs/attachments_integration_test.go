@@ -48,6 +48,7 @@ func TestHTTPJobTMAttachmentsCRUDAndACL(t *testing.T) {
 		&projects.Handler{Store: projects.NewStore(pool), BackupDir: t.TempDir()},
 		&jobs.Handler{Store: jobs.NewStore(pool)},
 		"http://localhost",
+		"",
 	))
 	t.Cleanup(srv.Close)
 
@@ -152,6 +153,7 @@ func TestHTTPJobGlossaryAttachmentsACL(t *testing.T) {
 		&projects.Handler{Store: projects.NewStore(pool), BackupDir: t.TempDir()},
 		&jobs.Handler{Store: jobs.NewStore(pool), Glossary: glossaryStore},
 		"http://localhost",
+		"",
 	))
 	t.Cleanup(srv.Close)
 

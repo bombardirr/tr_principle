@@ -107,6 +107,11 @@ function openGlossaryCollectionFromSettings() {
   glossaryCollectionOpen.value = true
 }
 
+function openMetricsFromSettings() {
+  closeSettings()
+  void router.push({ name: 'ops-metrics' })
+}
+
 function onDocPointer(e: PointerEvent) {
   if (!settingsOpen.value) return
   const el = settingsRoot.value
@@ -260,6 +265,15 @@ async function onLogout() {
                   <button type="button" class="ghost danger" :disabled="settingsBusy" @click="onLogout">
                     {{ t('auth.logout') }}
                   </button>
+                </div>
+                <div v-if="user?.is_admin" class="settings-block settings-ops">
+                  <span class="settings-label">{{ t('ops.metricsTitle') }}</span>
+                  <p class="settings-hint">{{ t('auth.settingsMetricsHint') }}</p>
+                  <div class="settings-actions">
+                    <button type="button" class="primary" @click="openMetricsFromSettings">
+                      {{ t('auth.settingsOpenMetrics') }}
+                    </button>
+                  </div>
                 </div>
               </div>
 

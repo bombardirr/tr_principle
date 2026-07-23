@@ -15,6 +15,7 @@ type Config struct {
 	AllowedOrigin string
 	PublicDir     string
 	BackupDir     string
+	MetricsToken  string
 }
 
 func FromEnv() (Config, error) {
@@ -61,5 +62,6 @@ func FromEnv() (Config, error) {
 		AllowedOrigin: origin,
 		PublicDir:     publicDir,
 		BackupDir:     backupDir,
+		MetricsToken:  os.Getenv("METRICS_TOKEN"),
 	}, nil
 }

@@ -25,7 +25,7 @@ func MountSPA(api http.Handler, publicDir string) http.Handler {
 		if p == "" {
 			p = "/"
 		}
-		if strings.HasPrefix(p, "/api/") || p == "/api" {
+		if strings.HasPrefix(p, "/api/") || p == "/api" || p == "/metrics" {
 			api.ServeHTTP(w, r)
 			return
 		}

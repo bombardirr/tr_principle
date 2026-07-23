@@ -177,6 +177,31 @@ func (h *Handler) Middleware(next http.Handler) http.Handler {
 	})
 }
 
+// AdminFromBearer returns (authed, isAdmin) for a Bearer JWT without writing a response.
+// When Tokens/Store are missing or the token is invalid, authed is false.
+func (h *Handler) AdminFromBearer(r *http.Request) (authed bool, isAdmin bool) {
+	if h == nil || h.Tokens == nil || h.Store == nil {
+		return false, false
+	}
+	header := r.Header.Get("Authorization")
+	if !strings.HasPrefix(header, "Bearer ") {
+		return false, false
+	}
+	claims, err := h.Tokens.Parse(strings.TrimPrefix(header, "Bearer "))
+	if err != nil {
+		return false, false
+	}
+	id, err := uuid.Parse(claims.Subject)
+	if err != nil {
+		return false, false
+	}
+	user, err := h.Store.FindByID(r.Context(), id)
+	if err != nil || user.SessionVersion != claims.SV {
+		return false, false
+	}
+	return true, user.IsAdmin
+}
+
 func UserFromContext(ctx context.Context) (User, bool) {
 	u, ok := ctx.Value(userContextKey).(User)
 	return u, ok

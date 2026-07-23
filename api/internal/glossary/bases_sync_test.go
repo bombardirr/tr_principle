@@ -50,6 +50,7 @@ func TestGlossaryBaseCatalogAndOwnerSync(t *testing.T) {
 		&projects.Handler{Store: projects.NewStore(pool), BackupDir: t.TempDir()},
 		&jobs.Handler{Store: jobs.NewStore(pool)},
 		"http://localhost",
+		"",
 	))
 	t.Cleanup(srv.Close)
 
@@ -113,6 +114,7 @@ func TestGlossaryJobMemberCannotSyncDeletedBase(t *testing.T) {
 		&projects.Handler{Store: projects.NewStore(pool), BackupDir: t.TempDir()},
 		&jobs.Handler{Store: jobs.NewStore(pool)},
 		"http://localhost",
+		"",
 	))
 	t.Cleanup(srv.Close)
 

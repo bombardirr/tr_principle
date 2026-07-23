@@ -3,6 +3,7 @@ package httpapi_test
 import (
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -25,6 +26,7 @@ func TestProjectRoutes_NoTrailingSlash(t *testing.T) {
 		&projects.Handler{},
 		&jobs.Handler{},
 		"http://localhost",
+		"",
 	)
 
 	tests := []struct {
@@ -63,6 +65,7 @@ func TestJobsRouteRequiresAuthentication(t *testing.T) {
 		&projects.Handler{},
 		&jobs.Handler{},
 		"http://localhost",
+		"",
 	)
 
 	tests := []struct {
@@ -82,5 +85,50 @@ func TestJobsRouteRequiresAuthentication(t *testing.T) {
 				t.Fatalf("%s without auth = %d, want 401", tt.path, rec.Code)
 			}
 		})
+	}
+}
+
+func TestMetricsRoute_TokenOK(t *testing.T) {
+	authHandler := &auth.Handler{
+		Tokens: auth.NewTokenIssuer([]byte("test-secret-key-32bytes-minimum!!"), time.Hour),
+	}
+	handler := httpapi.NewRouter(
+		authHandler,
+		&tm.Handler{},
+		&glossary.Handler{},
+		&projects.Handler{},
+		&jobs.Handler{},
+		"http://localhost",
+		"metrics-secret",
+	)
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/metrics", nil)
+	req.Header.Set("Authorization", "Bearer metrics-secret")
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("got %d body=%q", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), "http_requests_total") {
+		t.Fatalf("expected http_requests_total in body")
+	}
+}
+
+func TestMetricsRoute_NoAuth401(t *testing.T) {
+	authHandler := &auth.Handler{
+		Tokens: auth.NewTokenIssuer([]byte("test-secret-key-32bytes-minimum!!"), time.Hour),
+	}
+	handler := httpapi.NewRouter(
+		authHandler,
+		&tm.Handler{},
+		&glossary.Handler{},
+		&projects.Handler{},
+		&jobs.Handler{},
+		"http://localhost",
+		"metrics-secret",
+	)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/metrics", nil))
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("got %d", rec.Code)
 	}
 }

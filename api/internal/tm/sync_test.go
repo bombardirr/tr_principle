@@ -53,7 +53,7 @@ func TestTmSyncFlow(t *testing.T) {
 	srv := httptest.NewServer(httpapi.NewRouter(authHandler, tmHandler, glossaryHandler, &projects.Handler{
 		Store:     projects.NewStore(pool),
 		BackupDir: t.TempDir(),
-	}, &jobs.Handler{Store: jobs.NewStore(pool)}, "http://localhost"))
+	}, &jobs.Handler{Store: jobs.NewStore(pool)}, "http://localhost", ""))
 	t.Cleanup(srv.Close)
 
 	emailA := fmt.Sprintf("tmtest_a_%s@example.com", time.Now().Format("150405.000000000"))
@@ -171,7 +171,7 @@ func TestTmSyncBaseID(t *testing.T) {
 	srv := httptest.NewServer(httpapi.NewRouter(authHandler, tmHandler, glossaryHandler, &projects.Handler{
 		Store:     projects.NewStore(pool),
 		BackupDir: t.TempDir(),
-	}, &jobs.Handler{Store: jobs.NewStore(pool)}, "http://localhost"))
+	}, &jobs.Handler{Store: jobs.NewStore(pool)}, "http://localhost", ""))
 	t.Cleanup(srv.Close)
 
 	email := fmt.Sprintf("tmtest_base_%s@example.com", time.Now().Format("150405.000000000"))

@@ -37,9 +37,9 @@ const router = createRouter({
       meta: { requiresAuth: true },
     },
     {
-      path: '/jobs/:id',
-      name: 'job-hub',
-      redirect: to => ({ name: 'projects', query: { job: String(to.params.id) } }),
+      path: '/ops/metrics',
+      name: 'ops-metrics',
+      component: () => import('@/pages/OpsMetricsPage.vue'),
       meta: { requiresAuth: true },
     },
   ],

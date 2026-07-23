@@ -156,12 +156,14 @@ Outbox / очередь push — **не** в этом пункте («позже
 - [ ] Согласие / cookie-баннер — только если реально нужно по политике хостинга; иначе минимум (счётчик + цели)
 
 **B. Сервер / ops (после tag или параллельно ops, не блокер tag)**  
-- [ ] **Prometheus**: `/metrics` на Go API (request rate/latency/errors, DB pool если есть)  
-- [ ] **Grafana**: дашборд по scrape (compose или отдельный стек на мини-ПК)  
+- [x] **Prometheus Phase 1**: `/metrics` на Go API (request rate/latency/errors + process) + dual auth (token / `is_admin`) + SPA `/ops/metrics`  
+- [ ] **Prometheus + node_exporter** в compose (phase 2)  
+- [ ] **Grafana**: дашборд по scrape (phase 3)  
 - [ ] Алерты позже (5xx, latency) — не в первом срезе  
 - [ ] Не путать с продуктовой аналитикой: Prometheus ≠ клики по UI
 
-Спеку/план реализации — перед стартом среза (как для entitlement).
+Спека: [`docs/superpowers/specs/2026-07-23-observability-prometheus-design.md`](docs/superpowers/specs/2026-07-23-observability-prometheus-design.md)  
+План phase 1: [`docs/superpowers/plans/2026-07-23-observability-phase1.md`](docs/superpowers/plans/2026-07-23-observability-phase1.md)
 
 ---
 

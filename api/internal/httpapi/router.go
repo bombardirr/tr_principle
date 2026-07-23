@@ -20,6 +20,7 @@ func NewRouter(
 	projectsHandler *projects.Handler,
 	jobsHandler *jobs.Handler,
 	allowedOrigin string,
+	metricsToken string,
 ) http.Handler {
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID)
@@ -27,6 +28,9 @@ func NewRouter(
 	r.Use(middleware.Timeout(120 * time.Second))
 	r.Use(securityHeaders)
 	r.Use(cors(allowedOrigin))
+	r.Use(Instrument)
+
+	r.Handle("/metrics", MetricsAuth(metricsToken, authHandler.AdminFromBearer, MetricsHandler()))
 
 	r.Get("/api/health", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
