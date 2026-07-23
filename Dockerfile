@@ -6,7 +6,7 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
 COPY . .
-ARG VITE_GRAFANA_URL=https://grafana.appzac.ru
+ARG VITE_GRAFANA_URL=https://metrics.appzac.ru
 ENV VITE_GRAFANA_URL=$VITE_GRAFANA_URL
 RUN npm run build
 

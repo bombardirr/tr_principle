@@ -6,25 +6,30 @@
   - compose project:  appzac       (-p appzac)
   - app:  appzac-prod-app   (Go: API + SPA, порт 8080)
   - db:   appzac-prod-db
+  - grafana: appzac-prod-grafana (proxy_net + localhost:3000)
+  - prometheus: appzac-prod-prometheus (только 127.0.0.1:9090)
   - NPM Proxy Host → http://appzac-prod-app:8080
-  - домен (план): appzac.ru
+  - домен: appzac.ru
+  - Grafana (NPM): metrics.appzac.ru  (не grafana.appzac.ru — часто занят)
+
+Подробности observability: deploy/observability/README.md
 
 1) Один раз — окружение
    cd /home/ag/projects/tr_principle
    git clone git@github.com:bombardirr/tr_principle.git .   # если ещё нет
    cp .env.prod.example .env.prod
-   # Заполните POSTGRES_*, DATABASE_URL, JWT_SECRET, CORS_ORIGIN.
+   # Заполните POSTGRES_*, DATABASE_URL, JWT_SECRET, CORS_ORIGIN,
+   # METRICS_TOKEN, GRAFANA_ADMIN_*, GRAFANA_ROOT_URL.
 
 2) Один раз — сеть NPM
    docker network create proxy_net || true
 
-3) NPM (Nginx Proxy Manager)
+3) NPM (Nginx Proxy Manager) — приложение
    - Add Proxy Host: appzac.ru (или поддомен)
    - Forward Hostname / IP: appzac-prod-app
    - Forward Port: 8080   ← не 80, отдельного nginx-контейнера нет
    - SSL: Let's Encrypt + Force SSL / HSTS
    - Передавать X-Real-IP (по умолчанию NPM делает) — нужен для rate limit auth
-   - Доступ можно ограничить Access List
    - Не публикуйте :8080 наружу без NPM
 
 3b) Секреты
@@ -32,15 +37,16 @@
    - BACKUP_DIR=/data/backups (volume в compose)
    - CORS_ORIGIN = реальный origin SPA (https://appzac.ru)
    - METRICS_TOKEN (openssl rand -hex 32) — scrape /metrics
-   - GRAFANA_ADMIN_PASSWORD (openssl rand -base64 24) — логин Grafana
-   - GRAFANA_ROOT_URL=https://grafana.appzac.ru
+   - GRAFANA_ADMIN_USER=admin + GRAFANA_ADMIN_PASSWORD (openssl rand -base64 24)
+   - GRAFANA_ROOT_URL=https://metrics.appzac.ru
 
-3c) NPM — Grafana (после первого up со стеком observability)
-   - Domain: grafana.appzac.ru
+3c) NPM — Grafana
+   - Domain: metrics.appzac.ru
    - Forward: http://appzac-prod-grafana:3000
    - Websockets: on; SSL Let's Encrypt
-   - Access List рекомендуется
+   - Access List рекомендуется (иначе публична только форма логина; графики — после пароля Grafana)
    - Prometheus (:9090) на NPM не публиковать
+   - Логин Grafana ≠ аккаунт appzac; пароль: grep GRAFANA_ADMIN_ .env.prod
 
 4) Деплой вручную (порядок как в CI)
    cd /home/ag/projects/tr_principle
@@ -48,21 +54,19 @@
    docker compose --env-file .env.prod -p appzac -f docker-compose.prod.yml up -d db
    docker compose --env-file .env.prod -p appzac -f docker-compose.prod.yml up -d --build --remove-orphans
    # Старые appzac-prod-web / appzac-prod-api уйдут через --remove-orphans.
-   # Поднимаются также: node-exporter, prometheus (:9090 localhost), grafana (:3000 localhost).
+   # Также: node-exporter, prometheus, grafana.
 
 5) Проверка
    docker exec appzac-prod-app wget -qO- http://127.0.0.1:8080/api/health
-   docker exec appzac-prod-app wget -qO- http://127.0.0.1:8080/ | head
    docker compose --env-file .env.prod -p appzac -f docker-compose.prod.yml ps
-   # Prometheus targets (на сервере):
-   #   curl -s http://127.0.0.1:9090/api/v1/targets | head
-   # Grafana: https://grafana.appzac.ru (NPM) или SSH-туннель :3000
-   #   дашборд Appzac → Appzac ops; логин admin / GRAFANA_ADMIN_PASSWORD
-   # Prometheus UI только локально: curl http://127.0.0.1:9090
-   # Сырой текст метрик в SPA: https://appzac.ru/ops/metrics (is_admin) → кнопка Grafana
+   curl -s 'http://127.0.0.1:9090/api/v1/query?query=up'
+   # Grafana: https://metrics.appzac.ru  (admin / GRAFANA_ADMIN_PASSWORD)
+   # SPA: https://appzac.ru/ops/metrics (is_admin) → «Открыть Grafana»
+
 6) Self-hosted runner — как раньше: /home/ag/actions-runner-appzac (не внутри репо).
 
 7) CI
    Push в main → check → deploy: db → up --build app → health /api/health.
+   .env.prod обязан содержать METRICS_TOKEN и GRAFANA_ADMIN_PASSWORD (не CHANGE_ME*).
 
 Локально фронт: npm run dev (Vite), API: docker compose -f docker-compose.local.yml up.

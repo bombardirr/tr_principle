@@ -577,6 +577,6 @@ export default {
     metricsLoadError: 'Не удалось загрузить метрики (HTTP {status}).',
     grafanaOpen: 'Открыть Grafana',
     grafanaHint:
-      'Откроет ops-дашборд (логин Grafana). Обычно https://grafana.appzac.ru через NPM; лучше Access List.',
+      'Откроет ops-дашборд (логин Grafana). Обычно https://metrics.appzac.ru через NPM; лучше Access List.',
   },
 }

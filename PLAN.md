@@ -34,9 +34,9 @@ Telegram-сброс пароля — **в границе MVP, но не блок
 
 **Снято / не в scope tag сейчас:** HTTPS на проде (уже работает); Word-checklist на реальных DOCX (отложено — проверка на проде); soft-warn при confirm в shared TM ✓.
 
-**Явно не блокер tag:** Telegram link/reset; Pro paywall; dual % / finalize PM (J5 polish); deferred TM write stack (устарело с attach-only); полный TBX Core / морфология; Prometheus/Grafana.
+**Явно не блокер tag:** Telegram link/reset; Pro paywall; dual % / finalize PM (J5 polish); deferred TM write stack (устарело с attach-only); полный TBX Core / морфология; ops-алерты (Prometheus/Grafana ядро уже ✓).
 
-**Уже в `main` (фичи cloud/group):** auth, cloud TM + named bases + job share E/C, glossary C1+C2, jobs/hub/invites/progress, original DOCX share, offline banner, free/Pro badge (без жёсткого gating), soft-warn confirm над чужим exact/context в shared TM.
+**Уже в `main` (фичи cloud/group):** auth, cloud TM + named bases + job share E/C, glossary C1+C2, jobs/hub/invites/progress, original DOCX share, offline banner, free/Pro badge (без жёсткого gating), soft-warn confirm над чужим exact/context в shared TM, ops metrics (`/metrics`, `/ops/metrics`, Prometheus + Grafana + node_exporter).
 
 ---
 
@@ -155,15 +155,14 @@ Outbox / очередь push — **не** в этом пункте («позже
 - [ ] Privacy: не слать email/текст сегментов/JWT; только агрегированные действия и page views  
 - [ ] Согласие / cookie-баннер — только если реально нужно по политике хостинга; иначе минимум (счётчик + цели)
 
-**B. Сервер / ops (после tag или параллельно ops, не блокер tag)**  
+**B. Сервер / ops**  
 - [x] **Prometheus Phase 1**: `/metrics` на Go API + dual auth + SPA `/ops/metrics`  
-- [x] **Prometheus + node_exporter + Grafana** в compose (phase 2–3): localhost:9090 / :3000, SSH tunnel  
-- [ ] Алерты позже (5xx, latency) — не в первом срезе  
+- [x] **Prometheus + node_exporter + Grafana** в compose; публичный UI — NPM `https://metrics.appzac.ru` (Access List желателен); Prometheus только localhost  
+- [ ] Алерты позже (5xx, latency, disk)  
 - [ ] Не путать с продуктовой аналитикой: Prometheus ≠ клики по UI
 
 Спека: [`docs/superpowers/specs/2026-07-23-observability-prometheus-design.md`](docs/superpowers/specs/2026-07-23-observability-prometheus-design.md)  
-План phase 1: [`docs/superpowers/plans/2026-07-23-observability-phase1.md`](docs/superpowers/plans/2026-07-23-observability-phase1.md)  
-Deploy: [`deploy/CURSOR_MINI_PC.txt`](deploy/CURSOR_MINI_PC.txt) + `deploy/observability/`
+Deploy: [`deploy/observability/README.md`](deploy/observability/README.md) · [`deploy/CURSOR_MINI_PC.txt`](deploy/CURSOR_MINI_PC.txt)
 
 ---
 
@@ -236,7 +235,7 @@ Deploy: [`deploy/CURSOR_MINI_PC.txt`](deploy/CURSOR_MINI_PC.txt) + `deploy/obser
 
 #### Порядок (актуально)
 
-До tag: **метрики** (+ tag). Word checklist — на проде; soft-warn ✓.  
+До tag: **Яндекс.Метрика (продукт)** + tag. Ops Prometheus/Grafana ✓. Word checklist — smoke на проде.
 C и F по фичам закрыты. После MVP: `F4 → E3 pop-out → E1b → E4`; E5 по нужде.
 
 ---
@@ -432,7 +431,7 @@ C2: [`docs/superpowers/specs/2026-07-22-glossary-named-bases-design.md`](docs/su
 - [ ] SRX (правила сегментации)
 - [ ] Лимиты free; Pro-пакеты / биллинг
 - [ ] Penalty за числа; TM dedupe/merge; Elasticsearch при масштабе
-- [ ] **Observability ops:** Prometheus `/metrics` + Grafana; алерты 5xx/latency
+- [x] **Observability ops:** Prometheus `/metrics` + Grafana (+ node_exporter); алерты 5xx/latency — позже
 - [ ] XLIFF / другие форматы
 
 ---
@@ -463,8 +462,8 @@ C2: [`docs/superpowers/specs/2026-07-22-glossary-named-bases-design.md`](docs/su
 10. **Фаза C: глоссарий** C1+C2 ✓  
 11. **Фаза F: jobs** ядро ✓ (soft-warn ✓)  
 12. Job original share ✓  
-13. **Метрики / tag** ← **сейчас** (Word checklist — smoke на проде)  
-14. **После MVP:** Prometheus/Grafana → остаток E → MT / multi-TM priority / SRX / форматы / Pro billing
+13. **Яндекс.Метрика / tag** ← **сейчас** (ops ✓; Word checklist — smoke на проде)  
+14. **После MVP:** алерты ops → остаток E → MT / multi-TM priority / SRX / форматы / Pro billing
 
 ---
 
