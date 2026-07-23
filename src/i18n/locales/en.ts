@@ -571,5 +571,8 @@ export default {
     metricsLoading: 'Loading…',
     metricsForbidden: 'Admin access required.',
     metricsLoadError: 'Could not load metrics (HTTP {status}).',
+    grafanaOpen: 'Open Grafana',
+    grafanaHint:
+      'Dashboard opens on this computer at 127.0.0.1:3000 — first start an SSH tunnel to the mini-PC (see deploy docs).',
   },
 }

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { apiBase, getStoredToken } from '@/auth/api'
@@ -12,6 +12,11 @@ const { user, isAuthenticated } = useAuth()
 const body = ref('')
 const error = ref('')
 const busy = ref(false)
+
+/** Grafana via SSH tunnel by default; override with VITE_GRAFANA_URL at build. */
+const grafanaBase = (import.meta.env.VITE_GRAFANA_URL as string | undefined)?.replace(/\/$/, '') ||
+  'http://127.0.0.1:3000'
+const grafanaDashboardUrl = computed(() => `${grafanaBase}/d/appzac-ops/appzac-ops`)
 
 async function load() {
   error.value = ''
@@ -63,12 +68,22 @@ onMounted(() => {
         <button type="button" class="ghost" :disabled="busy" @click="router.push({ name: 'projects' })">
           {{ t('ops.metricsBack') }}
         </button>
+        <a
+          v-if="user?.is_admin"
+          class="primary link-btn"
+          :href="grafanaDashboardUrl"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          {{ t('ops.grafanaOpen') }}
+        </a>
         <button type="button" class="primary" :disabled="busy || !user?.is_admin" @click="load">
           {{ t('ops.metricsRefresh') }}
         </button>
       </div>
     </header>
     <p class="ops-hint">{{ t('ops.metricsHint') }}</p>
+    <p v-if="user?.is_admin" class="ops-hint">{{ t('ops.grafanaHint') }}</p>
     <p v-if="error" class="ops-error" role="alert">{{ error }}</p>
     <pre v-else-if="body" class="ops-body">{{ body }}</pre>
     <p v-else-if="busy" class="ops-hint">{{ t('ops.metricsLoading') }}</p>
@@ -110,6 +125,13 @@ onMounted(() => {
   border: 1px solid transparent;
   font-size: 0.8rem;
   font-weight: 600;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+}
+
+.ops-actions .link-btn {
+  box-sizing: border-box;
 }
 
 .ops-actions .ghost {

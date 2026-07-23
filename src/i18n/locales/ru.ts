@@ -575,5 +575,8 @@ export default {
     metricsLoading: 'Загрузка…',
     metricsForbidden: 'Нужен доступ администратора.',
     metricsLoadError: 'Не удалось загрузить метрики (HTTP {status}).',
+    grafanaOpen: 'Открыть Grafana',
+    grafanaHint:
+      'Дашборд откроется на этом компьютере (127.0.0.1:3000) — сначала SSH-туннель до мини-ПК (см. deploy docs).',
   },
 }
