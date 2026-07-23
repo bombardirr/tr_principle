@@ -573,6 +573,6 @@ export default {
     metricsLoadError: 'Could not load metrics (HTTP {status}).',
     grafanaOpen: 'Open Grafana',
     grafanaHint:
-      'Dashboard opens on this computer at 127.0.0.1:3000 — first start an SSH tunnel to the mini-PC (see deploy docs).',
+      'Opens the ops dashboard (Grafana login). Prefer https://grafana.appzac.ru via NPM; Access List recommended.',
   },
 }

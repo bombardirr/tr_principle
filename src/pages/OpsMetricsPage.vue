@@ -13,9 +13,10 @@ const body = ref('')
 const error = ref('')
 const busy = ref(false)
 
-/** Grafana via SSH tunnel by default; override with VITE_GRAFANA_URL at build. */
-const grafanaBase = (import.meta.env.VITE_GRAFANA_URL as string | undefined)?.replace(/\/$/, '') ||
-  'http://127.0.0.1:3000'
+/** Public Grafana (NPM). Override with VITE_GRAFANA_URL at SPA build. */
+const grafanaBase =
+  (import.meta.env.VITE_GRAFANA_URL as string | undefined)?.replace(/\/$/, '') ||
+  'https://grafana.appzac.ru'
 const grafanaDashboardUrl = computed(() => `${grafanaBase}/d/appzac-ops/appzac-ops`)
 
 async function load() {

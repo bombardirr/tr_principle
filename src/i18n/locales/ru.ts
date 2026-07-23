@@ -577,6 +577,6 @@ export default {
     metricsLoadError: 'Не удалось загрузить метрики (HTTP {status}).',
     grafanaOpen: 'Открыть Grafana',
     grafanaHint:
-      'Дашборд откроется на этом компьютере (127.0.0.1:3000) — сначала SSH-туннель до мини-ПК (см. deploy docs).',
+      'Откроет ops-дашборд (логин Grafana). Обычно https://grafana.appzac.ru через NPM; лучше Access List.',
   },
 }

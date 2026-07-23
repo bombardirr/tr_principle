@@ -8,10 +8,11 @@
 # NPM: Proxy Host → http://appzac-prod-app:8080
 #   (имя контейнера = ${STACK_NAME}-app). WebSockets не обязательны.
 #
-# Observability (не публиковать наружу):
-#   Grafana  http://127.0.0.1:3000  (SSH tunnel)
-#   Prometheus http://127.0.0.1:9090 (SSH tunnel)
-#   Требует METRICS_TOKEN + GRAFANA_ADMIN_PASSWORD в .env.prod
+# Observability (Grafana public via NPM; Prometheus stays localhost-only):
+#   Grafana  NPM → http://appzac-prod-grafana:3000  (https://grafana.appzac.ru)
+#   Grafana  also 127.0.0.1:3000 (SSH fallback)
+#   Prometheus http://127.0.0.1:9090 (SSH only — do not publish on NPM)
+#   Требует METRICS_TOKEN + GRAFANA_ADMIN_PASSWORD + GRAFANA_ROOT_URL в .env.prod
 
 services:
   db:
@@ -117,7 +118,7 @@ services:
       GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD}
       GF_USERS_ALLOW_SIGN_UP: "false"
-      GF_SERVER_ROOT_URL: ${GRAFANA_ROOT_URL:-http://127.0.0.1:3000}
+      GF_SERVER_ROOT_URL: ${GRAFANA_ROOT_URL:-https://grafana.appzac.ru}
       GF_AUTH_ANONYMOUS_ENABLED: "false"
     volumes:
       - appzac_grafana:/var/lib/grafana
@@ -126,9 +127,11 @@ services:
     depends_on:
       - prometheus
     ports:
+      # Optional local/SSH access; public traffic goes via NPM → container:3000 on proxy_net
       - "127.0.0.1:3000:3000"
     networks:
       - default
+      - proxy_net
 
 networks:
   proxy_net:

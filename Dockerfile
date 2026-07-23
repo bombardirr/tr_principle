@@ -6,6 +6,8 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
 COPY . .
+ARG VITE_GRAFANA_URL=https://grafana.appzac.ru
+ENV VITE_GRAFANA_URL=$VITE_GRAFANA_URL
 RUN npm run build
 
 FROM golang:1.26-alpine AS backend

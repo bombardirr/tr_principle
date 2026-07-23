@@ -33,6 +33,14 @@
    - CORS_ORIGIN = реальный origin SPA (https://appzac.ru)
    - METRICS_TOKEN (openssl rand -hex 32) — scrape /metrics
    - GRAFANA_ADMIN_PASSWORD (openssl rand -base64 24) — логин Grafana
+   - GRAFANA_ROOT_URL=https://grafana.appzac.ru
+
+3c) NPM — Grafana (после первого up со стеком observability)
+   - Domain: grafana.appzac.ru
+   - Forward: http://appzac-prod-grafana:3000
+   - Websockets: on; SSL Let's Encrypt
+   - Access List рекомендуется
+   - Prometheus (:9090) на NPM не публиковать
 
 4) Деплой вручную (порядок как в CI)
    cd /home/ag/projects/tr_principle
@@ -48,11 +56,10 @@
    docker compose --env-file .env.prod -p appzac -f docker-compose.prod.yml ps
    # Prometheus targets (на сервере):
    #   curl -s http://127.0.0.1:9090/api/v1/targets | head
-   # Grafana: SSH-туннель с ноутбука:
-   #   ssh -L 3000:127.0.0.1:3000 user@mini-pc
-   #   открыть http://127.0.0.1:3000  (admin / GRAFANA_ADMIN_PASSWORD)
-   #   дашборд Appzac → Appzac ops
-   # Сырой текст метрик в SPA: https://appzac.ru/ops/metrics (is_admin)
+   # Grafana: https://grafana.appzac.ru (NPM) или SSH-туннель :3000
+   #   дашборд Appzac → Appzac ops; логин admin / GRAFANA_ADMIN_PASSWORD
+   # Prometheus UI только локально: curl http://127.0.0.1:9090
+   # Сырой текст метрик в SPA: https://appzac.ru/ops/metrics (is_admin) → кнопка Grafana
 6) Self-hosted runner — как раньше: /home/ag/actions-runner-appzac (не внутри репо).
 
 7) CI
