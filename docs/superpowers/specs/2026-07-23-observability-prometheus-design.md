@@ -1,7 +1,7 @@
 # Observability (Prometheus / Grafana) — design
 
 Date: 2026-07-23  
-Status: Phase 1 implemented (main pending) — `/metrics` + admin SPA; compose Prometheus/Grafana next  
+Status: Phase 1–3 implemented — `/metrics` + admin SPA; Prometheus + node_exporter + Grafana in compose (SSH tunnel)  
 Stack: same mini-PC `docker-compose.prod.yml` as app + Postgres (behind NPM)
 
 ## Goal

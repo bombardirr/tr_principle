@@ -1,0 +1,13 @@
+apiVersion: 1
+
+providers:
+  - name: appzac
+    orgId: 1
+    folder: Appzac
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 30
+    allowUiUpdates: true
+    options:
+      path: /etc/grafana/dashboards
+      foldersFromFilesStructure: false

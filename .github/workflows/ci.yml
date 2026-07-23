@@ -79,13 +79,23 @@ jobs:
           fi
           TMP_ENV="$(mktemp)"
           sed '1s/^\xEF\xBB\xBF//' .env.prod | tr -d '\r' > "$TMP_ENV"
-          for key in POSTGRES_USER POSTGRES_PASSWORD POSTGRES_DB DATABASE_URL JWT_SECRET CORS_ORIGIN; do
+          for key in POSTGRES_USER POSTGRES_PASSWORD POSTGRES_DB DATABASE_URL JWT_SECRET CORS_ORIGIN METRICS_TOKEN GRAFANA_ADMIN_PASSWORD; do
             if ! grep -qE "^[[:space:]]*(export[[:space:]]+)?${key}[[:space:]]*=[[:space:]]*[^[:space:]#]" "$TMP_ENV"; then
               echo "::error::В .env.prod нужна непустая строка ${key}=... (см. .env.prod.example)."
               rm -f "$TMP_ENV"
               exit 1
             fi
           done
+          if grep -qE "^[[:space:]]*(export[[:space:]]+)?METRICS_TOKEN[[:space:]]*=[[:space:]]*CHANGE_ME" "$TMP_ENV"; then
+            echo "::error::METRICS_TOKEN всё ещё CHANGE_ME* — сгенерируйте: openssl rand -hex 32"
+            rm -f "$TMP_ENV"
+            exit 1
+          fi
+          if grep -qE "^[[:space:]]*(export[[:space:]]+)?GRAFANA_ADMIN_PASSWORD[[:space:]]*=[[:space:]]*CHANGE_ME" "$TMP_ENV"; then
+            echo "::error::GRAFANA_ADMIN_PASSWORD всё ещё CHANGE_ME* — сгенерируйте: openssl rand -base64 24"
+            rm -f "$TMP_ENV"
+            exit 1
+          fi
           rm -f "$TMP_ENV"
 
       - name: prod — сеть Docker

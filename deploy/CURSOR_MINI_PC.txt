@@ -31,17 +31,28 @@
    - JWT_SECRET ≥ 32 символа (openssl rand -base64 48)
    - BACKUP_DIR=/data/backups (volume в compose)
    - CORS_ORIGIN = реальный origin SPA (https://appzac.ru)
+   - METRICS_TOKEN (openssl rand -hex 32) — scrape /metrics
+   - GRAFANA_ADMIN_PASSWORD (openssl rand -base64 24) — логин Grafana
+
 4) Деплой вручную (порядок как в CI)
    cd /home/ag/projects/tr_principle
    git fetch origin main && git checkout main && git reset --hard origin/main
    docker compose --env-file .env.prod -p appzac -f docker-compose.prod.yml up -d db
    docker compose --env-file .env.prod -p appzac -f docker-compose.prod.yml up -d --build --remove-orphans
    # Старые appzac-prod-web / appzac-prod-api уйдут через --remove-orphans.
+   # Поднимаются также: node-exporter, prometheus (:9090 localhost), grafana (:3000 localhost).
 
 5) Проверка
    docker exec appzac-prod-app wget -qO- http://127.0.0.1:8080/api/health
    docker exec appzac-prod-app wget -qO- http://127.0.0.1:8080/ | head
-
+   docker compose --env-file .env.prod -p appzac -f docker-compose.prod.yml ps
+   # Prometheus targets (на сервере):
+   #   curl -s http://127.0.0.1:9090/api/v1/targets | head
+   # Grafana: SSH-туннель с ноутбука:
+   #   ssh -L 3000:127.0.0.1:3000 user@mini-pc
+   #   открыть http://127.0.0.1:3000  (admin / GRAFANA_ADMIN_PASSWORD)
+   #   дашборд Appzac → Appzac ops
+   # Сырой текст метрик в SPA: https://appzac.ru/ops/metrics (is_admin)
 6) Self-hosted runner — как раньше: /home/ag/actions-runner-appzac (не внутри репо).
 
 7) CI

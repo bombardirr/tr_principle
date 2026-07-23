@@ -1,0 +1,23 @@
+# Prometheus scrape config for appzac prod (Docker network).
+# Bearer token is written at container start from METRICS_TOKEN → /tmp/bearer_token
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: appzac-app
+    metrics_path: /metrics
+    authorization:
+      type: Bearer
+      credentials_file: /tmp/bearer_token
+    static_configs:
+      - targets: ["app:8080"]
+        labels:
+          service: appzac
+
+  - job_name: node
+    static_configs:
+      - targets: ["node-exporter:9100"]
+        labels:
+          service: node
