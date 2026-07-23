@@ -19,6 +19,8 @@ import {
   SHORTCUT_DEFAULTS,
 } from '@/shortcuts/bindings'
 import JoinToast from '@/components/JoinToast.vue'
+import TmCollectionDialog from '@/components/TmCollectionDialog.vue'
+import GlossaryCollectionDialog from '@/components/GlossaryCollectionDialog.vue'
 
 const { t, locale } = useI18n()
 const route = useRoute()
@@ -37,11 +39,13 @@ const showOfflineBanner = computed(
 
 const settingsOpen = ref(false)
 const settingsRoot = ref<HTMLElement | null>(null)
-const settingsTab = ref<'account' | 'keys'>('account')
+const settingsTab = ref<'account' | 'keys' | 'tm' | 'glossary'>('account')
 const nameDraft = ref('')
 const settingsBusy = ref(false)
 const settingsError = ref('')
 const settingsSaved = ref(false)
+const tmCollectionOpen = ref(false)
+const glossaryCollectionOpen = ref(false)
 
 const { bindings, setBinding, resetBinding, reload: reloadShortcuts } = useShortcutBindings()
 const capturingShortcut = ref<'clearFocus' | null>(null)
@@ -91,6 +95,16 @@ function closeSettings() {
   settingsError.value = ''
   settingsSaved.value = false
   capturingShortcut.value = null
+}
+
+function openTmCollectionFromSettings() {
+  closeSettings()
+  tmCollectionOpen.value = true
+}
+
+function openGlossaryCollectionFromSettings() {
+  closeSettings()
+  glossaryCollectionOpen.value = true
 }
 
 function onDocPointer(e: PointerEvent) {
@@ -184,6 +198,26 @@ async function onLogout() {
                   type="button"
                   role="tab"
                   class="settings-tab"
+                  :class="{ active: settingsTab === 'tm' }"
+                  :aria-selected="settingsTab === 'tm'"
+                  @click="settingsTab = 'tm'"
+                >
+                  {{ t('auth.settingsTabTm') }}
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  class="settings-tab"
+                  :class="{ active: settingsTab === 'glossary' }"
+                  :aria-selected="settingsTab === 'glossary'"
+                  @click="settingsTab = 'glossary'"
+                >
+                  {{ t('auth.settingsTabGlossary') }}
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  class="settings-tab"
                   :class="{ active: settingsTab === 'keys' }"
                   :aria-selected="settingsTab === 'keys'"
                   @click="settingsTab = 'keys'"
@@ -225,6 +259,24 @@ async function onLogout() {
                   </button>
                   <button type="button" class="ghost danger" :disabled="settingsBusy" @click="onLogout">
                     {{ t('auth.logout') }}
+                  </button>
+                </div>
+              </div>
+
+              <div v-else-if="settingsTab === 'tm'" role="tabpanel" class="settings-panel">
+                <p class="settings-hint">{{ t('auth.settingsTmHint') }}</p>
+                <div class="settings-actions">
+                  <button type="button" class="primary" @click="openTmCollectionFromSettings">
+                    {{ t('auth.settingsOpenTmCollection') }}
+                  </button>
+                </div>
+              </div>
+
+              <div v-else-if="settingsTab === 'glossary'" role="tabpanel" class="settings-panel">
+                <p class="settings-hint">{{ t('auth.settingsGlossaryHint') }}</p>
+                <div class="settings-actions">
+                  <button type="button" class="primary" @click="openGlossaryCollectionFromSettings">
+                    {{ t('auth.settingsOpenGlossaryCollection') }}
                   </button>
                 </div>
               </div>
@@ -276,6 +328,18 @@ async function onLogout() {
         </IconButton>
       </div>
     </header>
+    <TmCollectionDialog
+      :open="tmCollectionOpen"
+      mode="browse"
+      :attached-ids="[]"
+      @close="tmCollectionOpen = false"
+    />
+    <GlossaryCollectionDialog
+      :open="glossaryCollectionOpen"
+      mode="browse"
+      :attached-ids="[]"
+      @close="glossaryCollectionOpen = false"
+    />
     <p v-if="showOfflineBanner" class="offline-banner" role="status">
       {{ t('app.offlineBanner') }}
     </p>
@@ -416,7 +480,7 @@ async function onLogout() {
   top: calc(100% + 0.35rem);
   right: 0;
   z-index: 40;
-  width: min(18.5rem, calc(100vw - 1.5rem));
+  width: min(22rem, calc(100vw - 1.5rem));
   padding: 0.55rem 0.65rem 0.65rem;
   border-radius: 8px;
   border: 1px solid var(--border-strong);
@@ -433,6 +497,7 @@ async function onLogout() {
 
 .settings-tabs {
   display: flex;
+  flex-wrap: wrap;
   gap: 0.1rem;
   margin-bottom: 0.45rem;
   padding: 0.1rem;
@@ -442,7 +507,8 @@ async function onLogout() {
 }
 
 .settings-tab {
-  flex: 1;
+  flex: 1 1 auto;
+  min-width: 3.2rem;
   border: 0;
   border-radius: 4px;
   padding: 0.22rem 0.35rem;

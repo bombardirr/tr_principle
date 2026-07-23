@@ -5,6 +5,7 @@ import { useI18n } from 'vue-i18n'
 import MarqueeText from '@/components/MarqueeText.vue'
 import ProjectSettingsDialog from '@/components/ProjectSettingsDialog.vue'
 import ResegmentDialog from '@/components/ResegmentDialog.vue'
+import SharedTmConfirmDialog from '@/components/SharedTmConfirmDialog.vue'
 import ShareProjectDialog from '@/components/ShareProjectDialog.vue'
 import CreateSharedWorkDialog from '@/components/CreateSharedWorkDialog.vue'
 import SharedWorkPanel from '@/components/SharedWorkPanel.vue'
@@ -31,6 +32,10 @@ import { findTmMatches } from '@/tm/match'
 import { findLangPairPreset, langPairLabel } from '@/tm/langPairs'
 import { tmLookupKey } from '@/tm/normalize'
 import { resolveTmBaseAccess } from '@/tm/tmAccess'
+import {
+  sharedExactHitsFromMatches,
+  shouldWarnSharedExact,
+} from '@/tm/shouldWarnSharedExact'
 import { listJobTmAttachments } from '@/tm/jobAttachments'
 import { listJobTmAttachmentsApi } from '@/jobs/tmAttachmentsApi'
 import { TM_COLLECTION_CHANGED_EVENT } from '@/tm/tmCollectionEvents'
@@ -97,6 +102,8 @@ const error = ref('')
 const notice = ref('')
 const jobSharedAttachments = ref<JobTmAttachment[]>([])
 const jobGlossaryAttachments = ref<JobGlossaryAttachment[]>([])
+const sharedTmWarnOpen = ref(false)
+const sharedTmWarnSegId = ref<string | null>(null)
 
 const jobQueryId = computed(() => {
   const raw = route.query.job
@@ -1260,10 +1267,19 @@ function redoSegment(segId: string) {
   if (snap) restoreSegmentSnapshot(segId, snap)
 }
 
-async function saveSegmentToTmById(segId: string) {
+async function saveSegmentToTmById(segId: string, opts?: { skipSharedWarn?: boolean }) {
   if (!record.value || editorReadOnly.value || !personalTmWritable.value) return
   const seg = record.value.segments.find(s => s.id === segId)
   if (!seg || !seg.target.trim()) return
+
+  if (!opts?.skipSharedWarn && tmBaseAccess.value.jobContext) {
+    const hits = sharedExactHitsFromMatches(matchesFor(seg), matchTmUnits.value)
+    if (shouldWarnSharedExact(hits, publicActorLabel(user.value))) {
+      sharedTmWarnSegId.value = segId
+      sharedTmWarnOpen.value = true
+      return
+    }
+  }
 
   const status = finalizeSegmentStatus({ ...seg, status: seg.target.trim() ? 'done' : seg.status })
   patchSegment(segId, { status })
@@ -1282,6 +1298,18 @@ async function saveSegmentToTmById(segId: string) {
   } catch (e) {
     setSaveError(e)
   }
+}
+
+function cancelSharedTmWarn() {
+  sharedTmWarnOpen.value = false
+  sharedTmWarnSegId.value = null
+}
+
+async function continueSharedTmWarn() {
+  const segId = sharedTmWarnSegId.value
+  sharedTmWarnOpen.value = false
+  sharedTmWarnSegId.value = null
+  if (segId) await saveSegmentToTmById(segId, { skipSharedWarn: true })
 }
 
 async function exportTmxFile() {
@@ -2069,6 +2097,11 @@ async function goBack() {
       @save="saveProjectSettings"
     />
     <ResegmentDialog :open="resegmentOpen" @later="deferResegment" @confirm="confirmResegment" />
+    <SharedTmConfirmDialog
+      :open="sharedTmWarnOpen"
+      @cancel="cancelSharedTmWarn"
+      @continue="continueSharedTmWarn"
+    />
     <ShareProjectDialog
       :open="shareOpen"
       @close="closeShareDialog"

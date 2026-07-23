@@ -29,6 +29,8 @@ export interface TmMatch {
   /** Source fragment that produced the match (fragment mode). */
   matchedFragment?: string
   unitId?: string
+  /** Local TM base id the matched unit belongs to. */
+  baseId?: string
   createdBy?: string
   updatedBy?: string
   createdAt?: string

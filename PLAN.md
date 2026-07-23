@@ -29,15 +29,14 @@ Telegram-сброс пароля — **в границе MVP, но не блок
 
 | # | Пункт | Блокер tag? |
 |---|--------|-------------|
-| 1 | Ручной чеклист Word на реальных DOCX | **Да** |
-| 2 | Яндекс.Метрика + события + privacy | **Да** (по плану «до/на tag») |
-| 3 | Soft-warning при confirm в shared TM (J4) | Желательно |
-| 4 | HTTPS на проде (NPM) | Операционка |
-| 5 | Tag / релизный ярлык | — |
+| 1 | Яндекс.Метрика + события + privacy | **Да** (по плану «до/на tag») |
+| 2 | Tag / релизный ярлык | — |
+
+**Снято / не в scope tag сейчас:** HTTPS на проде (уже работает); Word-checklist на реальных DOCX (отложено — проверка на проде); soft-warn при confirm в shared TM ✓.
 
 **Явно не блокер tag:** Telegram link/reset; Pro paywall; dual % / finalize PM (J5 polish); deferred TM write stack (устарело с attach-only); полный TBX Core / морфология; Prometheus/Grafana.
 
-**Уже в `main` (фичи cloud/group):** auth, cloud TM + named bases + job share E/C, glossary C1+C2, jobs/hub/invites/progress, original DOCX share, offline banner, free/Pro badge (без жёсткого gating).
+**Уже в `main` (фичи cloud/group):** auth, cloud TM + named bases + job share E/C, glossary C1+C2, jobs/hub/invites/progress, original DOCX share, offline banner, free/Pro badge (без жёсткого gating), soft-warn confirm над чужим exact/context в shared TM.
 
 ---
 
@@ -45,7 +44,7 @@ Telegram-сброс пароля — **в границе MVP, но не блок
 
 ### Полировка A (не блокирует auth)
 
-- [ ] Ручной чеклист в Word на реальных файлах ← **осталось для tag**
+- [ ] Ручной чеклист в Word на реальных файлах ← отложено (smoke на проде)
 - [x] Статический деплой SPA
 - [x] Мелкий UX по тестам
 
@@ -110,7 +109,7 @@ Telegram-сброс пароля — **в границе MVP, но не блок
 4. Ручной чеклист Word на реальных файлах ← **открыто (tag)**  
 5. Метрики продукта (Яндекс.Метрика + события) ← **открыто (tag)**  
 6. **Фаза C: глоссарий** — C1 ✓; C2 ✓ ([спека](docs/superpowers/specs/2026-07-22-glossary-named-bases-design.md))  
-7. **Фаза F: shared work / jobs** — ядро ✓; soft-warn J4 открыт; Telegram отложен  
+7. **Фаза F: shared work / jobs** — ядро ✓; soft-warn J4 ✓; Telegram отложен  
 8. Job original DOCX share ← ✓ ([спека](docs/superpowers/specs/2026-07-22-job-original-share-design.md))  
 9. Tag MVP ← **после 4–5**  
 
@@ -235,7 +234,7 @@ Outbox / очередь push — **не** в этом пункте («позже
 
 #### Порядок (актуально)
 
-До tag: **метрики + Word checklist** (+ желательно soft-warn).  
+До tag: **метрики** (+ tag). Word checklist — на проде; soft-warn ✓.  
 C и F по фичам закрыты. После MVP: `F4 → E3 pop-out → E1b → E4`; E5 по нужде.
 
 ---
@@ -444,7 +443,7 @@ C2: [`docs/superpowers/specs/2026-07-22-glossary-named-bases-design.md`](docs/su
 - [x] Не логировать JWT / тела бэкапов; токен lock только в JSON body
 - [x] IndexedDB per-user prefix после login
 - [x] Лимиты тел (auth/TM/lock/backup), таймауты сервера, `JWT_SECRET` ≥ 32, CSP/headers
-- [ ] HTTPS на NPM (операционно); webhook только на свой API (когда будет бот)
+- [x] HTTPS на NPM (операционно); webhook только на свой API (когда будет бот)
 
 ---
 
@@ -460,9 +459,9 @@ C2: [`docs/superpowers/specs/2026-07-22-glossary-named-bases-design.md`](docs/su
 8. Landing стилей + тулбар минимум ✓
 9. **Дозакрытие cloud** (offline / plan / TM toolbar) ✓  
 10. **Фаза C: глоссарий** C1+C2 ✓  
-11. **Фаза F: jobs** ядро ✓ (soft-warn открыт)  
+11. **Фаза F: jobs** ядро ✓ (soft-warn ✓)  
 12. Job original share ✓  
-13. **Метрики / Word checklist / tag** ← **сейчас**  
+13. **Метрики / tag** ← **сейчас** (Word checklist — smoke на проде)  
 14. **После MVP:** Prometheus/Grafana → остаток E → MT / multi-TM priority / SRX / форматы / Pro billing
 
 ---

@@ -1,7 +1,7 @@
 # Shared work (jobs): personal copies + live resources — design
 
 Date: 2026-07-17  
-Status: Implemented (main) — ядро jobs; soft-warn / finalize backlog см. PLAN.md  
+Status: Implemented (main) — soft-warn confirm над shared exact/context ✓; finalize backlog см. PLAN.md  
 Slice: Phase F — revised MVP collaboration model  
 **Supersedes:** [`2026-07-17-group-collaboration-design.md`](./2026-07-17-group-collaboration-design.md) (shared bilingual + segment/project locks)
 

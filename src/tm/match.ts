@@ -265,6 +265,7 @@ function betterMatch(a: TmMatch | null, b: TmMatch | null): TmMatch | null {
 function matchMeta(unit: TmUnit): Partial<TmMatch> {
   return {
     unitId: unit.id,
+    baseId: unit.baseId,
     createdBy: unit.createdBy,
     updatedBy: unit.updatedBy,
     createdAt: unit.createdAt,

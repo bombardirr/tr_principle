@@ -297,9 +297,9 @@ Defaults on job create: insert job TM attachment preset `can_read=true`, `can_wr
 
 Rule: exact/context hit from job TM where `createdBy/updatedBy` ≠ current actor label/`anon:id`.
 
-- [ ] **Step 1: Unit test shouldWarnSharedExact**
-- [ ] **Step 2: Modal — continue / cancel; continue still confirms**
-- [ ] **Step 3: Commit** `Warn before confirm when shared TM already has exact hit.`
+- [x] **Step 1: Unit test shouldWarnSharedExact**
+- [x] **Step 2: Modal — continue / cancel; continue still confirms**
+- [x] **Step 3: Commit** `Warn before confirm when shared TM already has exact hit.`
 
 ### Task 10: Transfer owner + PLAN
 
