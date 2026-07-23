@@ -157,7 +157,7 @@ Outbox / очередь push — **не** в этом пункте («позже
 
 **B. Сервер / ops**  
 - [x] **Prometheus Phase 1**: `/metrics` на Go API + dual auth + SPA `/ops/metrics`  
-- [x] **Prometheus + node_exporter + Grafana** в compose; публичный UI — NPM `https://metrics.appzac.ru` (Access List желателен); Prometheus только localhost  
+- [x] **Prometheus + node_exporter + Grafana** в compose; публичный UI — NPM `https://grafana.appzac.ru` (Access List желателен); Prometheus только localhost  
 - [ ] Алерты позже (5xx, latency, disk)  
 - [ ] Не путать с продуктовой аналитикой: Prometheus ≠ клики по UI
 

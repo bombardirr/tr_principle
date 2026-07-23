@@ -13,8 +13,7 @@ Spec: [`docs/superpowers/specs/2026-07-23-observability-prometheus-design.md`](.
 | Grafana + dashboard **Appzac ops** | NPM → `appzac-prod-grafana:3000` | Grafana login (`GRAFANA_ADMIN_*`); **Access List recommended** |
 | Host CPU/RAM/disk | `node-exporter` (scraped privately) | — |
 
-Default public Grafana host: **`https://metrics.appzac.ru`**  
-(`grafana.appzac.ru` may already be taken in NPM — use `metrics`.)
+Default public Grafana host: **`https://grafana.appzac.ru`**
 
 ## Secrets (`.env.prod`)
 
@@ -22,12 +21,12 @@ Default public Grafana host: **`https://metrics.appzac.ru`**
 METRICS_TOKEN=…                 # openssl rand -hex 32
 GRAFANA_ADMIN_USER=admin
 GRAFANA_ADMIN_PASSWORD=…        # openssl rand -base64 24
-GRAFANA_ROOT_URL=https://metrics.appzac.ru
+GRAFANA_ROOT_URL=https://grafana.appzac.ru
 ```
 
 Show password on server: `grep -E '^GRAFANA_ADMIN_(USER|PASSWORD)=' .env.prod`
 
-SPA button URL is baked at image build (`VITE_GRAFANA_URL`, Dockerfile default `https://metrics.appzac.ru`). After changing the public host, rebuild `app`.
+SPA button URL is baked at image build (`VITE_GRAFANA_URL`, Dockerfile default `https://grafana.appzac.ru`). After changing the public host, rebuild `app`.
 
 ## Access model (who sees what)
 
@@ -38,14 +37,16 @@ SPA button URL is baked at image build (`VITE_GRAFANA_URL`, Dockerfile default `
 
 ## NPM Proxy Host (Grafana)
 
-1. DNS: `metrics.appzac.ru` → same IP as `appzac.ru`
+If assets fail to load (“failed to load its application files”), `GRAFANA_ROOT_URL` must match the browser URL exactly (`https://grafana.appzac.ru`) and Grafana must be recreated after changing it.
+
+1. DNS: `grafana.appzac.ru` → same IP as `appzac.ru`
 2. Proxy Host:
-   - Domain: `metrics.appzac.ru`
+   - Domain: `grafana.appzac.ru`
    - Forward: `http://appzac-prod-grafana:3000`
    - Websockets: **on**
    - SSL: Let's Encrypt + Force SSL
 3. Access List (recommended)
-4. Open https://metrics.appzac.ru → `admin` / `GRAFANA_ADMIN_PASSWORD`
+4. Open https://grafana.appzac.ru → `admin` / `GRAFANA_ADMIN_PASSWORD`
 5. Or from app: `/ops/metrics` → **Open Grafana**
 
 Do **not** publish Prometheus `:9090` on NPM.

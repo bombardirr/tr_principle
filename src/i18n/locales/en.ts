@@ -573,6 +573,6 @@ export default {
     metricsLoadError: 'Could not load metrics (HTTP {status}).',
     grafanaOpen: 'Open Grafana',
     grafanaHint:
-      'Opens the ops dashboard (Grafana login). Prefer https://metrics.appzac.ru via NPM; Access List recommended.',
+      'Opens the ops dashboard (Grafana login). Prefer https://grafana.appzac.ru via NPM; Access List recommended.',
   },
 }

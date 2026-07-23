@@ -1,7 +1,7 @@
 # Observability (Prometheus / Grafana) — design
 
 Date: 2026-07-23  
-Status: Implemented (phases 1–3) — `/metrics` + admin SPA; Prometheus + node_exporter + Grafana; public UI via NPM `metrics.appzac.ru` (Access List recommended); alerts backlog
+Status: Implemented (phases 1–3) — `/metrics` + admin SPA; Prometheus + node_exporter + Grafana; public UI via NPM `grafana.appzac.ru` (Access List recommended); alerts backlog
 Stack: same mini-PC `docker-compose.prod.yml` as app + Postgres (behind NPM)
 
 ## Goal
@@ -106,7 +106,7 @@ CPU, memory, disk, load — standard node exporter metrics.
 
 1. `grafana` service + volume; default admin password from `.env.prod`.
 2. Provision Prometheus datasource + one dashboard JSON: HTTP RPS/latency/5xx, Go mem, node CPU/RAM/disk.
-3. Access: NPM `https://metrics.appzac.ru` → `appzac-prod-grafana:3000` (Access List recommended); SSH `127.0.0.1:3000` fallback. SPA button on `/ops/metrics`.
+3. Access: NPM `https://grafana.appzac.ru` → `appzac-prod-grafana:3000` (Access List recommended); SSH `127.0.0.1:3000` fallback. SPA button on `/ops/metrics`.
 
 ### Phase 4+ (backlog)
 

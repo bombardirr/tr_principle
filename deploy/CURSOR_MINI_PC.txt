@@ -10,7 +10,7 @@
   - prometheus: appzac-prod-prometheus (только 127.0.0.1:9090)
   - NPM Proxy Host → http://appzac-prod-app:8080
   - домен: appzac.ru
-  - Grafana (NPM): metrics.appzac.ru  (не grafana.appzac.ru — часто занят)
+  - Grafana (NPM): grafana.appzac.ru
 
 Подробности observability: deploy/observability/README.md
 
@@ -38,10 +38,10 @@
    - CORS_ORIGIN = реальный origin SPA (https://appzac.ru)
    - METRICS_TOKEN (openssl rand -hex 32) — scrape /metrics
    - GRAFANA_ADMIN_USER=admin + GRAFANA_ADMIN_PASSWORD (openssl rand -base64 24)
-   - GRAFANA_ROOT_URL=https://metrics.appzac.ru
+   - GRAFANA_ROOT_URL=https://grafana.appzac.ru
 
 3c) NPM — Grafana
-   - Domain: metrics.appzac.ru
+   - Domain: grafana.appzac.ru
    - Forward: http://appzac-prod-grafana:3000
    - Websockets: on; SSL Let's Encrypt
    - Access List рекомендуется (иначе публична только форма логина; графики — после пароля Grafana)
@@ -60,7 +60,7 @@
    docker exec appzac-prod-app wget -qO- http://127.0.0.1:8080/api/health
    docker compose --env-file .env.prod -p appzac -f docker-compose.prod.yml ps
    curl -s 'http://127.0.0.1:9090/api/v1/query?query=up'
-   # Grafana: https://metrics.appzac.ru  (admin / GRAFANA_ADMIN_PASSWORD)
+   # Grafana: https://grafana.appzac.ru  (admin / GRAFANA_ADMIN_PASSWORD)
    # SPA: https://appzac.ru/ops/metrics (is_admin) → «Открыть Grafana»
 
 6) Self-hosted runner — как раньше: /home/ag/actions-runner-appzac (не внутри репо).

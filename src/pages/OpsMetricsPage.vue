@@ -16,7 +16,7 @@ const busy = ref(false)
 /** Public Grafana (NPM). Override with VITE_GRAFANA_URL at SPA build. */
 const grafanaBase =
   (import.meta.env.VITE_GRAFANA_URL as string | undefined)?.replace(/\/$/, '') ||
-  'https://metrics.appzac.ru'
+  'https://grafana.appzac.ru'
 const grafanaDashboardUrl = computed(() => `${grafanaBase}/d/appzac-ops/appzac-ops`)
 
 async function load() {

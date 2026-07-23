@@ -9,7 +9,7 @@
 #   (имя контейнера = ${STACK_NAME}-app). WebSockets не обязательны.
 #
 # Observability (Grafana public via NPM; Prometheus stays localhost-only):
-#   Grafana  NPM → http://appzac-prod-grafana:3000  (https://metrics.appzac.ru)
+#   Grafana  NPM → http://appzac-prod-grafana:3000  (https://grafana.appzac.ru)
 #   Grafana  also 127.0.0.1:3000 (SSH fallback)
 #   Prometheus http://127.0.0.1:9090 (SSH only — do not publish on NPM)
 #   Требует METRICS_TOKEN + GRAFANA_ADMIN_PASSWORD + GRAFANA_ROOT_URL в .env.prod
@@ -118,7 +118,8 @@ services:
       GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD}
       GF_USERS_ALLOW_SIGN_UP: "false"
-      GF_SERVER_ROOT_URL: ${GRAFANA_ROOT_URL:-https://metrics.appzac.ru}
+      GF_SERVER_ROOT_URL: ${GRAFANA_ROOT_URL:-https://grafana.appzac.ru}
+      GF_SERVER_DOMAIN: grafana.appzac.ru
       GF_AUTH_ANONYMOUS_ENABLED: "false"
     volumes:
       - appzac_grafana:/var/lib/grafana
