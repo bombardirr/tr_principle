@@ -1,12 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="appzac">
-  <g fill="#ffffff" font-family="Segoe UI, IBM Plex Sans, system-ui, sans-serif" font-weight="700" text-anchor="middle" dominant-baseline="central">
-    <text x="64" y="30" font-size="30">???</text>
-    <text x="64" y="98" font-size="30">???</text>
-  </g>
-  <g fill="#ffffff">
-    <rect x="36" y="61" width="56" height="6" rx="1"/>
-    <polygon points="28,64 42,54 42,74"/>
-    <polygon points="100,64 86,54 86,74"/>
-  </g>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1285 1285" role="img" aria-label="appzac">
+  <text xml:space="preserve" x="160" y="472" font-family="Impact, Haettenschweiler, Arial Narrow Bold, sans-serif" font-size="595" font-weight="800" fill="#ffffff">АПП</text>
+  <text xml:space="preserve" x="160" y="1206" font-family="Impact, Haettenschweiler, Arial Narrow Bold, sans-serif" font-size="595" font-weight="800" fill="#ffffff">ЗАЦ</text>
+  <path fill="#ffffff" fill-rule="evenodd" d="M 1129.006958 605.046997 L 1062.741577 638.941406 L 1062.760132 612.467346 L 223.249054 611.875488 L 223.230392 638.349548 L 157.012741 604.361755 L 223.278244 570.467346 L 223.259583 596.941406 L 1062.770752 597.533264 L 1062.789429 571.059204 Z"/>
 </svg>

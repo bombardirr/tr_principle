@@ -169,9 +169,8 @@ async function onLogout() {
 <template>
   <div class="app-shell" :class="{ 'app-shell--landing': isLanding }">
     <header class="topbar">
-      <router-link :to="brandTo" class="brand">
+      <router-link :to="brandTo" class="brand" :aria-label="t('app.name')">
         <img class="brand-icon" src="/logo-mark.png" alt="" width="28" height="28" />
-        <span>{{ t('app.name') }}</span>
       </router-link>
       <div id="app-header-center" class="header-center" />
       <div class="top-actions">
@@ -424,8 +423,8 @@ async function onLogout() {
 
 .brand-icon {
   display: block;
-  width: 1.55rem;
-  height: 1.55rem;
+  width: 2rem;
+  height: 2rem;
   object-fit: contain;
   flex-shrink: 0;
 }

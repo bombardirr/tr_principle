@@ -416,8 +416,8 @@ async function submit() {
 
 .brand-mark-icon {
   display: block;
-  width: clamp(2.4rem, 6vw, 3.2rem);
-  height: clamp(2.4rem, 6vw, 3.2rem);
+  width: clamp(2.8rem, 7vw, 3.6rem);
+  height: clamp(2.8rem, 7vw, 3.6rem);
   object-fit: contain;
   flex-shrink: 0;
 }
