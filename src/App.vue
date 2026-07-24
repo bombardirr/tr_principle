@@ -19,6 +19,7 @@ import {
   SHORTCUT_DEFAULTS,
 } from '@/shortcuts/bindings'
 import JoinToast from '@/components/JoinToast.vue'
+import DonateDialog from '@/components/DonateDialog.vue'
 import TmCollectionDialog from '@/components/TmCollectionDialog.vue'
 import GlossaryCollectionDialog from '@/components/GlossaryCollectionDialog.vue'
 
@@ -46,6 +47,7 @@ const settingsError = ref('')
 const settingsSaved = ref(false)
 const tmCollectionOpen = ref(false)
 const glossaryCollectionOpen = ref(false)
+const donateOpen = ref(false)
 
 const { bindings, setBinding, resetBinding, reload: reloadShortcuts } = useShortcutBindings()
 const capturingShortcut = ref<'clearFocus' | null>(null)
@@ -173,6 +175,9 @@ async function onLogout() {
       </router-link>
       <div id="app-header-center" class="header-center" />
       <div class="top-actions">
+        <button type="button" class="donate-btn" @click="donateOpen = true">
+          {{ t('app.donate') }}
+        </button>
         <template v-if="ready && isAuthenticated && !isLanding">
           <span class="account" :title="user?.email">
             {{ headerName }}
@@ -345,6 +350,7 @@ async function onLogout() {
         </IconButton>
       </div>
     </header>
+    <DonateDialog :open="donateOpen" @close="donateOpen = false" />
     <TmCollectionDialog
       :open="tmCollectionOpen"
       mode="browse"
@@ -448,6 +454,22 @@ async function onLogout() {
   display: flex;
   align-items: center;
   gap: 0.2rem;
+}
+
+.donate-btn {
+  margin-right: 0.25rem;
+  padding: 0.28rem 0.65rem;
+  border-radius: 6px;
+  border: 1px solid color-mix(in srgb, var(--accent) 40%, var(--border));
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--accent);
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.donate-btn:hover {
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
 }
 
 .account {
