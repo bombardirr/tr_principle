@@ -167,7 +167,10 @@ async function onLogout() {
 <template>
   <div class="app-shell" :class="{ 'app-shell--landing': isLanding }">
     <header class="topbar">
-      <router-link :to="brandTo" class="brand">{{ t('app.name') }}</router-link>
+      <router-link :to="brandTo" class="brand">
+        <img class="brand-icon" src="/logo-mark.png" alt="" width="28" height="28" />
+        <span>{{ t('app.name') }}</span>
+      </router-link>
       <div id="app-header-center" class="header-center" />
       <div class="top-actions">
         <template v-if="ready && isAuthenticated && !isLanding">
@@ -403,11 +406,22 @@ async function onLogout() {
   position: relative;
   z-index: 1;
   flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
   font-weight: 600;
   font-size: 1.05rem;
   letter-spacing: 0.01em;
   color: var(--text);
   text-decoration: none;
+}
+
+.brand-icon {
+  display: block;
+  width: 1.55rem;
+  height: 1.55rem;
+  object-fit: contain;
+  flex-shrink: 0;
 }
 
 .header-center {
