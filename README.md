@@ -4,7 +4,7 @@
 
 ## Статус
 
-**Cloud MVP почти закрыт по фичам** (на `main`). До **tag** остаётся QA/полировка: Word-checklist, метрики, опционально soft-warn / HTTPS.
+**Cloud MVP tagged:** [`v1.0.0`](https://github.com/bombardirr/tr_principle/releases/tag/v1.0.0) (2026-07-24).
 
 Работает:
 
