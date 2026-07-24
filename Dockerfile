@@ -8,6 +8,9 @@ RUN npm ci
 COPY . .
 ARG VITE_GRAFANA_URL=https://grafana.appzac.ru
 ENV VITE_GRAFANA_URL=$VITE_GRAFANA_URL
+# Product analytics — set at build from .env.prod (do not hardcode counter id in git).
+ARG VITE_YANDEX_METRIKA_ID=
+ENV VITE_YANDEX_METRIKA_ID=$VITE_YANDEX_METRIKA_ID
 RUN npm run build
 
 FROM golang:1.26-alpine AS backend

@@ -4,6 +4,7 @@ import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { ApiError } from '@/auth/api'
 import { useAuth } from '@/auth/session'
+import { metrikaGoal } from '@/analytics/metrika'
 
 const { t } = useI18n()
 const router = useRouter()
@@ -151,8 +152,13 @@ async function submit() {
   if (!validateCreds()) return
   busy.value = true
   try {
-    if (mode.value === 'register') await register(email.value.trim(), password.value)
-    else await login(email.value.trim(), password.value)
+    if (mode.value === 'register') {
+      await register(email.value.trim(), password.value)
+      metrikaGoal('register')
+    } else {
+      await login(email.value.trim(), password.value)
+      metrikaGoal('login')
+    }
     await router.push({ name: 'projects' })
   } catch (e) {
     const raw =

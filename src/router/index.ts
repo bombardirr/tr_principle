@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory, type RouteLocationNormalized } from 'vue-router'
 import { bootstrapAuth, useAuth } from '@/auth/session'
+import { metrikaGoal, metrikaHit } from '@/analytics/metrika'
 
 declare module 'vue-router' {
   interface RouteMeta {
@@ -56,6 +57,16 @@ router.beforeEach(async (to: RouteLocationNormalized) => {
     return next.startsWith('/') ? next : '/projects'
   }
   return true
+})
+
+router.afterEach((to, from) => {
+  metrikaHit(to.fullPath, {
+    title: typeof document !== 'undefined' ? document.title : undefined,
+    referer: from.fullPath || undefined,
+  })
+  if (to.name === 'editor' && from.name !== 'editor') {
+    metrikaGoal('project_open')
+  }
 })
 
 export default router

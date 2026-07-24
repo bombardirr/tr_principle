@@ -11,6 +11,7 @@ import CreateSharedWorkDialog from '@/components/CreateSharedWorkDialog.vue'
 import SharedWorkPanel from '@/components/SharedWorkPanel.vue'
 import DocxPreviewPanel from '@/components/DocxPreviewPanel.vue'
 import GlossaryPanel from '@/components/GlossaryPanel.vue'
+import { metrikaGoal } from '@/analytics/metrika'
 import { buildTranslatedDocx, downloadBlob } from '@/docx/exportDocx'
 import { openDocx, DocxError } from '@/docx/openDocx'
 import { getProject, saveProject } from '@/storage/idb'
@@ -1736,6 +1737,7 @@ async function exportDocx() {
     const blob = await buildTranslatedDocx(record.value!.docx, record.value!.segments)
     downloadBlob(blob, `${record.value!.meta.name}.translated.docx`)
     notice.value = t('editor.exported')
+    metrikaGoal('export_docx')
   })
 }
 

@@ -36,6 +36,9 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        VITE_GRAFANA_URL: ${GRAFANA_ROOT_URL:-https://grafana.appzac.ru}
+        VITE_YANDEX_METRIKA_ID: ${VITE_YANDEX_METRIKA_ID:-}
     container_name: ${STACK_NAME:-appzac-prod}-app
     restart: unless-stopped
     env_file:
