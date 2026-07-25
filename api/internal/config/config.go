@@ -67,7 +67,9 @@ func FromEnv() (Config, error) {
 	}
 	tgWebhook := strings.TrimSpace(os.Getenv("TELEGRAM_WEBHOOK_URL"))
 	if tgToken != "" && tgSecret == "" {
-		return Config{}, fmt.Errorf("TELEGRAM_WEBHOOK_SECRET is required when TELEGRAM_BOT_TOKEN is set")
+		// Soft-disable rather than refusing to boot prod (CI healthcheck).
+		fmt.Fprintln(os.Stderr, "warning: TELEGRAM_BOT_TOKEN set without TELEGRAM_WEBHOOK_SECRET — telegram disabled")
+		tgToken = ""
 	}
 	if tgWebhook == "" && tgToken != "" {
 		base := strings.TrimRight(origin, "/")

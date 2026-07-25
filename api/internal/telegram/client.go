@@ -50,13 +50,14 @@ func (c *Client) call(ctx context.Context, method string, payload any) error {
 	req.Header.Set("Content-Type", "application/json")
 	res, err := c.httpClient.Do(req)
 	if err != nil {
-		return err
+		// Do not wrap err — net/http includes the request URL (with bot token).
+		return fmt.Errorf("telegram %s: network error (api.telegram.org unreachable or timed out)", method)
 	}
 	defer res.Body.Close()
 	raw, _ := io.ReadAll(io.LimitReader(res.Body, 1<<20))
 	var parsed apiResponse
 	if err := json.Unmarshal(raw, &parsed); err != nil {
-		return fmt.Errorf("telegram %s: status %d", method, res.StatusCode)
+		return fmt.Errorf("telegram %s: bad response status %d", method, res.StatusCode)
 	}
 	if !parsed.OK {
 		if parsed.Description != "" {

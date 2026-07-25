@@ -57,13 +57,17 @@ func main() {
 		},
 	}
 	if cfg.TelegramBotToken != "" {
-		whCtx, whCancel := context.WithTimeout(ctx, 15*time.Second)
-		if err := tgClient.SetWebhook(whCtx, cfg.TelegramWebhookURL, cfg.TelegramWebhookSecret); err != nil {
-			whCancel()
-			log.Fatalf("telegram setWebhook: %v", err)
-		}
-		whCancel()
-		log.Printf("telegram webhook set: %s", cfg.TelegramWebhookURL)
+		webhookURL := cfg.TelegramWebhookURL
+		webhookSecret := cfg.TelegramWebhookSecret
+		go func() {
+			whCtx, whCancel := context.WithTimeout(context.Background(), 20*time.Second)
+			defer whCancel()
+			if err := tgClient.SetWebhook(whCtx, webhookURL, webhookSecret); err != nil {
+				log.Printf("telegram setWebhook failed (app continues): %v", err)
+				return
+			}
+			log.Printf("telegram webhook set: %s", webhookURL)
+		}()
 	}
 	tmStore := tm.NewStore(pool)
 	tmHandler := &tm.Handler{Store: tmStore}
