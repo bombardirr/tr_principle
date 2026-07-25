@@ -40,13 +40,19 @@ func NewRouter(
 	r.Route("/api/auth", func(r chi.Router) {
 		r.Post("/register", authHandler.Register)
 		r.Post("/login", authHandler.Login)
+		r.Post("/password-reset/request", authHandler.PasswordResetRequest)
+		r.Post("/password-reset/confirm", authHandler.PasswordResetConfirm)
 		r.Group(func(r chi.Router) {
 			r.Use(authHandler.Middleware)
 			r.Get("/me", authHandler.Me)
 			r.Patch("/me", authHandler.PatchMe)
 			r.Post("/logout", authHandler.Logout)
+			r.Post("/telegram/link", authHandler.CreateTelegramLink)
+			r.Delete("/telegram", authHandler.UnlinkTelegram)
 		})
 	})
+
+	r.Post("/api/telegram/webhook", authHandler.TelegramWebhook)
 
 	r.Route("/api/tm", func(r chi.Router) {
 		r.Use(authHandler.Middleware)

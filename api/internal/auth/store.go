@@ -19,6 +19,7 @@ type User struct {
 	PasswordHash   string
 	SessionVersion int
 	IsAdmin        bool
+	TelegramID     *int64
 	Subscription   Subscription
 }
 
@@ -46,6 +47,7 @@ func scanUserRow(row pgx.Row) (scannedUser, error) {
 		&u.PasswordHash,
 		&u.SessionVersion,
 		&u.IsAdmin,
+		&u.TelegramID,
 		&plan,
 		&status,
 	)
@@ -67,7 +69,7 @@ func scanUserRow(row pgx.Row) (scannedUser, error) {
 
 const userSelect = `
 	SELECT u.id, u.email, u.display_name, u.password_hash, u.session_version, u.is_admin,
-	       s.plan, s.status
+	       u.telegram_id, s.plan, s.status
 	FROM users u
 	LEFT JOIN subscriptions s ON s.user_id = u.id
 `

@@ -2,7 +2,7 @@
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
-import { ApiError } from '@/auth/api'
+import { ApiError, passwordResetConfirm, passwordResetRequest } from '@/auth/api'
 import { useAuth } from '@/auth/session'
 import { metrikaGoal } from '@/analytics/metrika'
 
@@ -10,11 +10,13 @@ const { t } = useI18n()
 const router = useRouter()
 const { register, login, isAuthenticated } = useAuth()
 
-const mode = ref<'home' | 'login' | 'register'>('home')
+const mode = ref<'home' | 'login' | 'register' | 'forgot' | 'reset'>('home')
 const email = ref('')
 const password = ref('')
+const resetCode = ref('')
 const busy = ref(false)
 const error = ref('')
+const info = ref('')
 const showPassword = ref(false)
 
 const landingRoot = ref<HTMLElement | null>(null)
@@ -32,13 +34,13 @@ const panels = [
   { id: 'privacy', kind: 'privacy' as const },
 ]
 
-const title = computed(() =>
-  mode.value === 'login'
-    ? t('landing.loginTitle')
-    : mode.value === 'register'
-      ? t('landing.registerTitle')
-      : t('landing.headline'),
-)
+const title = computed(() => {
+  if (mode.value === 'login') return t('landing.loginTitle')
+  if (mode.value === 'register') return t('landing.registerTitle')
+  if (mode.value === 'forgot') return t('landing.forgotTitle')
+  if (mode.value === 'reset') return t('landing.resetTitle')
+  return t('landing.headline')
+})
 
 const activePanel = computed(() => Math.round(panelProgress.value))
 
@@ -100,18 +102,29 @@ onUnmounted(() => {
 function openLogin() {
   mode.value = 'login'
   error.value = ''
+  info.value = ''
   showPassword.value = false
 }
 
 function openRegister() {
   mode.value = 'register'
   error.value = ''
+  info.value = ''
   showPassword.value = false
+}
+
+function openForgot() {
+  mode.value = 'forgot'
+  error.value = ''
+  info.value = ''
+  password.value = ''
+  resetCode.value = ''
 }
 
 function backHome() {
   mode.value = 'home'
   error.value = ''
+  info.value = ''
   showPassword.value = false
 }
 
@@ -147,8 +160,62 @@ function validateCreds(): boolean {
   return true
 }
 
+async function submitForgot() {
+  error.value = ''
+  info.value = ''
+  if (!looksLikeEmail(email.value)) {
+    error.value = t('landing.errorEmail')
+    return
+  }
+  busy.value = true
+  try {
+    await passwordResetRequest(email.value.trim())
+    info.value = t('landing.forgotSent')
+    mode.value = 'reset'
+  } catch (e) {
+    error.value = e instanceof ApiError ? e.message : e instanceof Error ? e.message : String(e)
+  } finally {
+    busy.value = false
+  }
+}
+
+async function submitReset() {
+  error.value = ''
+  info.value = ''
+  if (!validateCreds()) return
+  if (resetCode.value.trim().length !== 6) {
+    error.value = t('landing.errorResetCode')
+    return
+  }
+  busy.value = true
+  try {
+    await passwordResetConfirm(email.value.trim(), resetCode.value.trim(), password.value)
+    info.value = t('landing.resetDone')
+    mode.value = 'login'
+    password.value = ''
+    resetCode.value = ''
+  } catch (e) {
+    const raw = e instanceof ApiError ? e.message : e instanceof Error ? e.message : String(e)
+    if (raw.includes('invalid credentials') || raw.includes('invalid code'))
+      error.value = t('landing.errorResetCode')
+    else if (raw.includes('password must')) error.value = t('landing.errorPasswordShort')
+    else error.value = raw
+  } finally {
+    busy.value = false
+  }
+}
+
 async function submit() {
   error.value = ''
+  info.value = ''
+  if (mode.value === 'forgot') {
+    await submitForgot()
+    return
+  }
+  if (mode.value === 'reset') {
+    await submitReset()
+    return
+  }
   if (!validateCreds()) return
   busy.value = true
   try {
@@ -206,6 +273,7 @@ async function submit() {
         >
           <div class="error-slot" aria-live="polite">
             <p v-if="error" class="error" role="alert" :title="error">{{ error }}</p>
+            <p v-else-if="info" class="info" role="status">{{ info }}</p>
           </div>
           <label>
             <span>{{ t('landing.emailField') }}</span>
@@ -221,14 +289,28 @@ async function submit() {
               @input="error = ''"
             />
           </label>
-          <label>
-            <span>{{ t('landing.passwordField') }}</span>
+          <label v-if="mode === 'reset'">
+            <span>{{ t('landing.resetCodeField') }}</span>
+            <input
+              v-model="resetCode"
+              name="reset-code"
+              type="text"
+              inputmode="numeric"
+              autocomplete="one-time-code"
+              maxlength="6"
+              @input="error = ''"
+            />
+          </label>
+          <label v-if="mode === 'login' || mode === 'register' || mode === 'reset'">
+            <span>{{
+              mode === 'reset' ? t('landing.newPasswordField') : t('landing.passwordField')
+            }}</span>
             <div class="password-row">
               <input
                 v-model="password"
                 :type="showPassword ? 'text' : 'password'"
                 name="appzac-password"
-                :autocomplete="mode === 'register' ? 'new-password' : 'current-password'"
+                :autocomplete="mode === 'register' || mode === 'reset' ? 'new-password' : 'current-password'"
                 maxlength="128"
                 @input="error = ''"
               />
@@ -273,9 +355,27 @@ async function submit() {
               </button>
             </div>
           </label>
+          <p v-if="mode === 'forgot'" class="support">{{ t('landing.forgotHint') }}</p>
           <div class="cta">
             <button type="submit" class="primary" :disabled="busy">
-              {{ mode === 'register' ? t('landing.register') : t('landing.login') }}
+              {{
+                mode === 'register'
+                  ? t('landing.register')
+                  : mode === 'forgot'
+                    ? t('landing.forgotSubmit')
+                    : mode === 'reset'
+                      ? t('landing.resetSubmit')
+                      : t('landing.login')
+              }}
+            </button>
+            <button
+              v-if="mode === 'login'"
+              type="button"
+              class="ghost"
+              :disabled="busy"
+              @click="openForgot"
+            >
+              {{ t('landing.forgotLink') }}
             </button>
             <button type="button" class="ghost" :disabled="busy" @click="backHome">
               {{ t('landing.back') }}
@@ -535,6 +635,19 @@ async function submit() {
   display: -webkit-box;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
+}
+
+.info {
+  margin: 0;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0.45rem 0.7rem;
+  border-radius: 8px;
+  border: 1px solid color-mix(in srgb, var(--ok) 40%, transparent);
+  background: color-mix(in srgb, var(--ok) 12%, transparent);
+  color: var(--text);
+  font-size: 0.86rem;
+  line-height: 1.35;
 }
 
 .field-hint {

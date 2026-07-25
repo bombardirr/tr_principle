@@ -26,7 +26,8 @@ import GlossaryCollectionDialog from '@/components/GlossaryCollectionDialog.vue'
 const { t, locale } = useI18n()
 const route = useRoute()
 const router = useRouter()
-const { user, isAuthenticated, isPro, logout, ready, updateDisplayName } = useAuth()
+const { user, isAuthenticated, isPro, logout, ready, updateDisplayName, linkTelegram, unlinkTelegram, refreshMe } =
+  useAuth()
 const theme = ref<Theme>('dark')
 const isEditorRoute = computed(() => route.name === 'editor')
 const isLanding = computed(() => route.name === 'landing')
@@ -45,6 +46,9 @@ const nameDraft = ref('')
 const settingsBusy = ref(false)
 const settingsError = ref('')
 const settingsSaved = ref(false)
+const telegramBusy = ref(false)
+const telegramError = ref('')
+const telegramLink = ref('')
 const tmCollectionOpen = ref(false)
 const glossaryCollectionOpen = ref(false)
 const donateOpen = ref(false)
@@ -158,6 +162,49 @@ async function saveDisplayName() {
   }
 }
 
+async function onLinkTelegram() {
+  telegramBusy.value = true
+  telegramError.value = ''
+  telegramLink.value = ''
+  try {
+    const res = await linkTelegram()
+    telegramLink.value = res.deep_link
+    window.open(res.deep_link, '_blank', 'noopener,noreferrer')
+  } catch (e) {
+    telegramError.value =
+      e instanceof ApiError ? e.message : e instanceof Error ? e.message : String(e)
+  } finally {
+    telegramBusy.value = false
+  }
+}
+
+async function onUnlinkTelegram() {
+  telegramBusy.value = true
+  telegramError.value = ''
+  try {
+    await unlinkTelegram()
+    telegramLink.value = ''
+  } catch (e) {
+    telegramError.value =
+      e instanceof ApiError ? e.message : e instanceof Error ? e.message : String(e)
+  } finally {
+    telegramBusy.value = false
+  }
+}
+
+async function onRefreshTelegramStatus() {
+  telegramBusy.value = true
+  telegramError.value = ''
+  try {
+    await refreshMe()
+  } catch (e) {
+    telegramError.value =
+      e instanceof ApiError ? e.message : e instanceof Error ? e.message : String(e)
+  } finally {
+    telegramBusy.value = false
+  }
+}
+
 async function onLogout() {
   closeSettings()
   await logout()
@@ -262,6 +309,46 @@ async function onLogout() {
                   <span class="settings-block-value">
                     <span class="plan-badge plan-badge--block">{{ t('auth.planPro') }}</span>
                   </span>
+                </div>
+                <div class="settings-block">
+                  <span class="settings-label">{{ t('auth.telegramLabel') }}</span>
+                  <p class="settings-hint">{{ t('auth.telegramHint') }}</p>
+                  <p v-if="user?.telegram_linked" class="settings-ok">{{ t('auth.telegramLinked') }}</p>
+                  <p v-else class="settings-hint">{{ t('auth.telegramNotLinked') }}</p>
+                  <p v-if="telegramError" class="settings-error">{{ telegramError }}</p>
+                  <div class="settings-actions">
+                    <button
+                      v-if="!user?.telegram_linked"
+                      type="button"
+                      class="primary"
+                      :disabled="telegramBusy"
+                      @click="onLinkTelegram"
+                    >
+                      {{ t('auth.telegramLink') }}
+                    </button>
+                    <button
+                      v-else
+                      type="button"
+                      class="ghost danger"
+                      :disabled="telegramBusy"
+                      @click="onUnlinkTelegram"
+                    >
+                      {{ t('auth.telegramUnlink') }}
+                    </button>
+                    <button
+                      type="button"
+                      class="ghost"
+                      :disabled="telegramBusy"
+                      @click="onRefreshTelegramStatus"
+                    >
+                      {{ t('auth.telegramRefresh') }}
+                    </button>
+                  </div>
+                  <p v-if="telegramLink" class="settings-hint">
+                    <a :href="telegramLink" target="_blank" rel="noopener noreferrer">{{
+                      t('auth.telegramOpenLink')
+                    }}</a>
+                  </p>
                 </div>
                 <p v-if="settingsError" class="settings-error">{{ settingsError }}</p>
                 <p v-else-if="settingsSaved" class="settings-ok">{{ t('auth.save') }} ✓</p>

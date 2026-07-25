@@ -12,6 +12,7 @@ function user(partial: Partial<AuthUser>): AuthUser {
     is_admin: false,
     plan: 'free',
     plan_status: 'active',
+    telegram_linked: false,
     ...partial,
   }
 }

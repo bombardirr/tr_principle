@@ -1,6 +1,7 @@
 import { computed, readonly, ref } from 'vue'
 import {
   ApiError,
+  createTelegramLink,
   fetchMe,
   getStoredToken,
   login as apiLogin,
@@ -8,6 +9,7 @@ import {
   patchMe,
   register as apiRegister,
   setStoredToken,
+  unlinkTelegram as apiUnlinkTelegram,
   type AuthUser,
 } from '@/auth/api'
 import { setStorageAccountId } from '@/storage/scope'
@@ -88,6 +90,22 @@ export async function updateDisplayName(displayName: string) {
   return next
 }
 
+export async function refreshMe() {
+  const me = await fetchMe()
+  user.value = me
+  return me
+}
+
+export async function linkTelegram() {
+  return createTelegramLink()
+}
+
+export async function unlinkTelegram() {
+  const next = await apiUnlinkTelegram()
+  user.value = next
+  return next
+}
+
 /** UI label: nickname, else email (header / own account only — never write to projects/TM). */
 export function displayLabel(u: AuthUser | null | undefined): string {
   if (!u) return ''
@@ -115,6 +133,9 @@ export function useAuth() {
     login,
     logout,
     updateDisplayName,
+    refreshMe,
+    linkTelegram,
+    unlinkTelegram,
     displayLabel,
     publicActorLabel,
     needsDisplayName,

@@ -10,6 +10,7 @@ export type AuthUser = {
   is_admin: boolean
   plan: PlanId
   plan_status: PlanStatus
+  telegram_linked: boolean
 }
 
 export function apiBase(): string {
@@ -107,5 +108,31 @@ export async function patchMe(displayName: string) {
   return apiFetch<AuthUser>('/api/auth/me', {
     method: 'PATCH',
     body: JSON.stringify({ display_name: displayName }),
+  })
+}
+
+export async function createTelegramLink() {
+  return apiFetch<{ deep_link: string; expires_at: string }>('/api/auth/telegram/link', {
+    method: 'POST',
+  })
+}
+
+export async function unlinkTelegram() {
+  return apiFetch<AuthUser>('/api/auth/telegram', { method: 'DELETE' })
+}
+
+export async function passwordResetRequest(email: string) {
+  return apiFetch<{ ok: boolean }>('/api/auth/password-reset/request', {
+    method: 'POST',
+    body: JSON.stringify({ email }),
+    token: null,
+  })
+}
+
+export async function passwordResetConfirm(email: string, code: string, password: string) {
+  return apiFetch<{ ok: boolean }>('/api/auth/password-reset/confirm', {
+    method: 'POST',
+    body: JSON.stringify({ email, code, password }),
+    token: null,
   })
 }

@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/bombardirr/tr_principle/api/internal/telegram"
 	"github.com/google/uuid"
 )
 
@@ -16,18 +17,27 @@ type contextKey string
 const userContextKey contextKey = "authUser"
 
 type PublicUser struct {
-	ID          string `json:"id"`
-	Email       string `json:"email"`
-	DisplayName string `json:"display_name"`
-	IsAdmin     bool   `json:"is_admin"`
-	Plan        string `json:"plan"`
-	PlanStatus  string `json:"plan_status"`
+	ID             string `json:"id"`
+	Email          string `json:"email"`
+	DisplayName    string `json:"display_name"`
+	IsAdmin        bool   `json:"is_admin"`
+	Plan           string `json:"plan"`
+	PlanStatus     string `json:"plan_status"`
+	TelegramLinked bool   `json:"telegram_linked"`
+}
+
+type TelegramConfig struct {
+	BotUsername   string
+	WebhookSecret string
+	Enabled       bool
 }
 
 type Handler struct {
-	Store   *Store
-	Tokens  *TokenIssuer
-	Limiter *RateLimiter
+	Store    *Store
+	Tokens   *TokenIssuer
+	Limiter  *RateLimiter
+	Telegram *telegram.Client
+	TgCfg    TelegramConfig
 }
 
 type credsBody struct {
@@ -248,12 +258,13 @@ func toPublic(u User) PublicUser {
 		status = StatusInactive
 	}
 	return PublicUser{
-		ID:          u.ID.String(),
-		Email:       u.Email,
-		DisplayName: u.DisplayName,
-		IsAdmin:     u.IsAdmin,
-		Plan:        EffectivePlan(u.Subscription),
-		PlanStatus:  status,
+		ID:             u.ID.String(),
+		Email:          u.Email,
+		DisplayName:    u.DisplayName,
+		IsAdmin:        u.IsAdmin,
+		Plan:           EffectivePlan(u.Subscription),
+		PlanStatus:     status,
+		TelegramLinked: u.TelegramID != nil,
 	}
 }
 
