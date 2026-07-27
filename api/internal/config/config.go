@@ -4,23 +4,18 @@ import (
 	"fmt"
 	"os"
 	"strconv"
-	"strings"
 	"time"
 )
 
 type Config struct {
-	HTTPAddr              string
-	DatabaseURL           string
-	JWTSecret             []byte
-	TokenTTL              time.Duration
-	AllowedOrigin         string
-	PublicDir             string
-	BackupDir             string
-	MetricsToken          string
-	TelegramBotToken      string
-	TelegramWebhookSecret string
-	TelegramBotUsername   string
-	TelegramWebhookURL    string
+	HTTPAddr      string
+	DatabaseURL   string
+	JWTSecret     []byte
+	TokenTTL      time.Duration
+	AllowedOrigin string
+	PublicDir     string
+	BackupDir     string
+	MetricsToken  string
 }
 
 func FromEnv() (Config, error) {
@@ -59,34 +54,14 @@ func FromEnv() (Config, error) {
 	if backupDir == "" {
 		backupDir = "data/backups"
 	}
-	tgToken := strings.TrimSpace(os.Getenv("TELEGRAM_BOT_TOKEN"))
-	tgSecret := strings.TrimSpace(os.Getenv("TELEGRAM_WEBHOOK_SECRET"))
-	tgUser := strings.TrimSpace(os.Getenv("TELEGRAM_BOT_USERNAME"))
-	if tgUser == "" {
-		tgUser = "appzac_bot"
-	}
-	tgWebhook := strings.TrimSpace(os.Getenv("TELEGRAM_WEBHOOK_URL"))
-	if tgToken != "" && tgSecret == "" {
-		// Soft-disable rather than refusing to boot prod (CI healthcheck).
-		fmt.Fprintln(os.Stderr, "warning: TELEGRAM_BOT_TOKEN set without TELEGRAM_WEBHOOK_SECRET — telegram disabled")
-		tgToken = ""
-	}
-	if tgWebhook == "" && tgToken != "" {
-		base := strings.TrimRight(origin, "/")
-		tgWebhook = base + "/api/telegram/webhook"
-	}
 	return Config{
-		HTTPAddr:              addr,
-		DatabaseURL:           dbURL,
-		JWTSecret:             []byte(secret),
-		TokenTTL:              time.Duration(ttlHours) * time.Hour,
-		AllowedOrigin:         origin,
-		PublicDir:             publicDir,
-		BackupDir:             backupDir,
-		MetricsToken:          os.Getenv("METRICS_TOKEN"),
-		TelegramBotToken:      tgToken,
-		TelegramWebhookSecret: tgSecret,
-		TelegramBotUsername:   tgUser,
-		TelegramWebhookURL:    tgWebhook,
+		HTTPAddr:      addr,
+		DatabaseURL:   dbURL,
+		JWTSecret:     []byte(secret),
+		TokenTTL:      time.Duration(ttlHours) * time.Hour,
+		AllowedOrigin: origin,
+		PublicDir:     publicDir,
+		BackupDir:     backupDir,
+		MetricsToken:  os.Getenv("METRICS_TOKEN"),
 	}, nil
 }

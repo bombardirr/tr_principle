@@ -10,7 +10,9 @@ export type AuthUser = {
   is_admin: boolean
   plan: PlanId
   plan_status: PlanStatus
-  telegram_linked: boolean
+  current_period_end?: string | null
+  storage_used_bytes: number
+  storage_limit_bytes: number
 }
 
 export function apiBase(): string {
@@ -111,28 +113,70 @@ export async function patchMe(displayName: string) {
   })
 }
 
-export async function createTelegramLink() {
-  return apiFetch<{ deep_link: string; expires_at: string }>('/api/auth/telegram/link', {
+export async function redeemLicense(key: string) {
+  return apiFetch<AuthUser>('/api/auth/license/redeem', {
     method: 'POST',
+    body: JSON.stringify({ key }),
   })
 }
 
-export async function unlinkTelegram() {
-  return apiFetch<AuthUser>('/api/auth/telegram', { method: 'DELETE' })
+export type StorageBackupItem = {
+  project_id: string
+  size_bytes: number
+  updated_at: string
 }
 
-export async function passwordResetRequest(email: string) {
-  return apiFetch<{ ok: boolean }>('/api/auth/password-reset/request', {
+export async function fetchStorage() {
+  return apiFetch<{
+    storage_used_bytes: number
+    storage_limit_bytes: number
+    plan: PlanId
+    backups: StorageBackupItem[]
+  }>('/api/auth/storage')
+}
+
+export type LicenseKeyRow = {
+  key_hash: string
+  key_hint: string
+  sku: string
+  duration_days: number
+  status: 'unused' | 'redeemed' | 'revoked' | string
+  note: string
+  created_at: string
+  created_email?: string
+  redeemed_at?: string
+  redeemed_email?: string
+  key?: string
+}
+
+export type LicenseKeyStats = {
+  total: number
+  unused: number
+  redeemed: number
+  revoked: number
+}
+
+export async function adminListLicenses() {
+  return apiFetch<{ keys: LicenseKeyRow[]; stats: LicenseKeyStats }>('/api/auth/license/keys')
+}
+
+export async function adminCreateLicense(sku: string, note = '') {
+  return apiFetch<LicenseKeyRow>('/api/auth/license/keys', {
     method: 'POST',
-    body: JSON.stringify({ email }),
-    token: null,
+    body: JSON.stringify({ sku, note }),
   })
 }
 
-export async function passwordResetConfirm(email: string, code: string, password: string) {
-  return apiFetch<{ ok: boolean }>('/api/auth/password-reset/confirm', {
+export async function adminRevokeLicense(keyHash: string) {
+  return apiFetch<{ ok: boolean }>('/api/auth/license/keys/revoke', {
     method: 'POST',
-    body: JSON.stringify({ email, code, password }),
-    token: null,
+    body: JSON.stringify({ key_hash: keyHash }),
+  })
+}
+
+export async function adminPatchLicenseNote(keyHash: string, note: string) {
+  return apiFetch<{ ok: boolean }>('/api/auth/license/keys/note', {
+    method: 'PATCH',
+    body: JSON.stringify({ key_hash: keyHash, note }),
   })
 }

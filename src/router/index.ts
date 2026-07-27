@@ -38,6 +38,12 @@ const router = createRouter({
       meta: { requiresAuth: true },
     },
     {
+      path: '/pro',
+      name: 'pro',
+      component: () => import('@/pages/ProPage.vue'),
+      meta: { public: true },
+    },
+    {
       path: '/ops/metrics',
       name: 'ops-metrics',
       component: () => import('@/pages/OpsMetricsPage.vue'),

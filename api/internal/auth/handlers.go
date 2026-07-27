@@ -7,8 +7,8 @@ import (
 	"net"
 	"net/http"
 	"strings"
+	"time"
 
-	"github.com/bombardirr/tr_principle/api/internal/telegram"
 	"github.com/google/uuid"
 )
 
@@ -17,27 +17,21 @@ type contextKey string
 const userContextKey contextKey = "authUser"
 
 type PublicUser struct {
-	ID             string `json:"id"`
-	Email          string `json:"email"`
-	DisplayName    string `json:"display_name"`
-	IsAdmin        bool   `json:"is_admin"`
-	Plan           string `json:"plan"`
-	PlanStatus     string `json:"plan_status"`
-	TelegramLinked bool   `json:"telegram_linked"`
-}
-
-type TelegramConfig struct {
-	BotUsername   string
-	WebhookSecret string
-	Enabled       bool
+	ID                string  `json:"id"`
+	Email             string  `json:"email"`
+	DisplayName       string  `json:"display_name"`
+	IsAdmin           bool    `json:"is_admin"`
+	Plan              string  `json:"plan"`
+	PlanStatus        string  `json:"plan_status"`
+	CurrentPeriodEnd  *string `json:"current_period_end,omitempty"`
+	StorageUsedBytes  int64   `json:"storage_used_bytes"`
+	StorageLimitBytes int64   `json:"storage_limit_bytes"`
 }
 
 type Handler struct {
-	Store    *Store
-	Tokens   *TokenIssuer
-	Limiter  *RateLimiter
-	Telegram *telegram.Client
-	TgCfg    TelegramConfig
+	Store   *Store
+	Tokens  *TokenIssuer
+	Limiter *RateLimiter
 }
 
 type credsBody struct {
@@ -117,7 +111,231 @@ func (h *Handler) Me(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusUnauthorized, "unauthorized")
 		return
 	}
-	writeJSON(w, http.StatusOK, toPublic(user))
+	fresh, err := h.Store.FindByID(r.Context(), user.ID)
+	if err != nil {
+		writeError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	writeJSON(w, http.StatusOK, h.publicUser(r.Context(), fresh))
+}
+
+func (h *Handler) RedeemLicense(w http.ResponseWriter, r *http.Request) {
+	user, ok := UserFromContext(r.Context())
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, 16<<10)
+	var body struct {
+		Key string `json:"key"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid json")
+		return
+	}
+	next, err := h.Store.RedeemLicense(r.Context(), user.ID, body.Key)
+	if err != nil {
+		switch {
+		case errors.Is(err, ErrLicenseInvalid):
+			writeError(w, http.StatusBadRequest, "invalid license key")
+		case errors.Is(err, ErrLicenseUsed):
+			writeError(w, http.StatusConflict, "license key already used")
+		case errors.Is(err, ErrLicenseRevoked):
+			writeError(w, http.StatusGone, "license key revoked")
+		default:
+			writeError(w, http.StatusInternalServerError, "server error")
+		}
+		return
+	}
+	writeJSON(w, http.StatusOK, h.publicUser(r.Context(), next))
+}
+
+func (h *Handler) Storage(w http.ResponseWriter, r *http.Request) {
+	user, ok := UserFromContext(r.Context())
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	fresh, err := h.Store.FindByID(r.Context(), user.ID)
+	if err != nil {
+		writeError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	used, err := h.Store.CloudStorageUsed(r.Context(), fresh.ID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "server error")
+		return
+	}
+	backups, err := h.Store.ListProjectBackups(r.Context(), fresh.ID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "server error")
+		return
+	}
+	if backups == nil {
+		backups = []BackupListItem{}
+	}
+	type backupDTO struct {
+		ProjectID string `json:"project_id"`
+		SizeBytes int64  `json:"size_bytes"`
+		UpdatedAt string `json:"updated_at"`
+	}
+	list := make([]backupDTO, 0, len(backups))
+	for _, b := range backups {
+		list = append(list, backupDTO{
+			ProjectID: b.ProjectID,
+			SizeBytes: b.SizeBytes,
+			UpdatedAt: b.UpdatedAt.UTC().Format(time.RFC3339Nano),
+		})
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"storage_used_bytes":  used,
+		"storage_limit_bytes": StorageLimitBytes(fresh.Subscription),
+		"plan":                EffectivePlan(fresh.Subscription),
+		"backups":             list,
+	})
+}
+
+func (h *Handler) requireAdmin(w http.ResponseWriter, r *http.Request) (User, bool) {
+	user, ok := UserFromContext(r.Context())
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "unauthorized")
+		return User{}, false
+	}
+	if !user.IsAdmin {
+		writeError(w, http.StatusForbidden, "forbidden")
+		return User{}, false
+	}
+	return user, true
+}
+
+func licenseKeyDTO(item LicenseKeyInfo) map[string]any {
+	dto := map[string]any{
+		"key_hash":      item.KeyHash,
+		"key_hint":      item.KeyHint,
+		"sku":           item.SKU,
+		"duration_days": item.DurationDays,
+		"status":        item.Status,
+		"note":          item.Note,
+		"created_at":    item.CreatedAt.UTC().Format(time.RFC3339Nano),
+		"created_email": item.CreatedEmail,
+		"redeemed_email": item.RedeemedEmail,
+	}
+	if item.RedeemedAt != nil {
+		dto["redeemed_at"] = item.RedeemedAt.UTC().Format(time.RFC3339Nano)
+	}
+	if item.Plaintext != "" {
+		dto["key"] = item.Plaintext
+	}
+	return dto
+}
+
+func (h *Handler) AdminCreateLicense(w http.ResponseWriter, r *http.Request) {
+	admin, ok := h.requireAdmin(w, r)
+	if !ok {
+		return
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, 16<<10)
+	var body struct {
+		SKU  string `json:"sku"`
+		Note string `json:"note"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid json")
+		return
+	}
+	item, err := h.Store.CreateLicenseKey(r.Context(), strings.TrimSpace(body.SKU), body.Note, admin.ID)
+	if errors.Is(err, ErrUnknownSKU) {
+		writeError(w, http.StatusBadRequest, "unknown license sku")
+		return
+	}
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "server error")
+		return
+	}
+	writeJSON(w, http.StatusOK, licenseKeyDTO(item))
+}
+
+func (h *Handler) AdminListLicenses(w http.ResponseWriter, r *http.Request) {
+	if _, ok := h.requireAdmin(w, r); !ok {
+		return
+	}
+	items, err := h.Store.ListLicenseKeys(r.Context(), 200)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "server error")
+		return
+	}
+	if items == nil {
+		items = []LicenseKeyInfo{}
+	}
+	list := make([]map[string]any, 0, len(items))
+	var unused, redeemed, revoked int
+	for _, it := range items {
+		list = append(list, licenseKeyDTO(it))
+		switch it.Status {
+		case "unused":
+			unused++
+		case "redeemed":
+			redeemed++
+		case "revoked":
+			revoked++
+		}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"keys": list,
+		"stats": map[string]int{
+			"total":    len(list),
+			"unused":   unused,
+			"redeemed": redeemed,
+			"revoked":  revoked,
+		},
+	})
+}
+
+func (h *Handler) AdminRevokeLicense(w http.ResponseWriter, r *http.Request) {
+	if _, ok := h.requireAdmin(w, r); !ok {
+		return
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, 16<<10)
+	var body struct {
+		KeyHash string `json:"key_hash"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid json")
+		return
+	}
+	if err := h.Store.RevokeLicenseKey(r.Context(), strings.TrimSpace(body.KeyHash)); err != nil {
+		if errors.Is(err, ErrLicenseInvalid) {
+			writeError(w, http.StatusConflict, "cannot revoke")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "server error")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+}
+
+func (h *Handler) AdminPatchLicenseNote(w http.ResponseWriter, r *http.Request) {
+	if _, ok := h.requireAdmin(w, r); !ok {
+		return
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, 16<<10)
+	var body struct {
+		KeyHash string `json:"key_hash"`
+		Note    string `json:"note"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid json")
+		return
+	}
+	if err := h.Store.UpdateLicenseNote(r.Context(), strings.TrimSpace(body.KeyHash), body.Note); err != nil {
+		if errors.Is(err, ErrLicenseInvalid) {
+			writeError(w, http.StatusNotFound, "not found")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "server error")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }
 
 func (h *Handler) PatchMe(w http.ResponseWriter, r *http.Request) {
@@ -144,7 +362,7 @@ func (h *Handler) PatchMe(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "server error")
 		return
 	}
-	writeJSON(w, http.StatusOK, toPublic(updated))
+	writeJSON(w, http.StatusOK, h.publicUser(r.Context(), updated))
 }
 
 func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
@@ -223,7 +441,15 @@ func (h *Handler) writeToken(w http.ResponseWriter, user User) {
 		writeError(w, http.StatusInternalServerError, "server error")
 		return
 	}
-	writeJSON(w, http.StatusOK, tokenResponse{Token: token, User: toPublic(user)})
+	writeJSON(w, http.StatusOK, tokenResponse{Token: token, User: h.publicUser(context.Background(), user)})
+}
+
+func (h *Handler) publicUser(ctx context.Context, u User) PublicUser {
+	used, err := h.Store.CloudStorageUsed(ctx, u.ID)
+	if err != nil {
+		used = 0
+	}
+	return toPublic(u, used)
 }
 
 func (h *Handler) rateOK(w http.ResponseWriter, r *http.Request) bool {
@@ -252,19 +478,26 @@ func clientIP(r *http.Request) string {
 	return host
 }
 
-func toPublic(u User) PublicUser {
+func toPublic(u User, storageUsed int64) PublicUser {
 	status := u.Subscription.Status
 	if status == "" {
 		status = StatusInactive
 	}
+	var periodEnd *string
+	if u.Subscription.CurrentPeriodEnd != nil {
+		s := u.Subscription.CurrentPeriodEnd.UTC().Format(time.RFC3339Nano)
+		periodEnd = &s
+	}
 	return PublicUser{
-		ID:             u.ID.String(),
-		Email:          u.Email,
-		DisplayName:    u.DisplayName,
-		IsAdmin:        u.IsAdmin,
-		Plan:           EffectivePlan(u.Subscription),
-		PlanStatus:     status,
-		TelegramLinked: u.TelegramID != nil,
+		ID:                u.ID.String(),
+		Email:             u.Email,
+		DisplayName:       u.DisplayName,
+		IsAdmin:           u.IsAdmin,
+		Plan:              EffectivePlan(u.Subscription),
+		PlanStatus:        status,
+		CurrentPeriodEnd:  periodEnd,
+		StorageUsedBytes:  storageUsed,
+		StorageLimitBytes: StorageLimitBytes(u.Subscription),
 	}
 }
 

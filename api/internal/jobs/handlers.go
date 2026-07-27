@@ -20,6 +20,7 @@ type Handler struct {
 	TM        *tm.Store
 	Glossary  *glossary.Store
 	BackupDir string
+	Auth      *auth.Store
 }
 
 func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {

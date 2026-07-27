@@ -17,7 +17,6 @@ import (
 	"github.com/bombardirr/tr_principle/api/internal/httpapi"
 	"github.com/bombardirr/tr_principle/api/internal/jobs"
 	"github.com/bombardirr/tr_principle/api/internal/projects"
-	"github.com/bombardirr/tr_principle/api/internal/telegram"
 	"github.com/bombardirr/tr_principle/api/internal/tm"
 )
 
@@ -44,30 +43,10 @@ func main() {
 
 	store := auth.NewStore(pool)
 	tokens := auth.NewTokenIssuer(cfg.JWTSecret, cfg.TokenTTL)
-	tgClient := telegram.NewClient(cfg.TelegramBotToken)
 	handler := &auth.Handler{
-		Store:    store,
-		Tokens:   tokens,
-		Limiter:  auth.NewRateLimiter(30, time.Minute),
-		Telegram: tgClient,
-		TgCfg: auth.TelegramConfig{
-			BotUsername:   cfg.TelegramBotUsername,
-			WebhookSecret: cfg.TelegramWebhookSecret,
-			Enabled:       cfg.TelegramBotToken != "",
-		},
-	}
-	if cfg.TelegramBotToken != "" {
-		webhookURL := cfg.TelegramWebhookURL
-		webhookSecret := cfg.TelegramWebhookSecret
-		go func() {
-			whCtx, whCancel := context.WithTimeout(context.Background(), 20*time.Second)
-			defer whCancel()
-			if err := tgClient.SetWebhook(whCtx, webhookURL, webhookSecret); err != nil {
-				log.Printf("telegram setWebhook failed (app continues): %v", err)
-				return
-			}
-			log.Printf("telegram webhook set: %s", webhookURL)
-		}()
+		Store:   store,
+		Tokens:  tokens,
+		Limiter: auth.NewRateLimiter(30, time.Minute),
 	}
 	tmStore := tm.NewStore(pool)
 	tmHandler := &tm.Handler{Store: tmStore}
@@ -76,9 +55,10 @@ func main() {
 	projectsHandler := &projects.Handler{
 		Store:     projects.NewStore(pool),
 		BackupDir: cfg.BackupDir,
+		Auth:      store,
 	}
 	jobsHandler := &jobs.Handler{
-		Store: jobs.NewStore(pool), TM: tmStore, Glossary: glossaryStore, BackupDir: cfg.BackupDir,
+		Store: jobs.NewStore(pool), TM: tmStore, Glossary: glossaryStore, BackupDir: cfg.BackupDir, Auth: store,
 	}
 	api := httpapi.NewRouter(handler, tmHandler, glossaryHandler, projectsHandler, jobsHandler, cfg.AllowedOrigin, cfg.MetricsToken)
 	handlerRoot := httpapi.MountSPA(api, cfg.PublicDir)

@@ -128,3 +128,9 @@ func (s *Store) GetBackupMeta(ctx context.Context, userID, projectID uuid.UUID) 
 	}
 	return m, err
 }
+
+func (s *Store) DeleteBackupMeta(ctx context.Context, userID, projectID uuid.UUID) error {
+	_, err := s.pool.Exec(ctx, `
+		DELETE FROM project_backups WHERE user_id=$1 AND project_id=$2`, userID, projectID)
+	return err
+}

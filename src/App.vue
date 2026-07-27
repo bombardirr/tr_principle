@@ -9,7 +9,9 @@ import LocaleToggleLabel from '@/components/LocaleToggleLabel.vue'
 import ThemeToggleGlyph from '@/components/ThemeToggleGlyph.vue'
 import { getTheme, toggleTheme, type Theme } from '@/theme'
 import { displayLabel, needsDisplayName, useAuth } from '@/auth/session'
-import { ApiError } from '@/auth/api'
+import { ApiError, fetchStorage, type StorageBackupItem } from '@/auth/api'
+import { deleteProjectBackup } from '@/projects/api'
+import { formatBytes, proDaysLeft, storageNearFull, storageOverLimit } from '@/auth/plan'
 import { useShortcutBindings } from '@/composables/useShortcutBindings'
 import { useOnlineStatus } from '@/composables/useOnlineStatus'
 import {
@@ -20,20 +22,26 @@ import {
 } from '@/shortcuts/bindings'
 import JoinToast from '@/components/JoinToast.vue'
 import DonateDialog from '@/components/DonateDialog.vue'
+import AdminLicenseDialog from '@/components/AdminLicenseDialog.vue'
 import TmCollectionDialog from '@/components/TmCollectionDialog.vue'
 import GlossaryCollectionDialog from '@/components/GlossaryCollectionDialog.vue'
 
 const { t, locale } = useI18n()
 const route = useRoute()
 const router = useRouter()
-const { user, isAuthenticated, isPro, logout, ready, updateDisplayName, linkTelegram, unlinkTelegram, refreshMe } =
+const { user, isAuthenticated, isPro, logout, ready, updateDisplayName, redeemLicense, refreshMe } =
   useAuth()
 const theme = ref<Theme>('dark')
 const isEditorRoute = computed(() => route.name === 'editor')
-const isLanding = computed(() => route.name === 'landing')
+const isLanding = computed(() => route.name === 'landing' || route.name === 'pro')
 const brandTo = computed(() => (isAuthenticated.value ? '/projects' : '/'))
 const headerName = computed(() => displayLabel(user.value))
 const showNameNudge = computed(() => needsDisplayName(user.value))
+const daysLeft = computed(() => proDaysLeft(user.value))
+const showProDays = computed(() => isPro.value && daysLeft.value != null && daysLeft.value <= 14)
+const showStorageWarn = computed(
+  () => isAuthenticated.value && (storageOverLimit(user.value) || storageNearFull(user.value)),
+)
 const { online } = useOnlineStatus()
 const showOfflineBanner = computed(
   () => ready.value && isAuthenticated.value && !isLanding.value && !online.value,
@@ -46,12 +54,16 @@ const nameDraft = ref('')
 const settingsBusy = ref(false)
 const settingsError = ref('')
 const settingsSaved = ref(false)
-const telegramBusy = ref(false)
-const telegramError = ref('')
-const telegramLink = ref('')
+const licenseKey = ref('')
+const licenseBusy = ref(false)
+const licenseError = ref('')
+const licenseOk = ref(false)
+const storageBackups = ref<StorageBackupItem[]>([])
+const storageBusy = ref(false)
 const tmCollectionOpen = ref(false)
 const glossaryCollectionOpen = ref(false)
 const donateOpen = ref(false)
+const licenseAdminOpen = ref(false)
 
 const { bindings, setBinding, resetBinding, reload: reloadShortcuts } = useShortcutBindings()
 const capturingShortcut = ref<'clearFocus' | null>(null)
@@ -60,7 +72,21 @@ onMounted(() => {
   theme.value = getTheme()
   document.addEventListener('pointerdown', onDocPointer, true)
   document.addEventListener('keydown', onDocKey, true)
+  if (route.query.settings === 'account' && isAuthenticated.value) {
+    openSettings()
+    void router.replace({ query: { ...route.query, settings: undefined } })
+  }
 })
+
+watch(
+  () => route.query.settings,
+  (v) => {
+    if (v === 'account' && isAuthenticated.value) {
+      openSettings()
+      void router.replace({ query: { ...route.query, settings: undefined } })
+    }
+  },
+)
 
 onUnmounted(() => {
   document.removeEventListener('pointerdown', onDocPointer, true)
@@ -91,9 +117,57 @@ function openSettings() {
   settingsTab.value = 'account'
   settingsError.value = ''
   settingsSaved.value = false
+  licenseKey.value = ''
+  licenseError.value = ''
+  licenseOk.value = false
   capturingShortcut.value = null
   reloadShortcuts()
   settingsOpen.value = true
+  void loadStorageList()
+}
+
+async function loadStorageList() {
+  storageBusy.value = true
+  try {
+    const s = await fetchStorage()
+    storageBackups.value = s.backups ?? []
+    await refreshMe()
+  } catch {
+    storageBackups.value = []
+  } finally {
+    storageBusy.value = false
+  }
+}
+
+async function onRedeemLicense() {
+  licenseBusy.value = true
+  licenseError.value = ''
+  licenseOk.value = false
+  try {
+    await redeemLicense(licenseKey.value.trim())
+    licenseKey.value = ''
+    licenseOk.value = true
+    await loadStorageList()
+  } catch (e) {
+    licenseError.value =
+      e instanceof ApiError ? e.message : e instanceof Error ? e.message : String(e)
+  } finally {
+    licenseBusy.value = false
+  }
+}
+
+async function onDeleteCloudBackup(projectId: string) {
+  if (!window.confirm(t('auth.storageDeleteConfirm'))) return
+  storageBusy.value = true
+  try {
+    await deleteProjectBackup(projectId)
+    await loadStorageList()
+  } catch (e) {
+    settingsError.value =
+      e instanceof ApiError ? e.message : e instanceof Error ? e.message : String(e)
+  } finally {
+    storageBusy.value = false
+  }
 }
 
 function closeSettings() {
@@ -162,49 +236,6 @@ async function saveDisplayName() {
   }
 }
 
-async function onLinkTelegram() {
-  telegramBusy.value = true
-  telegramError.value = ''
-  telegramLink.value = ''
-  try {
-    const res = await linkTelegram()
-    telegramLink.value = res.deep_link
-    window.open(res.deep_link, '_blank', 'noopener,noreferrer')
-  } catch (e) {
-    telegramError.value =
-      e instanceof ApiError ? e.message : e instanceof Error ? e.message : String(e)
-  } finally {
-    telegramBusy.value = false
-  }
-}
-
-async function onUnlinkTelegram() {
-  telegramBusy.value = true
-  telegramError.value = ''
-  try {
-    await unlinkTelegram()
-    telegramLink.value = ''
-  } catch (e) {
-    telegramError.value =
-      e instanceof ApiError ? e.message : e instanceof Error ? e.message : String(e)
-  } finally {
-    telegramBusy.value = false
-  }
-}
-
-async function onRefreshTelegramStatus() {
-  telegramBusy.value = true
-  telegramError.value = ''
-  try {
-    await refreshMe()
-  } catch (e) {
-    telegramError.value =
-      e instanceof ApiError ? e.message : e instanceof Error ? e.message : String(e)
-  } finally {
-    telegramBusy.value = false
-  }
-}
-
 async function onLogout() {
   closeSettings()
   await logout()
@@ -227,7 +258,26 @@ async function onLogout() {
         <template v-if="ready && isAuthenticated && !isLanding">
           <span class="account" :title="user?.email">
             {{ headerName }}
-            <span v-if="isPro" class="plan-badge" :title="t('auth.planPro')">{{ t('auth.planPro') }}</span>
+            <span v-if="isPro" class="plan-badge" :title="t('auth.planPro')">
+              {{
+                showProDays
+                  ? t('auth.planProDays', { n: daysLeft })
+                  : t('auth.planPro')
+              }}
+            </span>
+            <span
+              v-if="showStorageWarn"
+              class="storage-warn"
+              :title="t('auth.storageHint')"
+              @click="openSettings"
+            >
+              {{
+                t('auth.storageShort', {
+                  used: formatBytes(user?.storage_used_bytes ?? 0),
+                  limit: formatBytes(user?.storage_limit_bytes ?? 0),
+                })
+              }}
+            </span>
           </span>
           <div ref="settingsRoot" class="settings-wrap">
             <IconButton
@@ -307,48 +357,72 @@ async function onLogout() {
                 <div v-if="isPro" class="settings-block">
                   <span class="settings-label">{{ t('auth.planLabel') }}</span>
                   <span class="settings-block-value">
-                    <span class="plan-badge plan-badge--block">{{ t('auth.planPro') }}</span>
+                    <span class="plan-badge plan-badge--block">
+                      {{
+                        showProDays
+                          ? t('auth.planProDays', { n: daysLeft })
+                          : t('auth.planPro')
+                      }}
+                    </span>
                   </span>
                 </div>
                 <div class="settings-block">
-                  <span class="settings-label">{{ t('auth.telegramLabel') }}</span>
-                  <p class="settings-hint">{{ t('auth.telegramHint') }}</p>
-                  <p v-if="user?.telegram_linked" class="settings-ok">{{ t('auth.telegramLinked') }}</p>
-                  <p v-else class="settings-hint">{{ t('auth.telegramNotLinked') }}</p>
-                  <p v-if="telegramError" class="settings-error">{{ telegramError }}</p>
+                  <span class="settings-label">{{ t('auth.storageLabel') }}</span>
+                  <p class="settings-hint">
+                    {{
+                      t('auth.storageUsage', {
+                        used: formatBytes(user?.storage_used_bytes ?? 0),
+                        limit: formatBytes(user?.storage_limit_bytes ?? 0),
+                      })
+                    }}
+                  </p>
+                  <p class="settings-hint">{{ t('auth.storageHint') }}</p>
+                  <ul v-if="storageBackups.length" class="storage-list">
+                    <li v-for="b in storageBackups" :key="b.project_id">
+                      <span class="storage-list-id" :title="b.project_id">{{
+                        b.project_id.slice(0, 8)
+                      }}…</span>
+                      <span>{{ formatBytes(b.size_bytes) }}</span>
+                      <button
+                        type="button"
+                        class="ghost danger"
+                        :disabled="storageBusy"
+                        @click="onDeleteCloudBackup(b.project_id)"
+                      >
+                        {{ t('auth.storageDelete') }}
+                      </button>
+                    </li>
+                  </ul>
+                  <p v-else-if="!storageBusy" class="settings-hint">{{ t('auth.storageEmpty') }}</p>
+                </div>
+                <div class="settings-block">
+                  <span class="settings-label">{{ t('auth.licenseLabel') }}</span>
+                  <p class="settings-hint">{{ t('auth.licenseHint') }}</p>
+                  <label class="settings-field">
+                    <input
+                      v-model="licenseKey"
+                      type="text"
+                      maxlength="200"
+                      autocomplete="off"
+                      :placeholder="t('auth.licensePlaceholder')"
+                      @keydown.enter.prevent="onRedeemLicense"
+                    />
+                  </label>
+                  <p v-if="licenseError" class="settings-error">{{ licenseError }}</p>
+                  <p v-else-if="licenseOk" class="settings-ok">{{ t('auth.licenseOk') }}</p>
                   <div class="settings-actions">
                     <button
-                      v-if="!user?.telegram_linked"
                       type="button"
                       class="primary"
-                      :disabled="telegramBusy"
-                      @click="onLinkTelegram"
+                      :disabled="licenseBusy || !licenseKey.trim()"
+                      @click="onRedeemLicense"
                     >
-                      {{ t('auth.telegramLink') }}
+                      {{ t('auth.licenseRedeem') }}
                     </button>
-                    <button
-                      v-else
-                      type="button"
-                      class="ghost danger"
-                      :disabled="telegramBusy"
-                      @click="onUnlinkTelegram"
-                    >
-                      {{ t('auth.telegramUnlink') }}
-                    </button>
-                    <button
-                      type="button"
-                      class="ghost"
-                      :disabled="telegramBusy"
-                      @click="onRefreshTelegramStatus"
-                    >
-                      {{ t('auth.telegramRefresh') }}
-                    </button>
+                    <router-link class="ghost link-btn" :to="{ name: 'pro' }" @click="closeSettings">
+                      {{ t('auth.licenseBuy') }}
+                    </router-link>
                   </div>
-                  <p v-if="telegramLink" class="settings-hint">
-                    <a :href="telegramLink" target="_blank" rel="noopener noreferrer">{{
-                      t('auth.telegramOpenLink')
-                    }}</a>
-                  </p>
                 </div>
                 <p v-if="settingsError" class="settings-error">{{ settingsError }}</p>
                 <p v-else-if="settingsSaved" class="settings-ok">{{ t('auth.save') }} ✓</p>
@@ -366,6 +440,9 @@ async function onLogout() {
                   <div class="settings-actions">
                     <button type="button" class="primary" @click="openMetricsFromSettings">
                       {{ t('auth.settingsOpenMetrics') }}
+                    </button>
+                    <button type="button" class="ghost" @click="licenseAdminOpen = true">
+                      {{ t('auth.licenseAdminOpen') }}
                     </button>
                   </div>
                 </div>
@@ -437,6 +514,7 @@ async function onLogout() {
       </div>
     </header>
     <DonateDialog :open="donateOpen" @close="donateOpen = false" />
+    <AdminLicenseDialog v-if="licenseAdminOpen" @close="licenseAdminOpen = false" />
     <TmCollectionDialog
       :open="tmCollectionOpen"
       mode="browse"
@@ -585,6 +663,48 @@ async function onLogout() {
 
 .plan-badge--block {
   font-size: 0.72rem;
+}
+
+.storage-warn {
+  flex: 0 0 auto;
+  margin-left: 0.35rem;
+  padding: 0.05rem 0.35rem;
+  border-radius: 4px;
+  border: 1px solid color-mix(in srgb, var(--warn, #d89a5a) 50%, var(--border));
+  background: color-mix(in srgb, var(--warn, #d89a5a) 14%, var(--surface));
+  color: var(--warn, #d89a5a);
+  font-size: 0.65rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.storage-list {
+  list-style: none;
+  margin: 0.5rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.storage-list li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.82rem;
+}
+
+.storage-list-id {
+  font-family: ui-monospace, monospace;
+  color: var(--muted);
+}
+
+.link-btn {
+  display: inline-flex;
+  align-items: center;
+  text-decoration: none;
+  padding: 0.4rem 0.75rem;
 }
 
 .settings-wrap {

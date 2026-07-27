@@ -20,6 +20,7 @@ import { packProjectFile, unpackProjectFile } from '@/storage/projectFile'
 import IconButton from '@/components/IconButton.vue'
 import EditorGlyph from '@/components/EditorGlyph.vue'
 import TooltipWrap from '@/components/TooltipWrap.vue'
+import { ApiError } from '@/auth/api'
 import { publicActorLabel, useAuth } from '@/auth/session'
 import { useProjectAccess } from '@/composables/useProjectAccess'
 import { withSegmentAudit } from '@/utils/segmentAudit'
@@ -1574,7 +1575,10 @@ async function uploadCloudBackup() {
     error.value = ''
   } catch (e) {
     notice.value = ''
-    error.value = t('editor.cloudBackupFail')
+    error.value =
+      e instanceof ApiError && (e.status === 507 || e.message.includes('quota'))
+        ? t('editor.cloudBackupQuota')
+        : t('editor.cloudBackupFail')
     setSaveError(e)
   } finally {
     saving.value = false

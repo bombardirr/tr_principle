@@ -1,15 +1,14 @@
 import { computed, readonly, ref } from 'vue'
 import {
   ApiError,
-  createTelegramLink,
   fetchMe,
   getStoredToken,
   login as apiLogin,
   logoutRequest,
   patchMe,
+  redeemLicense as apiRedeemLicense,
   register as apiRegister,
   setStoredToken,
-  unlinkTelegram as apiUnlinkTelegram,
   type AuthUser,
 } from '@/auth/api'
 import { setStorageAccountId } from '@/storage/scope'
@@ -96,12 +95,8 @@ export async function refreshMe() {
   return me
 }
 
-export async function linkTelegram() {
-  return createTelegramLink()
-}
-
-export async function unlinkTelegram() {
-  const next = await apiUnlinkTelegram()
+export async function redeemLicense(key: string) {
+  const next = await apiRedeemLicense(key)
   user.value = next
   return next
 }
@@ -134,8 +129,7 @@ export function useAuth() {
     logout,
     updateDisplayName,
     refreshMe,
-    linkTelegram,
-    unlinkTelegram,
+    redeemLicense,
     displayLabel,
     publicActorLabel,
     needsDisplayName,

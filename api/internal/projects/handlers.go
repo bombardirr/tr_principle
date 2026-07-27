@@ -22,6 +22,8 @@ const MaxBackupBytes = 50 << 20 // 50 MiB
 type Handler struct {
 	Store     *Store
 	BackupDir string
+	// Auth provides cloud quota checks (optional in unit tests that skip uploads).
+	Auth *auth.Store
 }
 
 type lockBody struct {
@@ -125,6 +127,23 @@ func (h *Handler) PutBackup(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "empty body")
 		return
 	}
+	var oldSize int64
+	if meta, err := h.Store.GetBackupMeta(r.Context(), user.ID, projectID); err == nil {
+		oldSize = meta.SizeBytes
+	} else if !errors.Is(err, pgx.ErrNoRows) {
+		writeError(w, http.StatusInternalServerError, "server error")
+		return
+	}
+	delta := int64(len(data)) - oldSize
+	if h.Auth != nil {
+		if err := h.Auth.AllowCloudWrite(r.Context(), user.ID, delta); errors.Is(err, auth.ErrQuotaExceeded) {
+			writeError(w, http.StatusInsufficientStorage, "storage quota exceeded")
+			return
+		} else if err != nil {
+			writeError(w, http.StatusInternalServerError, "server error")
+			return
+		}
+	}
 	rel, abs, err := h.backupPaths(user.ID, projectID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "server error")
@@ -204,6 +223,30 @@ func (h *Handler) GetBackup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	http.ServeContent(w, r, projectID.String()+".tcat.zip", meta.UpdatedAt, f)
+}
+
+func (h *Handler) DeleteBackup(w http.ResponseWriter, r *http.Request) {
+	user, ok := auth.UserFromContext(r.Context())
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	projectID, err := parseProjectID(r)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid project id")
+		return
+	}
+	_, abs, err := h.backupPaths(user.ID, projectID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "server error")
+		return
+	}
+	_ = os.Remove(abs)
+	if err := h.Store.DeleteBackupMeta(r.Context(), user.ID, projectID); err != nil {
+		writeError(w, http.StatusInternalServerError, "server error")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }
 
 func (h *Handler) backupPaths(userID, projectID uuid.UUID) (rel, abs string, err error) {

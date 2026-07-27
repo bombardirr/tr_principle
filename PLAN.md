@@ -19,7 +19,7 @@
 
 В MVP входят: **sentence-сегменты + CAT-like TM UX**, **DOCX round-trip**, **аккаунт**, **облачная TM / named bases**, **бэкап**, **глоссарий (named bases + job attach)**, **shared work / jobs**; атрибуция TU + контекст в пикере.
 
-Telegram-сброс пароля — **в границе MVP, но не блокер tag** (отложен до бота).
+Telegram-сброс пароля — **снят** (сеть с прода до Telegram API).
 
 Не в MVP (после): другие форматы (XLIFF…), MT, multi-TM *приоритеты* как продукт, SRX, админка ТМ, полный audit timeline, OT/CRDT realtime, Pro-биллинг/квоты, Issues tray, pop-out превью.
 
@@ -34,7 +34,7 @@ Telegram-сброс пароля — **в границе MVP, но не блок
 
 **Снято / не в scope tag:** HTTPS ✓; Word-checklist (smoke на проде); soft-warn ✓; cookie-баннер по нужде.
 
-**Явно после tag / не блокер было:** Telegram link/reset; Pro paywall; dual % / finalize PM; ops-алерты; полный TBX Core.
+**Явно после tag / не блокер было:** recovery-code / сброс пароля; Pro paywall; dual % / finalize PM; ops-алерты; полный TBX Core.
 
 **В `v1.0.0`:** auth, cloud TM + named bases + job share E/C, glossary C1+C2, jobs/hub/invites/progress, original DOCX share, soft-warn shared TM, ops Prometheus/Grafana, Yandex Metrica.
 
@@ -109,11 +109,11 @@ Telegram-сброс пароля — **в границе MVP, но не блок
 4. Ручной чеклист Word на реальных файлах ← отложено (smoke на проде)  
 5. Метрики продукта (Яндекс.Метрика + события) ← ✓  
 6. **Фаза C: глоссарий** — C1 ✓; C2 ✓ ([спека](docs/superpowers/specs/2026-07-22-glossary-named-bases-design.md))  
-7. **Фаза F: shared work / jobs** — ядро ✓; soft-warn J4 ✓; Telegram отложен  
+7. **Фаза F: shared work / jobs** — ядро ✓; soft-warn J4 ✓  
 8. Job original DOCX share ← ✓ ([спека](docs/superpowers/specs/2026-07-22-job-original-share-design.md))  
 9. Tag MVP ← **`v1.0.0`** (2026-07-24)
 
-Telegram password reset — **отложен** до бота (не блокер tag).
+Telegram password reset — **снят** (сеть с прода).
 
 #### 1) Баннер offline — ✓
 
@@ -379,20 +379,9 @@ C2: [`docs/superpowers/specs/2026-07-22-glossary-named-bases-design.md`](docs/su
 - [x] Backup `.tcat.zip` API (свой user_id)
 - [x] Tab-lease остаётся локально; cloud lock — cross-device
 
-#### 4) Сброс пароля через Telegram (без почты) — в конце MVP
+#### 4) Сброс пароля
 
-Отложено: до бота сброс пароля только админом. Поле `telegram_id` в схеме оставляем nullable.
-
-**Зачем `telegram_id`:** числовой ID чата. Бот пишет только в известные чаты; связываем аккаунт ↔ ID, шлём код сброса.
-
-Поток:
-1. В профиле: «Привязать Telegram» → `t.me/bot?start=link_<token>` → бот сохраняет `telegram_id`.
-2. «Забыл пароль» → API → код в Telegram.
-3. Код + новый пароль в SPA.
-
-- [ ] Link / unlink Telegram
-- [ ] password-reset request/confirm + webhook бота
-- [ ] Rate limit; `{ ok: true }` без enumeration
+Telegram-бот снят (api.telegram.org недоступен с прод-хоста в РФ). Сброс пароля — только админом, пока нет recovery-code / email. Колонка `users.telegram_id` в БД остаётся unused legacy.
 
 #### Эндпоинты v1 (сжато)
 
@@ -407,13 +396,10 @@ C2: [`docs/superpowers/specs/2026-07-22-glossary-named-bases-design.md`](docs/su
 | POST/DELETE | `/api/projects/{id}/lock` | lock |
 | PUT/GET | `/api/projects/{id}/backup` | бэкап |
 | GET | `/api/health` | health |
-| POST | `/api/auth/password-reset/request` | → Telegram (позже) |
-| POST | `/api/auth/password-reset/confirm` | новый пароль (позже) |
-| POST | `/api/telegram/webhook` | бот (позже) |
 
 #### Клиент
 
-- [x] Лендинг + auth UI (auth-first, без гостя); привязка Telegram — позже
+- [x] Лендинг + auth UI (auth-first, без гостя)
 - [x] TM sync после login + dirty push при записи в ТМ
 - [x] Баннер offline ← см. «Дозакрытие cloud MVP»; позже outbox
 - [x] Feature flags / plan entitlement (`subscriptions`, бейдж Pro) — см. спеку `2026-07-16-plan-entitlement-design.md`
@@ -442,8 +428,8 @@ C2: [`docs/superpowers/specs/2026-07-22-glossary-named-bases-design.md`](docs/su
 ## Безопасность (перед / после prod auth)
 
 - [x] JWT на защищённых маршрутах; TM/lock/backup только своего `user_id`
-- [x] Rate limit auth (login/register); reset/telegram — когда появятся
-- [x] `session_version` на login/logout + middleware; telegram tokens — позже
+- [x] Rate limit auth (login/register)
+- [x] `session_version` на login/logout + middleware
 - [x] Не логировать JWT / тела бэкапов; токен lock только в JSON body
 - [x] IndexedDB per-user prefix после login
 - [x] Лимиты тел (auth/TM/lock/backup), таймауты сервера, `JWT_SECRET` ≥ 32, CSP/headers
@@ -458,7 +444,8 @@ C2: [`docs/superpowers/specs/2026-07-22-glossary-named-bases-design.md`](docs/su
 3. **Облачная TM** + named bases + job share ✓
 4. Project lock + backup ✓
 5. Prod + security pass ✓
-6. Telegram: link + password reset — отложено (не tag)
+6. Telegram link/reset — **снят** (миграция `022_drop_telegram_auth`)
+6b. Pro keys + cloud quota — ✓ (миграция `023_license_keys`, админ UI ключей)
 7. B2 p2: audit + concordance ✓
 8. Landing стилей + тулбар минимум ✓
 9. **Дозакрытие cloud** (offline / plan / TM toolbar) ✓  
@@ -478,5 +465,5 @@ C2: [`docs/superpowers/specs/2026-07-22-glossary-named-bases-design.md`](docs/su
   ├─ Tab lease + cloud lock / backup
   └─ HTTPS → API (JWT + session_version)
          ├─ Postgres (users, tm_units, locks, backups)
-         └─ Telegram Bot — позже (link + password reset)
+         └─ (сброс пароля: позже recovery-code / email)
 ```

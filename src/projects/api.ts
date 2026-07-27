@@ -73,3 +73,9 @@ export async function hasProjectBackup(projectId: string): Promise<boolean> {
   })
   return res.ok
 }
+
+export async function deleteProjectBackup(projectId: string) {
+  return apiFetch<{ ok: boolean }>(`/api/projects/${projectId}/backup`, {
+    method: 'DELETE',
+  })
+}

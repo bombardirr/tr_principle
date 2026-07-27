@@ -14,6 +14,7 @@ import (
 	"time"
 	"unicode"
 
+	"github.com/bombardirr/tr_principle/api/internal/auth"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 )
@@ -113,6 +114,23 @@ func (h *Handler) PutOriginal(w http.ResponseWriter, r *http.Request) {
 	if len(data) == 0 {
 		writeError(w, http.StatusBadRequest, "empty body")
 		return
+	}
+	var oldSize int64
+	if meta, err := h.Store.GetOriginalMeta(r.Context(), jobID); err == nil {
+		oldSize = meta.SizeBytes
+	} else if !errors.Is(err, pgx.ErrNoRows) {
+		writeError(w, http.StatusInternalServerError, "server error")
+		return
+	}
+	delta := int64(len(data)) - oldSize
+	if h.Auth != nil {
+		if err := h.Auth.AllowCloudWrite(r.Context(), user.ID, delta); errors.Is(err, auth.ErrQuotaExceeded) {
+			writeError(w, http.StatusInsufficientStorage, "storage quota exceeded")
+			return
+		} else if err != nil {
+			writeError(w, http.StatusInternalServerError, "server error")
+			return
+		}
 	}
 	job, err := h.Store.GetJob(r.Context(), jobID, user.ID)
 	if errors.Is(err, ErrJobNotFound) {

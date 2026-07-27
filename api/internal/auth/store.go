@@ -19,7 +19,6 @@ type User struct {
 	PasswordHash   string
 	SessionVersion int
 	IsAdmin        bool
-	TelegramID     *int64
 	Subscription   Subscription
 }
 
@@ -40,6 +39,7 @@ func scanUserRow(row pgx.Row) (scannedUser, error) {
 	var u User
 	var displayName *string
 	var plan, status *string
+	var periodEnd *time.Time
 	err := row.Scan(
 		&u.ID,
 		&u.Email,
@@ -47,9 +47,9 @@ func scanUserRow(row pgx.Row) (scannedUser, error) {
 		&u.PasswordHash,
 		&u.SessionVersion,
 		&u.IsAdmin,
-		&u.TelegramID,
 		&plan,
 		&status,
+		&periodEnd,
 	)
 	if err != nil {
 		return scannedUser{}, err
@@ -59,7 +59,11 @@ func scanUserRow(row pgx.Row) (scannedUser, error) {
 	}
 	out := scannedUser{User: u}
 	if plan != nil && status != nil {
-		out.Subscription = Subscription{Plan: *plan, Status: *status}
+		out.Subscription = Subscription{
+			Plan:             *plan,
+			Status:           *status,
+			CurrentPeriodEnd: periodEnd,
+		}
 	} else {
 		out.Subscription = DefaultFreeSubscription()
 		out.missingSub = true
@@ -69,7 +73,7 @@ func scanUserRow(row pgx.Row) (scannedUser, error) {
 
 const userSelect = `
 	SELECT u.id, u.email, u.display_name, u.password_hash, u.session_version, u.is_admin,
-	       u.telegram_id, s.plan, s.status
+	       s.plan, s.status, s.current_period_end
 	FROM users u
 	LEFT JOIN subscriptions s ON s.user_id = u.id
 `
@@ -167,19 +171,18 @@ func (s *Store) BumpSession(ctx context.Context, id uuid.UUID) (int, error) {
 }
 
 func (s *Store) ensureSubscription(ctx context.Context, sc scannedUser) (User, error) {
-	if !sc.missingSub {
-		return sc.User, nil
+	if sc.missingSub {
+		_, err := s.pool.Exec(ctx, `
+			INSERT INTO subscriptions (user_id, plan, status)
+			VALUES ($1, $2, $3)
+			ON CONFLICT (user_id) DO NOTHING
+		`, sc.ID, PlanFree, StatusActive)
+		if err != nil {
+			return sc.User, err
+		}
+		sc.Subscription = DefaultFreeSubscription()
 	}
-	_, err := s.pool.Exec(ctx, `
-		INSERT INTO subscriptions (user_id, plan, status)
-		VALUES ($1, $2, $3)
-		ON CONFLICT (user_id) DO NOTHING
-	`, sc.ID, PlanFree, StatusActive)
-	if err != nil {
-		return sc.User, err
-	}
-	sc.Subscription = DefaultFreeSubscription()
-	return sc.User, nil
+	return s.expireSubscriptionIfNeeded(ctx, sc.User)
 }
 
 type RateLimiter struct {
