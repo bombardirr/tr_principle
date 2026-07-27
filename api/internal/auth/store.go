@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/bombardirr/tr_principle/api/internal/emailvalidate"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -13,13 +14,14 @@ import (
 )
 
 type User struct {
-	ID             uuid.UUID
-	Email          string
-	DisplayName    string
-	PasswordHash   string
-	SessionVersion int
-	IsAdmin        bool
-	Subscription   Subscription
+	ID               uuid.UUID
+	Email            string
+	DisplayName      string
+	PasswordHash     string
+	SessionVersion   int
+	IsAdmin          bool
+	HasRecoveryCode  bool
+	Subscription     Subscription
 }
 
 type Store struct {
@@ -40,6 +42,7 @@ func scanUserRow(row pgx.Row) (scannedUser, error) {
 	var displayName *string
 	var plan, status *string
 	var periodEnd *time.Time
+	var recoveryHash *string
 	err := row.Scan(
 		&u.ID,
 		&u.Email,
@@ -47,6 +50,7 @@ func scanUserRow(row pgx.Row) (scannedUser, error) {
 		&u.PasswordHash,
 		&u.SessionVersion,
 		&u.IsAdmin,
+		&recoveryHash,
 		&plan,
 		&status,
 		&periodEnd,
@@ -57,6 +61,7 @@ func scanUserRow(row pgx.Row) (scannedUser, error) {
 	if displayName != nil {
 		u.DisplayName = *displayName
 	}
+	u.HasRecoveryCode = recoveryHash != nil && *recoveryHash != ""
 	out := scannedUser{User: u}
 	if plan != nil && status != nil {
 		out.Subscription = Subscription{
@@ -73,12 +78,12 @@ func scanUserRow(row pgx.Row) (scannedUser, error) {
 
 const userSelect = `
 	SELECT u.id, u.email, u.display_name, u.password_hash, u.session_version, u.is_admin,
-	       s.plan, s.status, s.current_period_end
+	       u.recovery_code_hash, s.plan, s.status, s.current_period_end
 	FROM users u
 	LEFT JOIN subscriptions s ON s.user_id = u.id
 `
 
-func (s *Store) CreateUser(ctx context.Context, email, passwordHash string) (User, error) {
+func (s *Store) CreateUser(ctx context.Context, email, passwordHash, recoveryCodeHash string) (User, error) {
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return User{}, err
@@ -88,10 +93,10 @@ func (s *Store) CreateUser(ctx context.Context, email, passwordHash string) (Use
 	var u User
 	var displayName *string
 	err = tx.QueryRow(ctx, `
-		INSERT INTO users (email, password_hash)
-		VALUES ($1, $2)
+		INSERT INTO users (email, password_hash, recovery_code_hash)
+		VALUES ($1, $2, $3)
 		RETURNING id, email, display_name, password_hash, session_version, is_admin
-	`, email, passwordHash).Scan(
+	`, email, passwordHash, recoveryCodeHash).Scan(
 		&u.ID, &u.Email, &displayName, &u.PasswordHash, &u.SessionVersion, &u.IsAdmin,
 	)
 	if err != nil {
@@ -104,6 +109,7 @@ func (s *Store) CreateUser(ctx context.Context, email, passwordHash string) (Use
 	if displayName != nil {
 		u.DisplayName = *displayName
 	}
+	u.HasRecoveryCode = recoveryCodeHash != ""
 
 	_, err = tx.Exec(ctx, `
 		INSERT INTO subscriptions (user_id, plan, status)
@@ -183,6 +189,122 @@ func (s *Store) ensureSubscription(ctx context.Context, sc scannedUser) (User, e
 		sc.Subscription = DefaultFreeSubscription()
 	}
 	return s.expireSubscriptionIfNeeded(ctx, sc.User)
+}
+
+func (s *Store) SetRecoveryCodeHash(ctx context.Context, userID uuid.UUID, hash string) error {
+	_, err := s.pool.Exec(ctx, `
+		UPDATE users SET recovery_code_hash = $2 WHERE id = $1
+	`, userID, hash)
+	return err
+}
+
+func (s *Store) ResetPasswordWithRecovery(ctx context.Context, email, recoveryCode, newPasswordHash string) error {
+	normEmail, err := emailvalidate.NormalizeAndValidate(email)
+	if err != nil {
+		return ErrInvalidCredentials
+	}
+	if err := ValidateRecoveryCodeFormat(recoveryCode); err != nil {
+		return ErrInvalidCredentials
+	}
+	codeHash := HashRecoveryCode(recoveryCode)
+
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+
+	var userID uuid.UUID
+	var storedHash *string
+	err = tx.QueryRow(ctx, `
+		SELECT id, recovery_code_hash FROM users WHERE lower(email) = lower($1) FOR UPDATE
+	`, normEmail).Scan(&userID, &storedHash)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ErrInvalidCredentials
+	}
+	if err != nil {
+		return err
+	}
+	if storedHash == nil || *storedHash == "" || *storedHash != codeHash {
+		return ErrInvalidCredentials
+	}
+	_, err = tx.Exec(ctx, `
+		UPDATE users
+		SET password_hash = $2, session_version = session_version + 1
+		WHERE id = $1
+	`, userID, newPasswordHash)
+	if err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
+}
+
+// SyncStorageGrace sets/clears the 90-day over-quota clock for free users.
+func (s *Store) SyncStorageGrace(ctx context.Context, userID uuid.UUID) error {
+	u, err := s.FindByID(ctx, userID)
+	if err != nil {
+		return err
+	}
+	used, err := s.CloudStorageUsed(ctx, userID)
+	if err != nil {
+		return err
+	}
+	over := !EffectivePro(u.Subscription) && used > FreeStorageBytes
+	if over {
+		_, err = s.pool.Exec(ctx, `
+			UPDATE subscriptions
+			SET storage_grace_started_at = COALESCE(storage_grace_started_at, now()), updated_at = now()
+			WHERE user_id = $1
+		`, userID)
+		return err
+	}
+	_, err = s.pool.Exec(ctx, `
+		UPDATE subscriptions
+		SET storage_grace_started_at = NULL, updated_at = now()
+		WHERE user_id = $1 AND storage_grace_started_at IS NOT NULL
+	`, userID)
+	return err
+}
+
+const StorageGraceDays = 90
+
+type graceCandidate struct {
+	UserID uuid.UUID
+}
+
+func (s *Store) ListUsersPastStorageGrace(ctx context.Context) ([]uuid.UUID, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT user_id FROM subscriptions
+		WHERE storage_grace_started_at IS NOT NULL
+		  AND storage_grace_started_at <= now() - interval '90 days'
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		out = append(out, id)
+	}
+	return out, rows.Err()
+}
+
+// CancelProForUser forces free after admin key revoke.
+func (s *Store) CancelProForUser(ctx context.Context, userID uuid.UUID) error {
+	_, err := s.pool.Exec(ctx, `
+		UPDATE subscriptions
+		SET plan = $2, status = $3, current_period_end = now(), updated_at = now()
+		WHERE user_id = $1
+	`, userID, PlanFree, StatusCanceled)
+	return err
+}
+
+func (s *Store) Pool() *pgxpool.Pool {
+	return s.pool
 }
 
 type RateLimiter struct {

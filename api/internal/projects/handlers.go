@@ -182,6 +182,9 @@ func (h *Handler) PutBackup(w http.ResponseWriter, r *http.Request) {
 		"updatedAt": now.Format(time.RFC3339Nano),
 		"sizeBytes": len(data),
 	})
+	if h.Auth != nil {
+		_ = h.Auth.SyncStorageGrace(r.Context(), user.ID)
+	}
 }
 
 func (h *Handler) GetBackup(w http.ResponseWriter, r *http.Request) {

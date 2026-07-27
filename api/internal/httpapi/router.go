@@ -40,6 +40,7 @@ func NewRouter(
 	r.Route("/api/auth", func(r chi.Router) {
 		r.Post("/register", authHandler.Register)
 		r.Post("/login", authHandler.Login)
+		r.Post("/password-reset", authHandler.PasswordReset)
 		r.Group(func(r chi.Router) {
 			r.Use(authHandler.Middleware)
 			r.Get("/me", authHandler.Me)
@@ -47,6 +48,7 @@ func NewRouter(
 			r.Post("/logout", authHandler.Logout)
 			r.Post("/license/redeem", authHandler.RedeemLicense)
 			r.Get("/storage", authHandler.Storage)
+			r.Post("/recovery-code", authHandler.RotateRecoveryCode)
 			r.Get("/license/keys", authHandler.AdminListLicenses)
 			r.Post("/license/keys", authHandler.AdminCreateLicense)
 			r.Post("/license/keys/revoke", authHandler.AdminRevokeLicense)

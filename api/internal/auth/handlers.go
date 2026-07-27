@@ -26,6 +26,7 @@ type PublicUser struct {
 	CurrentPeriodEnd  *string `json:"current_period_end,omitempty"`
 	StorageUsedBytes  int64   `json:"storage_used_bytes"`
 	StorageLimitBytes int64   `json:"storage_limit_bytes"`
+	HasRecoveryCode   bool    `json:"has_recovery_code"`
 }
 
 type Handler struct {
@@ -40,8 +41,9 @@ type credsBody struct {
 }
 
 type tokenResponse struct {
-	Token string     `json:"token"`
-	User  PublicUser `json:"user"`
+	Token        string     `json:"token"`
+	User         PublicUser `json:"user"`
+	RecoveryCode string     `json:"recovery_code,omitempty"`
 }
 
 func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
@@ -64,7 +66,12 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "server error")
 		return
 	}
-	user, err := h.Store.CreateUser(r.Context(), email, hash)
+	recoveryPlain, err := GenerateRecoveryCode()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "server error")
+		return
+	}
+	user, err := h.Store.CreateUser(r.Context(), email, hash, HashRecoveryCode(recoveryPlain))
 	if errors.Is(err, ErrEmailTaken) {
 		writeError(w, http.StatusConflict, "email taken")
 		return
@@ -73,7 +80,7 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "server error")
 		return
 	}
-	h.writeToken(w, user)
+	h.writeToken(w, user, recoveryPlain)
 }
 
 func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
@@ -102,7 +109,57 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	user.SessionVersion = sv
-	h.writeToken(w, user)
+	h.writeToken(w, user, "")
+}
+
+func (h *Handler) PasswordReset(w http.ResponseWriter, r *http.Request) {
+	if !h.rateOK(w, r) {
+		return
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, 16<<10)
+	var body struct {
+		Email        string `json:"email"`
+		RecoveryCode string `json:"recovery_code"`
+		Password     string `json:"password"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid json")
+		return
+	}
+	email, err := ValidateCredentials(body.Email, body.Password)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	hash, err := HashPassword(body.Password)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "server error")
+		return
+	}
+	err = h.Store.ResetPasswordWithRecovery(r.Context(), email, body.RecoveryCode, hash)
+	if err != nil {
+		writeError(w, http.StatusUnauthorized, "invalid credentials")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+}
+
+func (h *Handler) RotateRecoveryCode(w http.ResponseWriter, r *http.Request) {
+	user, ok := UserFromContext(r.Context())
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	plain, err := GenerateRecoveryCode()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "server error")
+		return
+	}
+	if err := h.Store.SetRecoveryCodeHash(r.Context(), user.ID, HashRecoveryCode(plain)); err != nil {
+		writeError(w, http.StatusInternalServerError, "server error")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"recovery_code": plain})
 }
 
 func (h *Handler) Me(w http.ResponseWriter, r *http.Request) {
@@ -112,6 +169,12 @@ func (h *Handler) Me(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	fresh, err := h.Store.FindByID(r.Context(), user.ID)
+	if err != nil {
+		writeError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	_ = h.Store.SyncStorageGrace(r.Context(), fresh.ID)
+	fresh, err = h.Store.FindByID(r.Context(), fresh.ID)
 	if err != nil {
 		writeError(w, http.StatusUnauthorized, "unauthorized")
 		return
@@ -305,7 +368,7 @@ func (h *Handler) AdminRevokeLicense(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid json")
 		return
 	}
-	if err := h.Store.RevokeLicenseKey(r.Context(), strings.TrimSpace(body.KeyHash)); err != nil {
+	if err := h.Store.RevokeLicenseKey(r.Context(), strings.TrimSpace(body.KeyHash), true); err != nil {
 		if errors.Is(err, ErrLicenseInvalid) {
 			writeError(w, http.StatusConflict, "cannot revoke")
 			return
@@ -437,13 +500,17 @@ func UserFromContext(ctx context.Context) (User, bool) {
 	return u, ok
 }
 
-func (h *Handler) writeToken(w http.ResponseWriter, user User) {
+func (h *Handler) writeToken(w http.ResponseWriter, user User, recoveryCode string) {
 	token, err := h.Tokens.Issue(user.ID, user.Email, user.SessionVersion)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "server error")
 		return
 	}
-	writeJSON(w, http.StatusOK, tokenResponse{Token: token, User: h.publicUser(context.Background(), user)})
+	writeJSON(w, http.StatusOK, tokenResponse{
+		Token:        token,
+		User:         h.publicUser(context.Background(), user),
+		RecoveryCode: recoveryCode,
+	})
 }
 
 func (h *Handler) publicUser(ctx context.Context, u User) PublicUser {
@@ -500,6 +567,7 @@ func toPublic(u User, storageUsed int64) PublicUser {
 		CurrentPeriodEnd:  periodEnd,
 		StorageUsedBytes:  storageUsed,
 		StorageLimitBytes: StorageLimitBytes(u.Subscription),
+		HasRecoveryCode:   u.HasRecoveryCode,
 	}
 }
 

@@ -52,8 +52,9 @@ func main() {
 	tmHandler := &tm.Handler{Store: tmStore}
 	glossaryStore := glossary.NewStore(pool)
 	glossaryHandler := &glossary.Handler{Store: glossaryStore}
+	projectsStore := projects.NewStore(pool)
 	projectsHandler := &projects.Handler{
-		Store:     projects.NewStore(pool),
+		Store:     projectsStore,
 		BackupDir: cfg.BackupDir,
 		Auth:      store,
 	}
@@ -62,6 +63,12 @@ func main() {
 	}
 	api := httpapi.NewRouter(handler, tmHandler, glossaryHandler, projectsHandler, jobsHandler, cfg.AllowedOrigin, cfg.MetricsToken)
 	handlerRoot := httpapi.MountSPA(api, cfg.PublicDir)
+
+	purgeCtx, purgeCancel := context.WithCancel(context.Background())
+	defer purgeCancel()
+	projects.StartQuotaPurgeLoop(purgeCtx, &projects.QuotaPurger{
+		Auth: store, Store: projectsStore, BackupDir: cfg.BackupDir,
+	}, time.Hour)
 
 	srv := &http.Server{
 		Addr:              cfg.HTTPAddr,

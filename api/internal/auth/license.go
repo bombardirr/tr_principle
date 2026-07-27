@@ -338,19 +338,49 @@ func (s *Store) ListLicenseKeys(ctx context.Context, limit int) ([]LicenseKeyInf
 	return out, rows.Err()
 }
 
-// RevokeLicenseKey marks an unused key as revoked (no-op useful error if already redeemed).
-func (s *Store) RevokeLicenseKey(ctx context.Context, keyHash string) error {
-	tag, err := s.pool.Exec(ctx, `
-		UPDATE license_keys SET status = 'revoked'
-		WHERE key_hash = $1 AND status = 'unused'
+// RevokeLicenseKey revokes an unused or redeemed key.
+// For redeemed keys, stripPro cancels Pro on the redeeming account.
+func (s *Store) RevokeLicenseKey(ctx context.Context, keyHash string, stripPro bool) error {
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+
+	var status string
+	var redeemedBy *uuid.UUID
+	err = tx.QueryRow(ctx, `
+		SELECT status, redeemed_by FROM license_keys WHERE key_hash = $1 FOR UPDATE
+	`, keyHash).Scan(&status, &redeemedBy)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ErrLicenseInvalid
+	}
+	if err != nil {
+		return err
+	}
+	if status == "revoked" {
+		return nil
+	}
+	if status != "unused" && status != "redeemed" {
+		return ErrLicenseInvalid
+	}
+	_, err = tx.Exec(ctx, `
+		UPDATE license_keys SET status = 'revoked' WHERE key_hash = $1
 	`, keyHash)
 	if err != nil {
 		return err
 	}
-	if tag.RowsAffected() == 0 {
-		return ErrLicenseInvalid
+	if stripPro && status == "redeemed" && redeemedBy != nil {
+		_, err = tx.Exec(ctx, `
+			UPDATE subscriptions
+			SET plan = $2, status = $3, current_period_end = now(), updated_at = now()
+			WHERE user_id = $1
+		`, *redeemedBy, PlanFree, StatusCanceled)
+		if err != nil {
+			return err
+		}
 	}
-	return nil
+	return tx.Commit(ctx)
 }
 
 // UpdateLicenseNote sets the admin note on a key.

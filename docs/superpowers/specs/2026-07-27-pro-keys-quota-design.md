@@ -74,11 +74,21 @@ WHERE user_id = '<uuid>';
 | PATCH | `/api/auth/license/keys/note` | admin | `{ key_hash, note }` |
 | GET | `/api/auth/me` | user | + `current_period_end`, storage fields |
 
-## Migrations
-- `022_drop_telegram_auth.sql` — drop Telegram tables
-- `023_license_keys.sql` — license inventory
+## Recovery code
 
-Applied automatically on API boot (`db.Migrate`).
+- Issued once at registration (`recovery_code` in register JSON); hash in `users.recovery_code_hash`.
+- Reset: `POST /api/auth/password-reset` `{ email, recovery_code, password }`.
+- Rotate when logged in: `POST /api/auth/recovery-code`.
+- Lost code → no reset (create new account). Intentional for MVP.
 
-## Non-goals (v1)
-- Digiseller, SMTP, auto-purge cron, CAT feature paywall, TM/glossary in quota.
+## Storage grace purge
+
+- Free over 50 MiB starts `subscriptions.storage_grace_started_at`.
+- After **90 days** still over free quota without Pro: hourly job deletes oldest project backups until ≤ 50 MiB.
+- Job originals are not auto-deleted (owner must remove job/original).
+
+## Admin key revoke
+
+- Unused or redeemed keys can be revoked from admin UI.
+- Redeemed → key `revoked` + redeeming user Pro canceled immediately.
+

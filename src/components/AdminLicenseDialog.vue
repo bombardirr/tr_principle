@@ -67,8 +67,15 @@ async function onCopy() {
 }
 
 async function onRevoke(row: LicenseKeyRow) {
-  if (row.status !== 'unused') return
-  if (!window.confirm(t('auth.licenseAdminRevokeConfirm', { hint: row.key_hint }))) return
+  if (row.status === 'revoked') return
+  const msg =
+    row.status === 'redeemed'
+      ? t('auth.licenseAdminRevokeRedeemedConfirm', {
+          hint: row.key_hint,
+          email: row.redeemed_email || '—',
+        })
+      : t('auth.licenseAdminRevokeConfirm', { hint: row.key_hint })
+  if (!window.confirm(msg)) return
   busy.value = true
   error.value = ''
   try {
@@ -202,7 +209,7 @@ onMounted(() => {
               </td>
               <td>
                 <button
-                  v-if="row.status === 'unused'"
+                  v-if="row.status === 'unused' || row.status === 'redeemed'"
                   type="button"
                   class="ghost danger"
                   :disabled="busy"

@@ -12,6 +12,7 @@ function user(partial: Partial<AuthUser> = {}): AuthUser {
     plan_status: 'active',
     storage_used_bytes: 0,
     storage_limit_bytes: 50 * 1024 * 1024,
+    has_recovery_code: true,
     ...partial,
   }
 }

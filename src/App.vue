@@ -30,7 +30,7 @@ import GlossaryCollectionDialog from '@/components/GlossaryCollectionDialog.vue'
 const { t, locale } = useI18n()
 const route = useRoute()
 const router = useRouter()
-const { user, isAuthenticated, isPro, logout, ready, updateDisplayName, redeemLicense, refreshMe } =
+const { user, isAuthenticated, isPro, logout, ready, updateDisplayName, redeemLicense, refreshMe, rotateRecoveryCode } =
   useAuth()
 const theme = ref<Theme>('dark')
 const isEditorRoute = computed(() => route.name === 'editor')
@@ -59,6 +59,10 @@ const licenseKey = ref('')
 const licenseBusy = ref(false)
 const licenseError = ref('')
 const licenseOk = ref(false)
+const recoveryBusy = ref(false)
+const recoveryError = ref('')
+const recoveryShown = ref('')
+const recoveryCopied = ref(false)
 const storageBackups = ref<StorageBackupItem[]>([])
 const storageBusy = ref(false)
 const tmCollectionOpen = ref(false)
@@ -121,6 +125,9 @@ function openSettings() {
   licenseKey.value = ''
   licenseError.value = ''
   licenseOk.value = false
+  recoveryShown.value = ''
+  recoveryError.value = ''
+  recoveryCopied.value = false
   capturingShortcut.value = null
   reloadShortcuts()
   settingsOpen.value = true
@@ -149,6 +156,31 @@ function backupLabel(b: StorageBackupItem) {
   const name = b.project_name?.trim()
   if (name) return name
   return t('auth.storageUnnamed', { id: b.project_id.slice(0, 8) })
+}
+
+async function onRotateRecovery() {
+  if (!window.confirm(t('auth.recoveryHint'))) return
+  recoveryBusy.value = true
+  recoveryError.value = ''
+  recoveryCopied.value = false
+  try {
+    recoveryShown.value = await rotateRecoveryCode()
+  } catch (e) {
+    recoveryError.value =
+      e instanceof ApiError ? e.message : e instanceof Error ? e.message : String(e)
+  } finally {
+    recoveryBusy.value = false
+  }
+}
+
+async function onCopyRecovery() {
+  if (!recoveryShown.value) return
+  try {
+    await navigator.clipboard.writeText(recoveryShown.value)
+    recoveryCopied.value = true
+  } catch {
+    recoveryError.value = t('landing.recoveryCopyFail')
+  }
 }
 
 async function onRedeemLicense() {
@@ -404,6 +436,31 @@ async function onLogout() {
                     </li>
                   </ul>
                   <p v-else-if="!storageBusy" class="settings-hint">{{ t('auth.storageEmpty') }}</p>
+                </div>
+                <div class="settings-block">
+                  <span class="settings-label">{{ t('auth.recoveryLabel') }}</span>
+                  <p class="settings-hint">{{ t('auth.recoveryHint') }}</p>
+                  <p class="settings-hint">
+                    {{ user?.has_recovery_code ? t('auth.recoveryHas') : t('auth.recoveryMissing') }}
+                  </p>
+                  <p v-if="recoveryShown" class="settings-ok">
+                    {{ t('auth.recoveryOnce') }}
+                    <code class="recovery-inline">{{ recoveryShown }}</code>
+                  </p>
+                  <p v-if="recoveryError" class="settings-error">{{ recoveryError }}</p>
+                  <div class="settings-actions">
+                    <button type="button" class="ghost" :disabled="recoveryBusy" @click="onRotateRecovery">
+                      {{ t('auth.recoveryRotate') }}
+                    </button>
+                    <button
+                      v-if="recoveryShown"
+                      type="button"
+                      class="ghost"
+                      @click="onCopyRecovery"
+                    >
+                      {{ recoveryCopied ? t('auth.recoveryCopied') : t('auth.recoveryCopy') }}
+                    </button>
+                  </div>
                 </div>
                 <div class="settings-block">
                   <span class="settings-label">{{ t('auth.licenseLabel') }}</span>
@@ -723,6 +780,14 @@ async function onLogout() {
 .storage-list-id {
   font-family: ui-monospace, monospace;
   color: var(--muted);
+}
+
+.recovery-inline {
+  display: block;
+  margin-top: 0.35rem;
+  font-size: 0.9rem;
+  letter-spacing: 0.03em;
+  word-break: break-all;
 }
 
 .link-btn {

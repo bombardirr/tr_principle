@@ -13,6 +13,7 @@ export type AuthUser = {
   current_period_end?: string | null
   storage_used_bytes: number
   storage_limit_bytes: number
+  has_recovery_code?: boolean
 }
 
 export function apiBase(): string {
@@ -83,7 +84,7 @@ export async function apiBlob(path: string, options: RequestInit = {}): Promise<
 }
 
 export async function register(email: string, password: string) {
-  return apiFetch<{ token: string; user: AuthUser }>('/api/auth/register', {
+  return apiFetch<{ token: string; user: AuthUser; recovery_code?: string }>('/api/auth/register', {
     method: 'POST',
     body: JSON.stringify({ email, password }),
     token: null,
@@ -95,6 +96,20 @@ export async function login(email: string, password: string) {
     method: 'POST',
     body: JSON.stringify({ email, password }),
     token: null,
+  })
+}
+
+export async function passwordReset(email: string, recoveryCode: string, password: string) {
+  return apiFetch<{ ok: boolean }>('/api/auth/password-reset', {
+    method: 'POST',
+    body: JSON.stringify({ email, recovery_code: recoveryCode, password }),
+    token: null,
+  })
+}
+
+export async function rotateRecoveryCode() {
+  return apiFetch<{ recovery_code: string }>('/api/auth/recovery-code', {
+    method: 'POST',
   })
 }
 

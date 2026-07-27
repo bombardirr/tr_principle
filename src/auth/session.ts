@@ -8,6 +8,7 @@ import {
   patchMe,
   redeemLicense as apiRedeemLicense,
   register as apiRegister,
+  rotateRecoveryCode as apiRotateRecoveryCode,
   setStoredToken,
   type AuthUser,
 } from '@/auth/api'
@@ -63,7 +64,7 @@ export async function bootstrapAuth() {
 export async function register(email: string, password: string) {
   const res = await apiRegister(email, password)
   await applySession(res.token, res.user)
-  return res.user
+  return { user: res.user, recoveryCode: res.recovery_code ?? '' }
 }
 
 export async function login(email: string, password: string) {
@@ -101,6 +102,12 @@ export async function redeemLicense(key: string) {
   return next
 }
 
+export async function rotateRecoveryCode() {
+  const res = await apiRotateRecoveryCode()
+  await refreshMe()
+  return res.recovery_code
+}
+
 /** UI label: nickname, else email (header / own account only — never write to projects/TM). */
 export function displayLabel(u: AuthUser | null | undefined): string {
   if (!u) return ''
@@ -130,6 +137,7 @@ export function useAuth() {
     updateDisplayName,
     refreshMe,
     redeemLicense,
+    rotateRecoveryCode,
     displayLabel,
     publicActorLabel,
     needsDisplayName,

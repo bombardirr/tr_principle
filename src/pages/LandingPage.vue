@@ -2,7 +2,7 @@
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
-import { ApiError } from '@/auth/api'
+import { ApiError, passwordReset } from '@/auth/api'
 import { useAuth } from '@/auth/session'
 import { metrikaGoal } from '@/analytics/metrika'
 
@@ -10,11 +10,14 @@ const { t } = useI18n()
 const router = useRouter()
 const { register, login, isAuthenticated } = useAuth()
 
-const mode = ref<'home' | 'login' | 'register'>('home')
+const mode = ref<'home' | 'login' | 'register' | 'forgot' | 'recovery'>('home')
 const email = ref('')
 const password = ref('')
+const recoveryCode = ref('')
+const shownRecovery = ref('')
 const busy = ref(false)
 const error = ref('')
+const info = ref('')
 const showPassword = ref(false)
 
 const landingRoot = ref<HTMLElement | null>(null)
@@ -35,6 +38,8 @@ const panels = [
 const title = computed(() => {
   if (mode.value === 'login') return t('landing.loginTitle')
   if (mode.value === 'register') return t('landing.registerTitle')
+  if (mode.value === 'forgot') return t('landing.forgotTitle')
+  if (mode.value === 'recovery') return t('landing.recoveryTitle')
   return t('landing.headline')
 })
 
@@ -98,19 +103,32 @@ onUnmounted(() => {
 function openLogin() {
   mode.value = 'login'
   error.value = ''
+  info.value = ''
   showPassword.value = false
 }
 
 function openRegister() {
   mode.value = 'register'
   error.value = ''
+  info.value = ''
+  showPassword.value = false
+}
+
+function openForgot() {
+  mode.value = 'forgot'
+  error.value = ''
+  info.value = ''
+  password.value = ''
+  recoveryCode.value = ''
   showPassword.value = false
 }
 
 function backHome() {
   mode.value = 'home'
   error.value = ''
+  info.value = ''
   showPassword.value = false
+  shownRecovery.value = ''
 }
 
 function goPanel(i: number) {
@@ -147,16 +165,54 @@ function validateCreds(): boolean {
 
 async function submit() {
   error.value = ''
+  info.value = ''
+  if (mode.value === 'forgot') {
+    if (!looksLikeEmail(email.value)) {
+      error.value = t('landing.errorEmail')
+      return
+    }
+    if (password.value.length < 8) {
+      error.value = t('landing.errorPasswordShort')
+      return
+    }
+    if (!recoveryCode.value.trim()) {
+      error.value = t('landing.errorRecoveryCode')
+      return
+    }
+    busy.value = true
+    try {
+      await passwordReset(email.value.trim(), recoveryCode.value.trim(), password.value)
+      info.value = t('landing.resetDone')
+      mode.value = 'login'
+      password.value = ''
+      recoveryCode.value = ''
+    } catch (e) {
+      const raw = e instanceof ApiError ? e.message : e instanceof Error ? e.message : String(e)
+      if (raw.includes('invalid credentials') || raw.includes('invalid recovery'))
+        error.value = t('landing.errorRecoveryCode')
+      else if (raw.includes('password must')) error.value = t('landing.errorPasswordShort')
+      else error.value = raw
+    } finally {
+      busy.value = false
+    }
+    return
+  }
+  if (mode.value === 'recovery') {
+    await router.push({ name: 'projects' })
+    return
+  }
   if (!validateCreds()) return
   busy.value = true
   try {
     if (mode.value === 'register') {
-      await register(email.value.trim(), password.value)
+      const res = await register(email.value.trim(), password.value)
       metrikaGoal('register')
-    } else {
-      await login(email.value.trim(), password.value)
-      metrikaGoal('login')
+      shownRecovery.value = res.recoveryCode
+      mode.value = 'recovery'
+      return
     }
+    await login(email.value.trim(), password.value)
+    metrikaGoal('login')
     await router.push({ name: 'projects' })
   } catch (e) {
     const raw =
@@ -169,6 +225,16 @@ async function submit() {
     else error.value = raw
   } finally {
     busy.value = false
+  }
+}
+
+async function copyRecovery() {
+  if (!shownRecovery.value) return
+  try {
+    await navigator.clipboard.writeText(shownRecovery.value)
+    info.value = t('landing.recoveryCopied')
+  } catch {
+    error.value = t('landing.recoveryCopyFail')
   }
 }
 </script>
@@ -204,81 +270,129 @@ async function submit() {
         >
           <div class="error-slot" aria-live="polite">
             <p v-if="error" class="error" role="alert" :title="error">{{ error }}</p>
+            <p v-else-if="info" class="info" role="status">{{ info }}</p>
           </div>
-          <label>
-            <span>{{ t('landing.emailField') }}</span>
-            <input
-              v-model="email"
-              name="email"
-              type="email"
-              inputmode="email"
-              autocomplete="email"
-              autocapitalize="off"
-              spellcheck="false"
-              maxlength="254"
-              @input="error = ''"
-            />
-          </label>
-          <label>
-            <span>{{ t('landing.passwordField') }}</span>
-            <div class="password-row">
+
+          <template v-if="mode === 'recovery'">
+            <p class="support">{{ t('landing.recoveryHint') }}</p>
+            <p class="recovery-code"><code>{{ shownRecovery }}</code></p>
+            <p class="support warn">{{ t('landing.recoveryLose') }}</p>
+            <div class="cta">
+              <button type="button" class="ghost" @click="copyRecovery">
+                {{ t('landing.recoveryCopy') }}
+              </button>
+              <button type="submit" class="primary">{{ t('landing.recoveryContinue') }}</button>
+            </div>
+          </template>
+
+          <template v-else>
+            <label>
+              <span>{{ t('landing.emailField') }}</span>
               <input
-                v-model="password"
-                :type="showPassword ? 'text' : 'password'"
-                name="appzac-password"
-                :autocomplete="mode === 'register' ? 'new-password' : 'current-password'"
-                maxlength="128"
+                v-model="email"
+                name="email"
+                type="email"
+                inputmode="email"
+                autocomplete="email"
+                autocapitalize="off"
+                spellcheck="false"
+                maxlength="254"
                 @input="error = ''"
               />
+            </label>
+            <label v-if="mode === 'forgot'">
+              <span>{{ t('landing.recoveryCodeField') }}</span>
+              <input
+                v-model="recoveryCode"
+                name="recovery-code"
+                type="text"
+                autocomplete="one-time-code"
+                maxlength="32"
+                spellcheck="false"
+                @input="error = ''"
+              />
+            </label>
+            <label>
+              <span>{{
+                mode === 'forgot' ? t('landing.newPasswordField') : t('landing.passwordField')
+              }}</span>
+              <div class="password-row">
+                <input
+                  v-model="password"
+                  :type="showPassword ? 'text' : 'password'"
+                  name="appzac-password"
+                  :autocomplete="
+                    mode === 'register' || mode === 'forgot' ? 'new-password' : 'current-password'
+                  "
+                  maxlength="128"
+                  @input="error = ''"
+                />
+                <button
+                  type="button"
+                  class="password-toggle"
+                  :title="showPassword ? t('landing.hidePassword') : t('landing.showPassword')"
+                  :aria-label="showPassword ? t('landing.hidePassword') : t('landing.showPassword')"
+                  @click="showPassword = !showPassword"
+                >
+                  <svg
+                    v-if="!showPassword"
+                    viewBox="0 0 16 16"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.5"
+                    aria-hidden="true"
+                  >
+                    <path
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      d="M1.75 8s2.25-3.75 6.25-3.75S14.25 8 14.25 8s-2.25 3.75-6.25 3.75S1.75 8 1.75 8Z"
+                    />
+                    <circle cx="8" cy="8" r="1.75" />
+                  </svg>
+                  <svg
+                    v-else
+                    viewBox="0 0 16 16"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.5"
+                    aria-hidden="true"
+                  >
+                    <path
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      d="M1.75 8s2.25-3.75 6.25-3.75S14.25 8 14.25 8s-2.25 3.75-6.25 3.75S1.75 8 1.75 8Z"
+                    />
+                    <circle cx="8" cy="8" r="1.75" />
+                    <path stroke-linecap="round" d="m3.25 12.75 9.5-9.5" />
+                  </svg>
+                </button>
+              </div>
+            </label>
+            <p v-if="mode === 'forgot'" class="support">{{ t('landing.forgotHint') }}</p>
+            <div class="cta">
+              <button type="submit" class="primary" :disabled="busy">
+                {{
+                  mode === 'register'
+                    ? t('landing.register')
+                    : mode === 'forgot'
+                      ? t('landing.resetSubmit')
+                      : t('landing.login')
+                }}
+              </button>
               <button
+                v-if="mode === 'login'"
                 type="button"
-                class="password-toggle"
-                :title="showPassword ? t('landing.hidePassword') : t('landing.showPassword')"
-                :aria-label="showPassword ? t('landing.hidePassword') : t('landing.showPassword')"
-                @click="showPassword = !showPassword"
+                class="ghost"
+                :disabled="busy"
+                @click="openForgot"
               >
-                <svg
-                  v-if="!showPassword"
-                  viewBox="0 0 16 16"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="1.5"
-                  aria-hidden="true"
-                >
-                  <path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    d="M1.75 8s2.25-3.75 6.25-3.75S14.25 8 14.25 8s-2.25 3.75-6.25 3.75S1.75 8 1.75 8Z"
-                  />
-                  <circle cx="8" cy="8" r="1.75" />
-                </svg>
-                <svg
-                  v-else
-                  viewBox="0 0 16 16"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="1.5"
-                  aria-hidden="true"
-                >
-                  <path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    d="M1.75 8s2.25-3.75 6.25-3.75S14.25 8 14.25 8s-2.25 3.75-6.25 3.75S1.75 8 1.75 8Z"
-                  />
-                  <circle cx="8" cy="8" r="1.75" />
-                  <path stroke-linecap="round" d="m3.25 12.75 9.5-9.5" />
-                </svg>
+                {{ t('landing.forgotLink') }}
+              </button>
+              <button type="button" class="ghost" :disabled="busy" @click="backHome">
+                {{ t('landing.back') }}
               </button>
             </div>
-          </label>
-          <div class="cta">
-            <button type="submit" class="primary" :disabled="busy">
-              {{ mode === 'register' ? t('landing.register') : t('landing.login') }}
-            </button>
-            <button type="button" class="ghost" :disabled="busy" @click="backHome">
-              {{ t('landing.back') }}
-            </button>
-          </div>
+          </template>
         </form>
 
         <p v-if="mode === 'home'" class="scroll-hint">{{ t('landing.scrollHint') }}</p>
@@ -433,6 +547,17 @@ async function submit() {
   max-width: 28rem;
   color: var(--text-muted);
   font-size: 1.02rem;
+}
+.support.warn {
+  color: #d89a5a;
+}
+.recovery-code {
+  margin: 0.75rem 0;
+}
+.recovery-code code {
+  font-size: 1.05rem;
+  letter-spacing: 0.04em;
+  word-break: break-all;
 }
 
 .cta {
