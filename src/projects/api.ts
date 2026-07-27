@@ -28,11 +28,17 @@ export async function releaseProjectLock(
   })
 }
 
-export async function putProjectBackup(projectId: string, blob: Blob) {
+export async function putProjectBackup(
+  projectId: string,
+  blob: Blob,
+  opts?: { projectName?: string },
+) {
   const headers = new Headers()
   const token = getStoredToken()
   if (token) headers.set('Authorization', `Bearer ${token}`)
   headers.set('Content-Type', 'application/zip')
+  const name = opts?.projectName?.trim()
+  if (name) headers.set('X-Project-Name', name.slice(0, 200))
   const res = await fetch(`${apiBase()}/api/projects/${projectId}/backup`, {
     method: 'PUT',
     headers,

@@ -11,6 +11,7 @@ import { getTheme, toggleTheme, type Theme } from '@/theme'
 import { displayLabel, needsDisplayName, useAuth } from '@/auth/session'
 import { ApiError, fetchStorage, type StorageBackupItem } from '@/auth/api'
 import { deleteProjectBackup } from '@/projects/api'
+import { listProjects } from '@/storage/idb'
 import { formatBytes, proDaysLeft, storageNearFull, storageOverLimit } from '@/auth/plan'
 import { useShortcutBindings } from '@/composables/useShortcutBindings'
 import { useOnlineStatus } from '@/composables/useOnlineStatus'
@@ -130,13 +131,24 @@ async function loadStorageList() {
   storageBusy.value = true
   try {
     const s = await fetchStorage()
-    storageBackups.value = s.backups ?? []
+    const local = await listProjects().catch(() => [])
+    const byId = new Map(local.map((p) => [p.id, p.name]))
+    storageBackups.value = (s.backups ?? []).map((b) => ({
+      ...b,
+      project_name: b.project_name?.trim() || byId.get(b.project_id) || '',
+    }))
     await refreshMe()
   } catch {
     storageBackups.value = []
   } finally {
     storageBusy.value = false
   }
+}
+
+function backupLabel(b: StorageBackupItem) {
+  const name = b.project_name?.trim()
+  if (name) return name
+  return t('auth.storageUnnamed', { id: b.project_id.slice(0, 8) })
 }
 
 async function onRedeemLicense() {
@@ -379,9 +391,7 @@ async function onLogout() {
                   <p class="settings-hint">{{ t('auth.storageHint') }}</p>
                   <ul v-if="storageBackups.length" class="storage-list">
                     <li v-for="b in storageBackups" :key="b.project_id">
-                      <span class="storage-list-id" :title="b.project_id">{{
-                        b.project_id.slice(0, 8)
-                      }}…</span>
+                      <span class="storage-list-name" :title="b.project_id">{{ backupLabel(b) }}</span>
                       <span>{{ formatBytes(b.size_bytes) }}</span>
                       <button
                         type="button"
@@ -424,6 +434,15 @@ async function onLogout() {
                     </router-link>
                   </div>
                 </div>
+                <div v-if="user?.is_admin" class="settings-block settings-ops">
+                  <span class="settings-label">{{ t('auth.licenseAdminTitle') }}</span>
+                  <p class="settings-hint">{{ t('auth.licenseAdminSettingsHint') }}</p>
+                  <div class="settings-actions">
+                    <button type="button" class="primary" @click="licenseAdminOpen = true">
+                      {{ t('auth.licenseAdminOpen') }}
+                    </button>
+                  </div>
+                </div>
                 <p v-if="settingsError" class="settings-error">{{ settingsError }}</p>
                 <p v-else-if="settingsSaved" class="settings-ok">{{ t('auth.save') }} ✓</p>
                 <div class="settings-actions">
@@ -440,9 +459,6 @@ async function onLogout() {
                   <div class="settings-actions">
                     <button type="button" class="primary" @click="openMetricsFromSettings">
                       {{ t('auth.settingsOpenMetrics') }}
-                    </button>
-                    <button type="button" class="ghost" @click="licenseAdminOpen = true">
-                      {{ t('auth.licenseAdminOpen') }}
                     </button>
                   </div>
                 </div>
@@ -693,6 +709,15 @@ async function onLogout() {
   align-items: center;
   gap: 0.5rem;
   font-size: 0.82rem;
+}
+
+.storage-list-name {
+  flex: 1 1 10rem;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 500;
 }
 
 .storage-list-id {

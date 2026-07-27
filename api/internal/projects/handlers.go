@@ -164,10 +164,15 @@ func (h *Handler) PutBackup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	now := time.Now().UTC()
+	projectName := strings.TrimSpace(r.Header.Get("X-Project-Name"))
+	if len(projectName) > 200 {
+		projectName = projectName[:200]
+	}
 	if err := h.Store.UpsertBackupMeta(r.Context(), user.ID, projectID, BackupMeta{
 		UpdatedAt:   now,
 		SizeBytes:   int64(len(data)),
 		StoragePath: rel,
+		ProjectName: projectName,
 	}); err != nil {
 		writeError(w, http.StatusInternalServerError, "server error")
 		return

@@ -19,7 +19,7 @@ export async function pushProjectBackup(record: ProjectRecord): Promise<void> {
   }
   const run = (async () => {
     const blob = await packProjectFile(record)
-    await putProjectBackup(record.meta.id, blob)
+    await putProjectBackup(record.meta.id, blob, { projectName: record.meta.name })
   })()
   inflight = run.finally(() => {
     if (inflight === run) inflight = null

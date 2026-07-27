@@ -70,14 +70,17 @@ export default {
     storageDelete: 'Delete',
     storageDeleteConfirm:
       'Delete the cloud copy of this project? The local browser copy stays.',
-    licenseLabel: 'Pro key',
+    storageUnnamed: 'Untitled ({id}…)',
+    licenseLabel: 'Activate key',
     licenseHint: 'Paste a one-time key after payment. Time stacks onto current Pro.',
     licensePlaceholder: 'AZ-…',
     licenseRedeem: 'Activate',
-    licenseBuy: 'Pro plans',
+    licenseBuy: 'Plans & terms',
     licenseOk: 'Pro activated.',
-    licenseAdminOpen: 'Pro keys',
-    licenseAdminTitle: 'Pro license keys',
+    licenseAdminOpen: 'Issue / list keys',
+    licenseAdminTitle: 'Admin · Pro keys',
+    licenseAdminSettingsHint:
+      'Generate one-time keys, see redemption status, revoke unused. Full key is shown once.',
     licenseAdminClose: 'Close',
     licenseAdminHint:
       'Full key is shown once at creation. The list shows a hint, status, and who redeemed. Clients cannot invent a working key without a DB row.',

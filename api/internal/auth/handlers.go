@@ -175,16 +175,18 @@ func (h *Handler) Storage(w http.ResponseWriter, r *http.Request) {
 		backups = []BackupListItem{}
 	}
 	type backupDTO struct {
-		ProjectID string `json:"project_id"`
-		SizeBytes int64  `json:"size_bytes"`
-		UpdatedAt string `json:"updated_at"`
+		ProjectID   string `json:"project_id"`
+		ProjectName string `json:"project_name"`
+		SizeBytes   int64  `json:"size_bytes"`
+		UpdatedAt   string `json:"updated_at"`
 	}
 	list := make([]backupDTO, 0, len(backups))
 	for _, b := range backups {
 		list = append(list, backupDTO{
-			ProjectID: b.ProjectID,
-			SizeBytes: b.SizeBytes,
-			UpdatedAt: b.UpdatedAt.UTC().Format(time.RFC3339Nano),
+			ProjectID:   b.ProjectID,
+			ProjectName: b.ProjectName,
+			SizeBytes:   b.SizeBytes,
+			UpdatedAt:   b.UpdatedAt.UTC().Format(time.RFC3339Nano),
 		})
 	}
 	writeJSON(w, http.StatusOK, map[string]any{

@@ -90,14 +90,15 @@ func (s *Store) AllowCloudWrite(ctx context.Context, userID uuid.UUID, deltaByte
 }
 
 type BackupListItem struct {
-	ProjectID string    `json:"project_id"`
-	SizeBytes int64     `json:"size_bytes"`
-	UpdatedAt time.Time `json:"updated_at"`
+	ProjectID   string    `json:"project_id"`
+	ProjectName string    `json:"project_name"`
+	SizeBytes   int64     `json:"size_bytes"`
+	UpdatedAt   time.Time `json:"updated_at"`
 }
 
 func (s *Store) ListProjectBackups(ctx context.Context, userID uuid.UUID) ([]BackupListItem, error) {
 	rows, err := s.pool.Query(ctx, `
-		SELECT project_id, size_bytes, updated_at
+		SELECT project_id, COALESCE(project_name, ''), size_bytes, updated_at
 		FROM project_backups
 		WHERE user_id = $1
 		ORDER BY updated_at ASC
@@ -110,7 +111,7 @@ func (s *Store) ListProjectBackups(ctx context.Context, userID uuid.UUID) ([]Bac
 	for rows.Next() {
 		var id uuid.UUID
 		var item BackupListItem
-		if err := rows.Scan(&id, &item.SizeBytes, &item.UpdatedAt); err != nil {
+		if err := rows.Scan(&id, &item.ProjectName, &item.SizeBytes, &item.UpdatedAt); err != nil {
 			return nil, err
 		}
 		item.ProjectID = id.String()

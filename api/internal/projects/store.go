@@ -101,17 +101,22 @@ type BackupMeta struct {
 	UpdatedAt   time.Time
 	SizeBytes   int64
 	StoragePath string
+	ProjectName string
 }
 
 func (s *Store) UpsertBackupMeta(ctx context.Context, userID, projectID uuid.UUID, meta BackupMeta) error {
 	_, err := s.pool.Exec(ctx, `
-		INSERT INTO project_backups (user_id, project_id, updated_at, size_bytes, storage_path)
-		VALUES ($1,$2,$3,$4,$5)
+		INSERT INTO project_backups (user_id, project_id, updated_at, size_bytes, storage_path, project_name)
+		VALUES ($1,$2,$3,$4,$5,$6)
 		ON CONFLICT (user_id, project_id) DO UPDATE SET
 			updated_at = EXCLUDED.updated_at,
 			size_bytes = EXCLUDED.size_bytes,
-			storage_path = EXCLUDED.storage_path`,
-		userID, projectID, meta.UpdatedAt, meta.SizeBytes, meta.StoragePath,
+			storage_path = EXCLUDED.storage_path,
+			project_name = CASE
+				WHEN EXCLUDED.project_name <> '' THEN EXCLUDED.project_name
+				ELSE project_backups.project_name
+			END`,
+		userID, projectID, meta.UpdatedAt, meta.SizeBytes, meta.StoragePath, meta.ProjectName,
 	)
 	return err
 }
@@ -119,9 +124,10 @@ func (s *Store) UpsertBackupMeta(ctx context.Context, userID, projectID uuid.UUI
 func (s *Store) GetBackupMeta(ctx context.Context, userID, projectID uuid.UUID) (BackupMeta, error) {
 	var m BackupMeta
 	err := s.pool.QueryRow(ctx, `
-		SELECT updated_at, size_bytes, storage_path FROM project_backups
+		SELECT updated_at, size_bytes, storage_path, COALESCE(project_name, '')
+		FROM project_backups
 		WHERE user_id=$1 AND project_id=$2`, userID, projectID).Scan(
-		&m.UpdatedAt, &m.SizeBytes, &m.StoragePath,
+		&m.UpdatedAt, &m.SizeBytes, &m.StoragePath, &m.ProjectName,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return BackupMeta{}, err

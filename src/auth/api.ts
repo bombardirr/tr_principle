@@ -122,6 +122,7 @@ export async function redeemLicense(key: string) {
 
 export type StorageBackupItem = {
   project_id: string
+  project_name?: string
   size_bytes: number
   updated_at: string
 }
