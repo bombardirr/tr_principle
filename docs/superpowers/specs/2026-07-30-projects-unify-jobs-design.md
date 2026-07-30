@@ -1,7 +1,7 @@
 # Unify projects = former shared works (jobs) — design
 
 Date: 2026-07-30  
-Status: Approved (spec)  
+Status: Implemented  
 Supersedes (product IA): dual list «Проекты | Общие работы» in [`2026-07-17-shared-work-jobs-design.md`](./2026-07-17-shared-work-jobs-design.md)  
 Keeps (collaboration semantics): personal bilingual copies + live shared TM/glossary — same doc  
 Related: [`2026-07-27-pro-keys-quota-design.md`](./2026-07-27-pro-keys-quota-design.md), [`2026-07-14-project-lock-backup-design.md`](./2026-07-14-project-lock-backup-design.md)

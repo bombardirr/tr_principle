@@ -193,7 +193,7 @@ git commit -m "Unify /projects UI to cloud project hubs only."
 - Update `PLAN.md` one-liner if it still says dual list / deferred jobs naming
 - Spec status already Approved; optionally mark «Implementing» → «Implemented» when done
 
-- [ ] **Step 1: Grep guards**
+- [x] **Step 1: Grep guards**
 
 ```bash
 rg -n "/api/jobs" api src --glob "!**/node_modules/**" --glob "!**/docs/**"
@@ -203,9 +203,9 @@ rg -n "/api/projects/.*/backup" src api --glob "!**/docs/**"
 
 Expected: no live `/api/jobs` in app code; backup only under `/api/backups`; UI not advertising dual list.
 
-- [ ] **Step 2: `go test ./...` (api) + `npx vitest run`**
+- [x] **Step 2: `go test ./...` (api) + `npx vitest run`**
 
-- [ ] **Step 3: Commit any leftovers**
+- [x] **Step 3: Commit any leftovers**
 
 ```bash
 git commit -m "Finish projects unify: verify and doc pointers."

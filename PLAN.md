@@ -245,8 +245,9 @@ C и F по фичам закрыты. После MVP: `F4 → E3 pop-out → E1
 
 ### Фаза F: работа в группе ← **в MVP** (модель пересобрана)
 
-**Актуальная спека:** [`docs/superpowers/specs/2026-07-17-shared-work-jobs-design.md`](docs/superpowers/specs/2026-07-17-shared-work-jobs-design.md)  
-**План:** [`docs/superpowers/plans/2026-07-17-shared-work-jobs.md`](docs/superpowers/plans/2026-07-17-shared-work-jobs.md)  
+**Актуальная спека (IA):** [`docs/superpowers/specs/2026-07-30-projects-unify-jobs-design.md`](docs/superpowers/specs/2026-07-30-projects-unify-jobs-design.md) — единый «проект» вместо dual list «Проекты | Общие работы».  
+**Историческая спека (collab semantics):** [`docs/superpowers/specs/2026-07-17-shared-work-jobs-design.md`](docs/superpowers/specs/2026-07-17-shared-work-jobs-design.md)  
+**План unify:** [`docs/superpowers/plans/2026-07-30-projects-unify-jobs.md`](docs/superpowers/plans/2026-07-30-projects-unify-jobs.md)  
 Устарело (co-edit bilingual + locks): [`docs/superpowers/specs/2026-07-17-group-collaboration-design.md`](docs/superpowers/specs/2026-07-17-group-collaboration-design.md)  
 Старый план co-edit: [`docs/superpowers/plans/2026-07-17-group-collaboration.md`](docs/superpowers/plans/2026-07-17-group-collaboration.md) — не исполнять дальше; адаптировать полезные куски (invite/TM ACL) под jobs.
 
@@ -294,7 +295,7 @@ C и F по фичам закрыты. После MVP: `F4 → E3 pop-out → E1
 
 _Ручной smoke: create → invite → join без проекта → хаб → создать/привязать проект → progress → transfer._
 
-**J5 (IA) — в основном ✓:** paste invite, Проекты | Общие работы, inline job hub, attach баз.  
+**J5 (IA) — ✓ (пересобрано 2026-07-30):** единый список «Проекты» (бывш. общие работы); hub-first create; без локального второго списка и «Сделать общей». Спека: [`2026-07-30-projects-unify-jobs-design.md`](docs/superpowers/specs/2026-07-30-projects-unify-jobs-design.md).  
 **Отложено / не tag:** deferred TM write stack (не нужен при attach-only); dual % + finalize «для начальника» — backlog после tag.
 
 #### Порядок
@@ -393,8 +394,9 @@ Telegram-бот снят (api.telegram.org недоступен с прод-хо
 | PATCH | `/api/auth/me` | display_name |
 | POST | `/api/auth/logout` | invalidate |
 | GET/PUT | `/api/tm` (или `/api/tm/sync`) | облачная TM |
-| POST/DELETE | `/api/projects/{id}/lock` | lock |
-| PUT/GET | `/api/projects/{id}/backup` | бэкап |
+| POST/DELETE | `/api/backups/{id}/lock` | lock |
+| PUT/GET | `/api/backups/{id}/backup` | бэкап |
+| GET/POST | `/api/projects…` | collab (бывш. `/api/jobs`) |
 | GET | `/api/health` | health |
 
 #### Клиент
