@@ -7,7 +7,6 @@ import ProjectSettingsDialog from '@/components/ProjectSettingsDialog.vue'
 import ResegmentDialog from '@/components/ResegmentDialog.vue'
 import SharedTmConfirmDialog from '@/components/SharedTmConfirmDialog.vue'
 import ShareProjectDialog from '@/components/ShareProjectDialog.vue'
-import CreateSharedWorkDialog from '@/components/CreateSharedWorkDialog.vue'
 import SharedWorkPanel from '@/components/SharedWorkPanel.vue'
 import DocxPreviewPanel from '@/components/DocxPreviewPanel.vue'
 import GlossaryPanel from '@/components/GlossaryPanel.vue'
@@ -34,10 +33,7 @@ import { findTmMatches } from '@/tm/match'
 import { findLangPairPreset, langPairLabel } from '@/tm/langPairs'
 import { tmLookupKey } from '@/tm/normalize'
 import { resolveTmBaseAccess } from '@/tm/tmAccess'
-import {
-  sharedExactHitsFromMatches,
-  shouldWarnSharedExact,
-} from '@/tm/shouldWarnSharedExact'
+import { sharedExactHitsFromMatches, shouldWarnSharedExact } from '@/tm/shouldWarnSharedExact'
 import { listJobTmAttachments } from '@/tm/jobAttachments'
 import { listJobTmAttachmentsApi } from '@/jobs/tmAttachmentsApi'
 import { TM_COLLECTION_CHANGED_EVENT } from '@/tm/tmCollectionEvents'
@@ -80,7 +76,6 @@ import {
 import { pickMagnetRowId } from '@/editor/magnetGeometry'
 import MagneticSegmentRail from '@/components/MagneticSegmentRail.vue'
 import ParagraphBlock from '@/components/ParagraphBlock.vue'
-import { bindLocalProjectToCloudProject } from '@/jobs/localProject'
 import { listMembers, getJob } from '@/jobs/api'
 import {
   acknowledgeProjectJoins,
@@ -138,7 +133,13 @@ const glossaryBaseAccess = computed(() =>
         jobQueryId: jobQueryId.value,
         jobShared: jobGlossaryAttachments.value,
       })
-    : { jobContext: false, readableBaseIds: [], writableBaseIds: [], exportableBaseIds: [], cloneableBaseIds: [] },
+    : {
+        jobContext: false,
+        readableBaseIds: [],
+        writableBaseIds: [],
+        exportableBaseIds: [],
+        cloneableBaseIds: [],
+      }
 )
 const personalTmReadable = computed(() => readableBaseIds.value.length > 0)
 const personalTmWritable = computed(() => writableBaseIds.value.length > 0)
@@ -156,7 +157,7 @@ const previewToken = ref(0)
 let previewTimer: ReturnType<typeof setTimeout> | null = null
 const PREVIEW_OVERLAY_MQ = '(max-width: 1280px)'
 const previewOverlayMode = ref(
-  typeof window !== 'undefined' ? window.matchMedia(PREVIEW_OVERLAY_MQ).matches : false,
+  typeof window !== 'undefined' ? window.matchMedia(PREVIEW_OVERLAY_MQ).matches : false
 )
 const previewAsOverlay = computed(() => previewEnabled.value && previewOverlayMode.value)
 let pageScrollSaveTimer: ReturnType<typeof setTimeout> | null = null
@@ -243,7 +244,6 @@ const settingsOpen = ref(false)
 const settingsMode = ref<'first' | 'edit'>('first')
 const resegmentOpen = ref(false)
 const shareOpen = ref(false)
-const sharedCreateOpen = ref(false)
 const sharedPanelOpen = ref(false)
 const editorOwnedJob = ref<CloudProject | null>(null)
 const sharedJoinUnread = computed(() => {
@@ -470,17 +470,13 @@ async function persistNow(): Promise<void> {
   }
   if (personalTmWritable.value && tmSettings.value.autoSaveToTm && tmAutosaveIds.value.size) {
     const onlyIds = [...tmAutosaveIds.value]
-    const dirty = await recordDoneSegmentsInTmBases(
-      record.value.segments,
-      writableBaseIds.value,
-      {
-        sourceLang: record.value.meta.sourceLang,
-        targetLang: record.value.meta.targetLang,
-        projectId: record.value.meta.id,
-        actor: publicActorLabel(user.value),
-        onlyIds,
-      },
-    )
+    const dirty = await recordDoneSegmentsInTmBases(record.value.segments, writableBaseIds.value, {
+      sourceLang: record.value.meta.sourceLang,
+      targetLang: record.value.meta.targetLang,
+      projectId: record.value.meta.id,
+      actor: publicActorLabel(user.value),
+      onlyIds,
+    })
     markEditorTmDirty(...dirty)
     await reloadPersonalTmUnits()
     tmAutosaveIds.value = new Set()
@@ -551,7 +547,7 @@ async function refreshJobTmLayers() {
       try {
         const localId = sharedTmLocalId(
           attachment.ownerId || attachment.createdBy,
-          attachment.tmBaseId,
+          attachment.tmBaseId
         )
         await upsertSharedTmBase({
           id: localId,
@@ -584,11 +580,13 @@ async function refreshJobGlossaryLayers() {
     const attachments = await listJobGlossaryAttachments(jobId)
     jobGlossaryAttachments.value = attachments
     await Promise.all(
-      attachments.filter(item => item.canRead && item.ownerId).map(item =>
-        syncGlossaryBase(sharedGlossaryLocalId(item.ownerId!, item.glossaryBaseId), {
-          projectId: jobId,
-        }),
-      ),
+      attachments
+        .filter(item => item.canRead && item.ownerId)
+        .map(item =>
+          syncGlossaryBase(sharedGlossaryLocalId(item.ownerId!, item.glossaryBaseId), {
+            projectId: jobId,
+          })
+        )
     )
   } catch {
     jobGlossaryAttachments.value = []
@@ -691,7 +689,7 @@ watch(
     await refreshJobGlossaryLayers()
     await reloadGlossary()
     await reloadPersonalTmUnits()
-  },
+  }
 )
 
 watch(
@@ -709,7 +707,7 @@ watch(
       // Join badges are best-effort while editing offline.
     }
   },
-  { immediate: true },
+  { immediate: true }
 )
 
 watch(sharedPanelOpen, async open => {
@@ -1000,7 +998,9 @@ const glossaryForPair = computed(() => {
 })
 
 async function reloadGlossary() {
-  glossaryTerms.value = await listGlossaryTerms({ baseIds: glossaryBaseAccess.value.readableBaseIds })
+  glossaryTerms.value = await listGlossaryTerms({
+    baseIds: glossaryBaseAccess.value.readableBaseIds,
+  })
 }
 
 function insertGlossaryTarget(segId: string, targetTerm: string) {
@@ -1669,8 +1669,7 @@ async function onEmptyDocxSelected(event: Event) {
       notice.value = ''
     }
   } catch (err) {
-    error.value =
-      err instanceof DocxError || err instanceof Error ? err.message : String(err)
+    error.value = err instanceof DocxError || err instanceof Error ? err.message : String(err)
   } finally {
     emptyBusy.value = false
   }
@@ -1715,27 +1714,7 @@ async function onEmptyProjectSelected(event: Event) {
 }
 
 function openSharedWork() {
-  if (!record.value) return
-  if (record.value.meta.projectId) {
-    sharedPanelOpen.value = true
-  } else if (!projectLease.blocked.value) {
-    sharedCreateOpen.value = true
-  }
-}
-
-async function onSharedWorkCreated(job: CloudProject) {
-  if (!record.value) return
-  try {
-    record.value = bindLocalProjectToCloudProject(record.value, job)
-    await saveProject(record.value)
-    await reloadJobMembership(job.id)
-    await reportJobProgress()
-    sharedCreateOpen.value = false
-    sharedPanelOpen.value = true
-    error.value = ''
-  } catch (err) {
-    error.value = err instanceof Error ? err.message : String(err)
-  }
+  if (record.value?.meta.projectId) sharedPanelOpen.value = true
 }
 
 async function exportDocx() {
@@ -1883,10 +1862,10 @@ async function goBack() {
             <EditorGlyph name="archive" />
           </IconButton>
           <IconButton
-            :title="record.meta.projectId ? t('jobs.openPanelHint') : t('jobs.createFromEditorHint')"
-            :active="Boolean(record.meta.projectId)"
+            v-if="record.meta.projectId"
+            :title="t('jobs.openPanelHint')"
+            active
             :badge="sharedJoinUnread"
-            :disabled="!record.meta.projectId && editorReadOnly"
             @click="openSharedWork"
           >
             <EditorGlyph name="send" />
@@ -2063,11 +2042,7 @@ async function goBack() {
         </div>
       </div>
       <Teleport to="body">
-        <div
-          v-if="previewAsOverlay"
-          class="preview-overlay-root"
-          @click.self="closePreview"
-        >
+        <div v-if="previewAsOverlay" class="preview-overlay-root" @click.self="closePreview">
           <DocxPreviewPanel
             :project-id="props.id"
             :record="record"
@@ -2096,7 +2071,7 @@ async function goBack() {
       :readable-base-ids="glossaryBaseAccess.readableBaseIds"
       :writable-base-ids="glossaryBaseAccess.writableBaseIds"
       :exportable-base-ids="glossaryBaseAccess.exportableBaseIds"
-      :project-id="glossaryBaseAccess.jobContext ? jobQueryId ?? undefined : undefined"
+      :project-id="glossaryBaseAccess.jobContext ? (jobQueryId ?? undefined) : undefined"
       @close="glossaryOpen = false"
       @changed="reloadGlossary"
     />
@@ -2119,12 +2094,6 @@ async function goBack() {
       :open="shareOpen"
       @close="closeShareDialog"
       @download="downloadFromShareDialog"
-    />
-    <CreateSharedWorkDialog
-      :open="sharedCreateOpen"
-      :project="record"
-      @close="sharedCreateOpen = false"
-      @created="onSharedWorkCreated"
     />
     <SharedWorkPanel
       v-if="record.meta.projectId"

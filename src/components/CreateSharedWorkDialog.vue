@@ -7,20 +7,12 @@ import {
   saveJobLangPairFromCodes,
   saveJobLangPairPresetId,
 } from '@/jobs/langPairPreference'
-import { projectFingerprint } from '@/jobs/localProject'
 import { createProjectId } from '@/storage/idb'
-import {
-  LANG_PAIR_PRESETS,
-  findLangPairPreset,
-  type LangPairPreset,
-} from '@/tm/langPairs'
+import { LANG_PAIR_PRESETS, type LangPairPreset } from '@/tm/langPairs'
 import type { CloudProject } from '@/types/cloudProject'
-import type { ProjectRecord } from '@/types/project'
 
 const props = defineProps<{
   open: boolean
-  /** When set — bind this project; otherwise create an empty shared-work card. */
-  project?: ProjectRecord | null
 }>()
 
 const emit = defineEmits<{
@@ -35,14 +27,6 @@ const busy = ref(false)
 const error = ref('')
 
 function initPairId() {
-  if (props.project) {
-    const found = findLangPairPreset(
-      props.project.meta.sourceLang,
-      props.project.meta.targetLang,
-    )
-    pairId.value = found?.id ?? loadJobLangPairPresetId()
-    return
-  }
   pairId.value = loadJobLangPairPresetId()
 }
 
@@ -50,11 +34,11 @@ watch(
   () => props.open,
   open => {
     if (!open) return
-    title.value = props.project?.meta.name?.trim() || ''
+    title.value = ''
     initPairId()
     error.value = ''
   },
-  { immediate: true },
+  { immediate: true }
 )
 
 function selectedPreset(): LangPairPreset {
@@ -69,21 +53,6 @@ async function submit() {
   const preset = selectedPreset()
   saveJobLangPairPresetId(preset.id)
   try {
-    if (props.project) {
-      const fingerprint = await projectFingerprint(props.project)
-      const job = await createJob({
-        id: props.project.meta.id,
-        title: trimmed,
-        sourceLang: preset.sourceLang,
-        targetLang: preset.targetLang,
-        sourceFilename: fingerprint.filename,
-        sourceHash: fingerprint.hash,
-        localProjectId: props.project.meta.id,
-      })
-      saveJobLangPairFromCodes(preset.sourceLang, preset.targetLang)
-      emit('created', job)
-      return
-    }
     const job = await createJob({
       id: createProjectId(),
       title: trimmed,
@@ -102,17 +71,12 @@ async function submit() {
 
 <template>
   <div v-if="open" class="backdrop" role="presentation" @click.self="emit('close')">
-    <div
-      class="dialog"
-      role="dialog"
-      aria-modal="true"
-      :aria-label="project ? t('jobs.createTitle') : t('jobs.createEmptyTitle')"
-    >
+    <div class="dialog" role="dialog" aria-modal="true" :aria-label="t('jobs.createEmptyTitle')">
       <h2 class="title">
-        {{ project ? t('jobs.createTitle') : t('jobs.createEmptyTitle') }}
+        {{ t('jobs.createEmptyTitle') }}
       </h2>
       <p class="hint">
-        {{ project ? t('jobs.createHint') : t('jobs.createEmptyHint') }}
+        {{ t('jobs.createEmptyHint') }}
       </p>
 
       <label class="field">

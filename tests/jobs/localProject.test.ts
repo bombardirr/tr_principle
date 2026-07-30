@@ -1,9 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import {
-  bindLocalProjectToCloudProject,
-  inviteLink,
-  projectFingerprint,
-} from '@/jobs/localProject'
+import { bindLocalProjectToCloudProject, inviteLink, projectFingerprint } from '@/jobs/localProject'
 import type { CloudProject } from '@/types/cloudProject'
 import type { ProjectRecord } from '@/types/project'
 
@@ -69,7 +65,7 @@ describe('bindLocalProjectToCloudProject', () => {
 describe('inviteLink', () => {
   it('encodes the raw token in the invite route', () => {
     expect(inviteLink('raw token/+', 'https://app.example/')).toBe(
-      'https://app.example/job-invite/raw%20token%2F%2B'
+      'https://app.example/project-invite/raw%20token%2F%2B'
     )
   })
 })

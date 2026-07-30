@@ -2,16 +2,8 @@
 import { computed, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { openDocx, DocxError } from '@/docx/openDocx'
-import {
-  createProjectId,
-  listProjects,
-  saveProject,
-} from '@/storage/idb'
-import { unpackProjectFile } from '@/storage/projectFile'
-import { SEGMENT_SCHEMA_DATE_SAFE } from '@/types/project'
+import { listProjects } from '@/storage/idb'
 import JobHubInline from '@/components/JobHubInline.vue'
-import ProjectListItem from '@/components/ProjectListItem.vue'
 import CreateSharedWorkDialog from '@/components/CreateSharedWorkDialog.vue'
 import TmCollectionDialog from '@/components/TmCollectionDialog.vue'
 import IconButton from '@/components/IconButton.vue'
@@ -39,13 +31,9 @@ const projects = ref<ProjectMeta[]>([])
 const sharedJobs = ref<CloudProject[]>([])
 const error = ref('')
 const notice = ref('')
-const busy = ref(false)
-const docxInput = ref<HTMLInputElement | null>(null)
-const projectInput = ref<HTMLInputElement | null>(null)
 const inviteInput = ref('')
 const inviteError = ref('')
 const openJobId = ref('')
-const hoverJobId = ref('')
 const pendingJobAction = ref<{
   projectId: string
   kind: 'leave' | 'archive' | 'delete'
@@ -55,11 +43,6 @@ const createSharedOpen = ref(false)
 const collectionOpen = ref(false)
 
 const sectionUnread = computed(() => joinUnreadCount.value)
-const relatedJobId = computed(() => hoverJobId.value || openJobId.value)
-
-function isRelatedProject(project: ProjectMeta) {
-  return Boolean(relatedJobId.value && project.projectId === relatedJobId.value)
-}
 
 function isJobOwner(job: CloudProject) {
   return Boolean(user.value?.id && job.ownerUserId === user.value.id)
@@ -126,7 +109,7 @@ watch(
   job => {
     openJobId.value = typeof job === 'string' ? job : ''
   },
-  { immediate: true },
+  { immediate: true }
 )
 
 async function refresh() {
@@ -147,67 +130,6 @@ async function refresh() {
 
 watch(() => user.value?.id, refresh, { immediate: true })
 onUnmounted(stopJoinActivityPolling)
-
-async function onDocxSelected(e: Event) {
-  const input = e.target as HTMLInputElement
-  const file = input.files?.[0]
-  input.value = ''
-  if (!file) return
-
-  busy.value = true
-  error.value = ''
-  notice.value = ''
-  try {
-    const opened = await openDocx(file)
-    const now = new Date().toISOString()
-    const id = createProjectId()
-    const name = file.name.replace(/\.docx$/i, '') || 'Untitled'
-    await saveProject({
-      meta: {
-        id,
-        name,
-        createdAt: now,
-        updatedAt: now,
-        segmentCount: opened.segments.length,
-        doneCount: 0,
-        segmentSchemaVersion: SEGMENT_SCHEMA_DATE_SAFE,
-      },
-      segments: opened.segments,
-      docx: opened.zipBytes,
-    })
-    if (!opened.segments.length) {
-      sessionStorage.setItem(`tr.emptyDocNotice:${id}`, '1')
-    }
-    await router.push({ name: 'editor', params: { id } })
-  } catch (err) {
-    error.value = err instanceof DocxError || err instanceof Error ? err.message : String(err)
-  } finally {
-    busy.value = false
-  }
-}
-
-async function onProjectFileSelected(e: Event) {
-  const input = e.target as HTMLInputElement
-  const file = input.files?.[0]
-  input.value = ''
-  if (!file) return
-
-  busy.value = true
-  error.value = ''
-  notice.value = ''
-  try {
-    const record = await unpackProjectFile(file)
-    await saveProject(record)
-    if (!record.segments.length) {
-      sessionStorage.setItem(`tr.emptyDocNotice:${record.meta.id}`, '1')
-    }
-    await router.push({ name: 'editor', params: { id: record.meta.id } })
-  } catch (err) {
-    error.value = err instanceof Error ? err.message : String(err)
-  } finally {
-    busy.value = false
-  }
-}
 
 function onItemNotice(message: string) {
   notice.value = message
@@ -239,7 +161,7 @@ async function openInvite() {
     return
   }
   inviteError.value = ''
-  await router.push({ name: 'job-invite', params: { token } })
+  await router.push({ name: 'project-invite', params: { token } })
 }
 </script>
 
@@ -248,6 +170,21 @@ async function openInvite() {
     <div class="head">
       <div class="title-row">
         <h1>{{ t('projects.title') }}</h1>
+        <span
+          v-if="sectionUnread && !openJobId"
+          class="section-badge"
+          :title="t('jobs.joinUnreadHint')"
+          :aria-label="t('jobs.joinUnreadHint')"
+        >
+          {{ sectionUnread }}
+        </span>
+        <IconButton
+          v-if="!openJobId"
+          :title="t('jobs.createFromListHint')"
+          @click="createSharedOpen = true"
+        >
+          <EditorGlyph name="plus" />
+        </IconButton>
         <IconButton :title="t('tmCollection.openFromProjects')" @click="collectionOpen = true">
           <EditorGlyph name="tm" />
         </IconButton>
@@ -264,26 +201,6 @@ async function openInvite() {
             {{ t('jobs.invitePasteAction') }}
           </button>
         </form>
-        <button type="button" class="primary" :disabled="busy" @click="docxInput?.click()">
-          {{ t('projects.newFromDocx') }}
-        </button>
-        <button type="button" :disabled="busy" @click="projectInput?.click()">
-          {{ t('projects.openProjectFile') }}
-        </button>
-        <input
-          ref="docxInput"
-          type="file"
-          accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-          hidden
-          @change="onDocxSelected"
-        />
-        <input
-          ref="projectInput"
-          type="file"
-          accept=".zip,.tcat.zip,application/zip"
-          hidden
-          @change="onProjectFileSelected"
-        />
       </div>
     </div>
 
@@ -291,143 +208,98 @@ async function openInvite() {
     <p v-else-if="inviteError" class="error">{{ inviteError }}</p>
     <p v-else-if="notice" class="notice">{{ notice }}</p>
 
-    <div class="columns">
-      <section class="column" aria-labelledby="personal-projects-title">
-        <h2 id="personal-projects-title" class="block-title">
-          {{ t('projects.personalProjectsTitle') }}
-        </h2>
-        <ul v-if="projects.length" class="list">
-          <ProjectListItem
-            v-for="p in projects"
-            :key="p.id"
-            :project="p"
-            :glow="isRelatedProject(p)"
-            @changed="refresh"
-            @notice="onItemNotice"
-            @error="onItemError"
-          />
-        </ul>
-        <p v-else-if="!busy" class="empty">{{ t('projects.empty') }}</p>
-      </section>
+    <section class="projects-list">
+      <JobHubInline
+        v-if="openJobId"
+        :project-id="openJobId"
+        @close="closeJob"
+        @changed="refresh"
+        @notice="onItemNotice"
+        @error="onItemError"
+      />
 
-      <section class="column" aria-labelledby="shared-works-title">
-        <h2 id="shared-works-title" class="block-title">
-          {{ t('projects.sharedWorksTitle') }}
-          <span
-            v-if="sectionUnread && !openJobId"
-            class="section-badge"
-            :title="t('jobs.joinUnreadHint')"
-            :aria-label="t('jobs.joinUnreadHint')"
+      <template v-else>
+        <ul v-if="sharedJobs.length" class="list">
+          <li
+            v-for="job in sharedJobs"
+            :key="job.id"
+            class="item viewer-item"
+            :class="{ 'has-join-unread': projectHasJoinUnread(job.id) }"
           >
-            {{ sectionUnread }}
-          </span>
-          <IconButton
-            v-if="!openJobId"
-            class="create-shared"
-            :title="t('jobs.createFromListHint')"
-            @click="createSharedOpen = true"
-          >
-            <EditorGlyph name="plus" />
-          </IconButton>
-        </h2>
-
-        <JobHubInline
-          v-if="openJobId"
-          :project-id="openJobId"
-          @close="closeJob"
-          @changed="refresh"
-          @notice="onItemNotice"
-          @error="onItemError"
-        />
-
-        <template v-else>
-          <ul v-if="sharedJobs.length" class="list">
-            <li
-              v-for="job in sharedJobs"
-              :key="job.id"
-              class="item viewer-item"
-              :class="{ 'has-join-unread': projectHasJoinUnread(job.id) }"
-              @mouseenter="hoverJobId = job.id"
-              @mouseleave="hoverJobId = ''"
-            >
-              <button type="button" class="viewer-card" @click="openJob(job.id)">
-                <span class="name">
-                  {{ job.title }}
-                  <span
-                    v-if="isJobArchived(job)"
-                    class="archived-chip"
-                  >{{ t('jobs.archivedBadge') }}</span>
-                  <span
-                    v-if="projectHasJoinUnread(job.id)"
-                    class="join-dot"
-                    :title="t('jobs.joinUnreadHint')"
-                    aria-hidden="true"
-                  />
-                </span>
-                <span class="sub">
-                  <template v-if="jobLangPairText(job)">{{ jobLangPairText(job) }} · </template>
-                  {{ t('projects.updated', { date: formatDate(job.updatedAt) }) }}
-                </span>
-              </button>
-              <div class="item-actions">
-                <template
-                  v-if="pendingJobAction && pendingJobAction.projectId === job.id"
-                >
-                  <IconButton
-                    danger
-                    :title="
-                      pendingJobAction.kind === 'leave'
-                        ? t('jobs.confirmLeave', { name: job.title })
-                        : pendingJobAction.kind === 'archive'
-                          ? t('jobs.confirmArchive', { name: job.title })
-                          : t('jobs.confirmDeleteForever', { name: job.title })
-                    "
-                    :disabled="actionBusy"
-                    @click="confirmJobAction(job)"
-                  >
-                    <EditorGlyph name="check" />
-                  </IconButton>
-                  <IconButton
-                    :title="t('jobs.deleteCancel')"
-                    :disabled="actionBusy"
-                    @click="cancelJobAction"
-                  >
-                    <EditorGlyph name="close" />
-                  </IconButton>
-                </template>
-                <template v-else-if="isJobOwner(job)">
-                  <IconButton
-                    v-if="!isJobArchived(job)"
-                    :title="t('jobs.archive')"
-                    :disabled="actionBusy"
-                    @click="pendingJobAction = { projectId: job.id, kind: 'archive' }"
-                  >
-                    <EditorGlyph name="archive" />
-                  </IconButton>
-                  <IconButton
-                    danger
-                    :title="t('jobs.deleteForever')"
-                    :disabled="actionBusy"
-                    @click="pendingJobAction = { projectId: job.id, kind: 'delete' }"
-                  >
-                    <EditorGlyph name="trash" />
-                  </IconButton>
-                </template>
+            <button type="button" class="viewer-card" @click="openJob(job.id)">
+              <span class="name">
+                {{ job.title }}
+                <span v-if="isJobArchived(job)" class="archived-chip">{{
+                  t('jobs.archivedBadge')
+                }}</span>
+                <span
+                  v-if="projectHasJoinUnread(job.id)"
+                  class="join-dot"
+                  :title="t('jobs.joinUnreadHint')"
+                  aria-hidden="true"
+                />
+              </span>
+              <span class="sub">
+                <template v-if="jobLangPairText(job)">{{ jobLangPairText(job) }} · </template>
+                {{ t('projects.updated', { date: formatDate(job.updatedAt) }) }}
+              </span>
+            </button>
+            <div class="item-actions">
+              <template v-if="pendingJobAction && pendingJobAction.projectId === job.id">
                 <IconButton
-                  v-else
-                  :title="t('jobs.leave')"
+                  danger
+                  :title="
+                    pendingJobAction.kind === 'leave'
+                      ? t('jobs.confirmLeave', { name: job.title })
+                      : pendingJobAction.kind === 'archive'
+                        ? t('jobs.confirmArchive', { name: job.title })
+                        : t('jobs.confirmDeleteForever', { name: job.title })
+                  "
                   :disabled="actionBusy"
-                  @click="pendingJobAction = { projectId: job.id, kind: 'leave' }"
+                  @click="confirmJobAction(job)"
                 >
-                  <EditorGlyph name="leave" />
+                  <EditorGlyph name="check" />
                 </IconButton>
-              </div>
-            </li>
-          </ul>
-          <p v-else-if="!busy" class="empty">{{ t('projects.noSharedWorks') }}</p>
-        </template>
-      </section>
-    </div>
+                <IconButton
+                  :title="t('jobs.deleteCancel')"
+                  :disabled="actionBusy"
+                  @click="cancelJobAction"
+                >
+                  <EditorGlyph name="close" />
+                </IconButton>
+              </template>
+              <template v-else-if="isJobOwner(job)">
+                <IconButton
+                  v-if="!isJobArchived(job)"
+                  :title="t('jobs.archive')"
+                  :disabled="actionBusy"
+                  @click="pendingJobAction = { projectId: job.id, kind: 'archive' }"
+                >
+                  <EditorGlyph name="archive" />
+                </IconButton>
+                <IconButton
+                  danger
+                  :title="t('jobs.deleteForever')"
+                  :disabled="actionBusy"
+                  @click="pendingJobAction = { projectId: job.id, kind: 'delete' }"
+                >
+                  <EditorGlyph name="trash" />
+                </IconButton>
+              </template>
+              <IconButton
+                v-else
+                :title="t('jobs.leave')"
+                :disabled="actionBusy"
+                @click="pendingJobAction = { projectId: job.id, kind: 'leave' }"
+              >
+                <EditorGlyph name="leave" />
+              </IconButton>
+            </div>
+          </li>
+        </ul>
+        <p v-else class="empty">{{ t('projects.empty') }}</p>
+      </template>
+    </section>
 
     <CreateSharedWorkDialog
       :open="createSharedOpen"
@@ -472,24 +344,7 @@ h1 {
   color: var(--text);
 }
 
-.block-title {
-  margin: 0;
-  color: var(--text);
-  font-size: 1.15rem;
-  display: inline-flex;
-  align-items: center;
-  gap: 0.45rem;
-}
-
-.columns {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  gap: 1.25rem 1.75rem;
-  align-items: start;
-  margin-top: 0.35rem;
-}
-
-.column {
+.projects-list {
   min-width: 0;
 }
 
@@ -524,12 +379,6 @@ button {
   text-decoration: none;
   color: var(--text);
   font-size: 0.9rem;
-}
-
-button.primary {
-  background: var(--accent-strong);
-  color: var(--accent-text);
-  border-color: var(--accent-strong);
 }
 
 .error {
@@ -648,9 +497,4 @@ button.primary {
   color: var(--text-muted);
 }
 
-@media (max-width: 860px) {
-  .columns {
-    grid-template-columns: 1fr;
-  }
-}
 </style>

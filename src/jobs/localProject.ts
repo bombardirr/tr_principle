@@ -12,7 +12,7 @@ export function projectFingerprint(record: ProjectRecord) {
 
 export function bindLocalProjectToCloudProject(
   record: ProjectRecord,
-  cloudProject: CloudProject,
+  cloudProject: CloudProject
 ): ProjectRecord {
   return {
     ...record,
@@ -28,7 +28,7 @@ export function bindLocalProjectToCloudProject(
 /** Clear meta.projectId on local projects that pointed at this cloud project. */
 export async function unlinkLocalProjectsFromCloudProject(
   projectId: string,
-  projects: ProjectMeta[],
+  projects: ProjectMeta[]
 ): Promise<void> {
   for (const meta of projects) {
     if (meta.projectId !== projectId) continue
@@ -40,5 +40,5 @@ export async function unlinkLocalProjectsFromCloudProject(
 }
 
 export function inviteLink(token: string, origin = window.location.origin): string {
-  return `${origin.replace(/\/$/, '')}/job-invite/${encodeURIComponent(token)}`
+  return `${origin.replace(/\/$/, '')}/project-invite/${encodeURIComponent(token)}`
 }

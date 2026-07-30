@@ -1,6 +1,6 @@
-const INVITE_PATH = /(?:^|\/)job-invite\/([^/?#]+)/i
+const INVITE_PATH = /(?:^|\/)(?:project|job)-invite\/([^/?#]+)/i
 
-/** Extract invite token from a full or path-only `/job-invite/…` link. Raw tokens are rejected. */
+/** Extract an invite token from current or legacy invite links. Raw tokens are rejected. */
 export function parseJobInviteToken(input: string): string | null {
   const value = input.trim()
   if (!value) return null

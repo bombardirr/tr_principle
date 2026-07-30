@@ -32,9 +32,14 @@ const router = createRouter({
       meta: { requiresAuth: true },
     },
     {
-      path: '/job-invite/:token',
-      name: 'job-invite',
+      path: '/project-invite/:token',
+      name: 'project-invite',
       component: () => import('@/pages/JobInviteAcceptPage.vue'),
+      meta: { requiresAuth: true },
+    },
+    {
+      path: '/job-invite/:token',
+      redirect: to => ({ name: 'project-invite', params: { token: to.params.token } }),
       meta: { requiresAuth: true },
     },
     {
