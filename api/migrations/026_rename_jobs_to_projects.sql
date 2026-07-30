@@ -1,0 +1,120 @@
+-- +goose Up
+ALTER TABLE jobs RENAME TO projects;
+
+ALTER TABLE job_members RENAME TO project_members;
+ALTER TABLE job_invites RENAME TO project_invites;
+ALTER TABLE job_tm_units RENAME TO project_tm_units;
+ALTER TABLE job_resource_presets RENAME TO project_resource_presets;
+ALTER TABLE job_member_resource_overrides RENAME TO project_member_resource_overrides;
+ALTER TABLE job_tm_attachments RENAME TO project_tm_attachments;
+ALTER TABLE job_originals RENAME TO project_originals;
+ALTER TABLE job_glossary_attachments RENAME TO project_glossary_attachments;
+
+ALTER TABLE project_members RENAME COLUMN job_id TO project_id;
+ALTER TABLE project_invites RENAME COLUMN job_id TO project_id;
+ALTER TABLE project_tm_units RENAME COLUMN job_id TO project_id;
+ALTER TABLE project_resource_presets RENAME COLUMN job_id TO project_id;
+ALTER TABLE project_member_resource_overrides RENAME COLUMN job_id TO project_id;
+ALTER TABLE project_tm_attachments RENAME COLUMN job_id TO project_id;
+ALTER TABLE project_originals RENAME COLUMN job_id TO project_id;
+ALTER TABLE project_glossary_attachments RENAME COLUMN job_id TO project_id;
+
+ALTER INDEX IF EXISTS jobs_archived_at RENAME TO projects_archived_at;
+ALTER INDEX IF EXISTS job_members_user RENAME TO project_members_user;
+ALTER INDEX IF EXISTS job_invites_job RENAME TO project_invites_project;
+ALTER INDEX IF EXISTS job_tm_units_job_updated RENAME TO project_tm_units_project_updated;
+ALTER INDEX IF EXISTS job_tm_units_job_source_key RENAME TO project_tm_units_project_source_key;
+ALTER INDEX IF EXISTS job_tm_attachments_job_id RENAME TO project_tm_attachments_project_id;
+ALTER INDEX IF EXISTS job_glossary_attachments_job_id RENAME TO project_glossary_attachments_project_id;
+
+ALTER INDEX IF EXISTS jobs_pkey RENAME TO projects_pkey;
+ALTER INDEX IF EXISTS job_members_pkey RENAME TO project_members_pkey;
+ALTER INDEX IF EXISTS job_invites_pkey RENAME TO project_invites_pkey;
+ALTER INDEX IF EXISTS job_tm_units_pkey RENAME TO project_tm_units_pkey;
+ALTER INDEX IF EXISTS job_resource_presets_pkey RENAME TO project_resource_presets_pkey;
+ALTER INDEX IF EXISTS job_member_resource_overrides_pkey RENAME TO project_member_resource_overrides_pkey;
+ALTER INDEX IF EXISTS job_tm_attachments_pkey RENAME TO project_tm_attachments_pkey;
+ALTER INDEX IF EXISTS job_originals_pkey RENAME TO project_originals_pkey;
+ALTER INDEX IF EXISTS job_glossary_attachments_pkey RENAME TO project_glossary_attachments_pkey;
+
+ALTER INDEX IF EXISTS job_tm_attachments_job_id_tm_base_id_key RENAME TO project_tm_attachments_project_id_tm_base_id_key;
+ALTER INDEX IF EXISTS job_glossary_attachments_job_id_glossary_base_id_key RENAME TO project_glossary_attachments_project_id_glossary_base_id_key;
+
+ALTER TABLE projects RENAME CONSTRAINT jobs_owner_user_id_fkey TO projects_owner_user_id_fkey;
+ALTER TABLE project_members RENAME CONSTRAINT job_members_job_id_fkey TO project_members_project_id_fkey;
+ALTER TABLE project_members RENAME CONSTRAINT job_members_user_id_fkey TO project_members_user_id_fkey;
+ALTER TABLE project_members RENAME CONSTRAINT job_members_role_check TO project_members_role_check;
+ALTER TABLE project_invites RENAME CONSTRAINT job_invites_job_id_fkey TO project_invites_project_id_fkey;
+ALTER TABLE project_invites RENAME CONSTRAINT job_invites_created_by_fkey TO project_invites_created_by_fkey;
+ALTER TABLE project_invites RENAME CONSTRAINT job_invites_role_check TO project_invites_role_check;
+ALTER TABLE project_invites RENAME CONSTRAINT job_invites_token_hash_key TO project_invites_token_hash_key;
+ALTER TABLE project_tm_units RENAME CONSTRAINT job_tm_units_job_id_fkey TO project_tm_units_project_id_fkey;
+ALTER TABLE project_resource_presets RENAME CONSTRAINT job_resource_presets_job_id_fkey TO project_resource_presets_project_id_fkey;
+ALTER TABLE project_member_resource_overrides RENAME CONSTRAINT job_member_resource_overrides_job_id_user_id_fkey TO project_member_resource_overrides_project_id_user_id_fkey;
+ALTER TABLE project_member_resource_overrides RENAME CONSTRAINT job_member_resource_overrides_job_id_kind_fkey TO project_member_resource_overrides_project_id_kind_fkey;
+ALTER TABLE project_tm_attachments RENAME CONSTRAINT job_tm_attachments_job_id_fkey TO project_tm_attachments_project_id_fkey;
+ALTER TABLE project_tm_attachments RENAME CONSTRAINT job_tm_attachments_created_by_fkey TO project_tm_attachments_created_by_fkey;
+ALTER TABLE project_originals RENAME CONSTRAINT job_originals_job_id_fkey TO project_originals_project_id_fkey;
+ALTER TABLE project_originals RENAME CONSTRAINT job_originals_uploaded_by_fkey TO project_originals_uploaded_by_fkey;
+ALTER TABLE project_glossary_attachments RENAME CONSTRAINT job_glossary_attachments_job_id_fkey TO project_glossary_attachments_project_id_fkey;
+ALTER TABLE project_glossary_attachments RENAME CONSTRAINT job_glossary_attachments_created_by_fkey TO project_glossary_attachments_created_by_fkey;
+
+-- +goose Down
+ALTER TABLE project_glossary_attachments RENAME CONSTRAINT project_glossary_attachments_created_by_fkey TO job_glossary_attachments_created_by_fkey;
+ALTER TABLE project_glossary_attachments RENAME CONSTRAINT project_glossary_attachments_project_id_fkey TO job_glossary_attachments_job_id_fkey;
+ALTER TABLE project_originals RENAME CONSTRAINT project_originals_uploaded_by_fkey TO job_originals_uploaded_by_fkey;
+ALTER TABLE project_originals RENAME CONSTRAINT project_originals_project_id_fkey TO job_originals_job_id_fkey;
+ALTER TABLE project_tm_attachments RENAME CONSTRAINT project_tm_attachments_created_by_fkey TO job_tm_attachments_created_by_fkey;
+ALTER TABLE project_tm_attachments RENAME CONSTRAINT project_tm_attachments_project_id_fkey TO job_tm_attachments_job_id_fkey;
+ALTER TABLE project_member_resource_overrides RENAME CONSTRAINT project_member_resource_overrides_project_id_kind_fkey TO job_member_resource_overrides_job_id_kind_fkey;
+ALTER TABLE project_member_resource_overrides RENAME CONSTRAINT project_member_resource_overrides_project_id_user_id_fkey TO job_member_resource_overrides_job_id_user_id_fkey;
+ALTER TABLE project_resource_presets RENAME CONSTRAINT project_resource_presets_project_id_fkey TO job_resource_presets_job_id_fkey;
+ALTER TABLE project_tm_units RENAME CONSTRAINT project_tm_units_project_id_fkey TO job_tm_units_job_id_fkey;
+ALTER TABLE project_invites RENAME CONSTRAINT project_invites_token_hash_key TO job_invites_token_hash_key;
+ALTER TABLE project_invites RENAME CONSTRAINT project_invites_role_check TO job_invites_role_check;
+ALTER TABLE project_invites RENAME CONSTRAINT project_invites_created_by_fkey TO job_invites_created_by_fkey;
+ALTER TABLE project_invites RENAME CONSTRAINT project_invites_project_id_fkey TO job_invites_job_id_fkey;
+ALTER TABLE project_members RENAME CONSTRAINT project_members_role_check TO job_members_role_check;
+ALTER TABLE project_members RENAME CONSTRAINT project_members_user_id_fkey TO job_members_user_id_fkey;
+ALTER TABLE project_members RENAME CONSTRAINT project_members_project_id_fkey TO job_members_job_id_fkey;
+ALTER TABLE projects RENAME CONSTRAINT projects_owner_user_id_fkey TO jobs_owner_user_id_fkey;
+
+ALTER INDEX IF EXISTS project_tm_attachments_project_id_tm_base_id_key RENAME TO job_tm_attachments_job_id_tm_base_id_key;
+ALTER INDEX IF EXISTS project_glossary_attachments_project_id_glossary_base_id_key RENAME TO job_glossary_attachments_job_id_glossary_base_id_key;
+
+ALTER INDEX IF EXISTS projects_pkey RENAME TO jobs_pkey;
+ALTER INDEX IF EXISTS project_members_pkey RENAME TO job_members_pkey;
+ALTER INDEX IF EXISTS project_invites_pkey RENAME TO job_invites_pkey;
+ALTER INDEX IF EXISTS project_tm_units_pkey RENAME TO job_tm_units_pkey;
+ALTER INDEX IF EXISTS project_resource_presets_pkey RENAME TO job_resource_presets_pkey;
+ALTER INDEX IF EXISTS project_member_resource_overrides_pkey RENAME TO job_member_resource_overrides_pkey;
+ALTER INDEX IF EXISTS project_tm_attachments_pkey RENAME TO job_tm_attachments_pkey;
+ALTER INDEX IF EXISTS project_originals_pkey RENAME TO job_originals_pkey;
+ALTER INDEX IF EXISTS project_glossary_attachments_pkey RENAME TO job_glossary_attachments_pkey;
+
+ALTER INDEX IF EXISTS projects_archived_at RENAME TO jobs_archived_at;
+ALTER INDEX IF EXISTS project_members_user RENAME TO job_members_user;
+ALTER INDEX IF EXISTS project_invites_project RENAME TO job_invites_job;
+ALTER INDEX IF EXISTS project_tm_units_project_updated RENAME TO job_tm_units_job_updated;
+ALTER INDEX IF EXISTS project_tm_units_project_source_key RENAME TO job_tm_units_job_source_key;
+ALTER INDEX IF EXISTS project_tm_attachments_project_id RENAME TO job_tm_attachments_job_id;
+ALTER INDEX IF EXISTS project_glossary_attachments_project_id RENAME TO job_glossary_attachments_job_id;
+
+ALTER TABLE project_glossary_attachments RENAME COLUMN project_id TO job_id;
+ALTER TABLE project_originals RENAME COLUMN project_id TO job_id;
+ALTER TABLE project_tm_attachments RENAME COLUMN project_id TO job_id;
+ALTER TABLE project_member_resource_overrides RENAME COLUMN project_id TO job_id;
+ALTER TABLE project_resource_presets RENAME COLUMN project_id TO job_id;
+ALTER TABLE project_tm_units RENAME COLUMN project_id TO job_id;
+ALTER TABLE project_invites RENAME COLUMN project_id TO job_id;
+ALTER TABLE project_members RENAME COLUMN project_id TO job_id;
+
+ALTER TABLE project_glossary_attachments RENAME TO job_glossary_attachments;
+ALTER TABLE project_originals RENAME TO job_originals;
+ALTER TABLE project_tm_attachments RENAME TO job_tm_attachments;
+ALTER TABLE project_member_resource_overrides RENAME TO job_member_resource_overrides;
+ALTER TABLE project_resource_presets RENAME TO job_resource_presets;
+ALTER TABLE project_tm_units RENAME TO job_tm_units;
+ALTER TABLE project_invites RENAME TO job_invites;
+ALTER TABLE project_members RENAME TO job_members;
+ALTER TABLE projects RENAME TO jobs;
