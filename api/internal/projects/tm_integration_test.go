@@ -1,4 +1,4 @@
-package jobs_test
+package projects_test
 
 import (
 	"bytes"
@@ -18,7 +18,7 @@ import (
 	"github.com/bombardirr/tr_principle/api/internal/db"
 	"github.com/bombardirr/tr_principle/api/internal/glossary"
 	"github.com/bombardirr/tr_principle/api/internal/httpapi"
-	"github.com/bombardirr/tr_principle/api/internal/jobs"
+	"github.com/bombardirr/tr_principle/api/internal/projects"
 	"github.com/bombardirr/tr_principle/api/internal/tm"
 	"github.com/google/uuid"
 )
@@ -49,7 +49,7 @@ func TestHTTPJobTMSyncACLAndAttribution(t *testing.T) {
 		&tm.Handler{Store: tm.NewStore(pool)},
 		&glossary.Handler{Store: glossary.NewStore(pool)},
 		&backups.Handler{Store: backups.NewStore(pool), BackupDir: t.TempDir()},
-		&jobs.Handler{Store: jobs.NewStore(pool)},
+		&projects.Handler{Store: projects.NewStore(pool)},
 		"http://localhost",
 		"",
 	))
@@ -59,7 +59,7 @@ func TestHTTPJobTMSyncACLAndAttribution(t *testing.T) {
 	memberToken, memberEmail := registerHTTPUserWithoutName(t, srv.URL)
 	viewerToken, _ := registerHTTPUserWithoutName(t, srv.URL)
 	jobID := uuid.New()
-	requestJSON(t, http.MethodPost, srv.URL+"/api/jobs", ownerToken, map[string]any{
+	requestJSON(t, http.MethodPost, srv.URL+"/api/projects", ownerToken, map[string]any{
 		"id":             jobID,
 		"title":          "Shared TM",
 		"sourceLang":     "en",
@@ -68,24 +68,24 @@ func TestHTTPJobTMSyncACLAndAttribution(t *testing.T) {
 		"sourceHash":     "hash",
 		"localProjectId": uuid.New(),
 	}, http.StatusCreated)
-	invite := requestJSON(t, http.MethodPost, srv.URL+"/api/jobs/"+jobID.String()+"/invites", ownerToken, map[string]any{
+	invite := requestJSON(t, http.MethodPost, srv.URL+"/api/projects/"+jobID.String()+"/invites", ownerToken, map[string]any{
 		"role": "translator",
 	}, http.StatusCreated)
 	requestJSON(t, http.MethodPost, srv.URL+"/api/job-invites/accept", memberToken, map[string]any{
 		"token": invite["token"],
 	}, http.StatusOK)
-	viewerInvite := requestJSON(t, http.MethodPost, srv.URL+"/api/jobs/"+jobID.String()+"/invites", ownerToken, map[string]any{
+	viewerInvite := requestJSON(t, http.MethodPost, srv.URL+"/api/projects/"+jobID.String()+"/invites", ownerToken, map[string]any{
 		"role": "viewer",
 	}, http.StatusCreated)
 	requestJSON(t, http.MethodPost, srv.URL+"/api/job-invites/accept", viewerToken, map[string]any{
 		"token": viewerInvite["token"],
 	}, http.StatusOK)
 
-	resources := requestJSON(t, http.MethodGet, srv.URL+"/api/jobs/"+jobID.String()+"/resources", ownerToken, nil, http.StatusOK)
+	resources := requestJSON(t, http.MethodGet, srv.URL+"/api/projects/"+jobID.String()+"/resources", ownerToken, nil, http.StatusOK)
 	if len(resources["resources"].([]any)) != 0 {
 		t.Fatalf("job TM should not be auto-seeded: %v", resources)
 	}
-	resource := requestJSON(t, http.MethodPatch, srv.URL+"/api/jobs/"+jobID.String()+"/resources/preset", ownerToken, map[string]any{
+	resource := requestJSON(t, http.MethodPatch, srv.URL+"/api/projects/"+jobID.String()+"/resources/preset", ownerToken, map[string]any{
 		"kind":     "job_tm",
 		"enabled":  true,
 		"canRead":  true,
@@ -95,7 +95,7 @@ func TestHTTPJobTMSyncACLAndAttribution(t *testing.T) {
 		t.Fatalf("owner preset response = %v", resource)
 	}
 
-	resources = requestJSON(t, http.MethodGet, srv.URL+"/api/jobs/"+jobID.String()+"/resources", memberToken, nil, http.StatusOK)
+	resources = requestJSON(t, http.MethodGet, srv.URL+"/api/projects/"+jobID.String()+"/resources", memberToken, nil, http.StatusOK)
 	resource = resources["resources"].([]any)[0].(map[string]any)
 	if resource["kind"] != "job_tm" || resource["canRead"] != true || resource["canWrite"] != true {
 		t.Fatalf("default translator resource = %v", resource)
@@ -103,32 +103,32 @@ func TestHTTPJobTMSyncACLAndAttribution(t *testing.T) {
 	if resource["canExport"] != false || resource["canClone"] != false {
 		t.Fatalf("translator export/clone defaults = %v", resource)
 	}
-	resources = requestJSON(t, http.MethodGet, srv.URL+"/api/jobs/"+jobID.String()+"/resources", viewerToken, nil, http.StatusOK)
+	resources = requestJSON(t, http.MethodGet, srv.URL+"/api/projects/"+jobID.String()+"/resources", viewerToken, nil, http.StatusOK)
 	resource = resources["resources"].([]any)[0].(map[string]any)
 	if resource["canWrite"] != false {
 		t.Fatalf("viewer should not be able to write: %v", resource)
 	}
 
-	requestJSON(t, http.MethodPatch, srv.URL+"/api/jobs/"+jobID.String()+"/resources/preset", ownerToken, map[string]any{
+	requestJSON(t, http.MethodPatch, srv.URL+"/api/projects/"+jobID.String()+"/resources/preset", ownerToken, map[string]any{
 		"kind": "job_tm", "enabled": false,
 	}, http.StatusOK)
-	requestRaw(t, http.MethodGet, srv.URL+"/api/jobs/"+jobID.String()+"/tm/sync?since=1970-01-01T00:00:00Z", memberToken, nil, http.StatusForbidden)
-	requestJSON(t, http.MethodPatch, srv.URL+"/api/jobs/"+jobID.String()+"/resources/preset", ownerToken, map[string]any{
+	requestRaw(t, http.MethodGet, srv.URL+"/api/projects/"+jobID.String()+"/tm/sync?since=1970-01-01T00:00:00Z", memberToken, nil, http.StatusForbidden)
+	requestJSON(t, http.MethodPatch, srv.URL+"/api/projects/"+jobID.String()+"/resources/preset", ownerToken, map[string]any{
 		"kind": "job_tm", "enabled": true,
 	}, http.StatusOK)
-	requestJSON(t, http.MethodPatch, srv.URL+"/api/jobs/"+jobID.String()+"/resources/me", memberToken, map[string]any{
+	requestJSON(t, http.MethodPatch, srv.URL+"/api/projects/"+jobID.String()+"/resources/me", memberToken, map[string]any{
 		"kind": "job_tm", "enabled": false,
 	}, http.StatusOK)
-	requestRaw(t, http.MethodGet, srv.URL+"/api/jobs/"+jobID.String()+"/tm/sync?since=1970-01-01T00:00:00Z", memberToken, nil, http.StatusForbidden)
-	requestRaw(t, http.MethodGet, srv.URL+"/api/jobs/"+jobID.String()+"/tm/sync?since=1970-01-01T00:00:00Z", ownerToken, nil, http.StatusOK)
+	requestRaw(t, http.MethodGet, srv.URL+"/api/projects/"+jobID.String()+"/tm/sync?since=1970-01-01T00:00:00Z", memberToken, nil, http.StatusForbidden)
+	requestRaw(t, http.MethodGet, srv.URL+"/api/projects/"+jobID.String()+"/tm/sync?since=1970-01-01T00:00:00Z", ownerToken, nil, http.StatusOK)
 
-	requestJSON(t, http.MethodPatch, srv.URL+"/api/jobs/"+jobID.String()+"/resources/me", memberToken, map[string]any{
+	requestJSON(t, http.MethodPatch, srv.URL+"/api/projects/"+jobID.String()+"/resources/me", memberToken, map[string]any{
 		"kind":     "job_tm",
 		"enabled":  true,
 		"canRead":  false,
 		"canWrite": false,
 	}, http.StatusOK)
-	requestRaw(t, http.MethodGet, srv.URL+"/api/jobs/"+jobID.String()+"/tm/sync?since=1970-01-01T00:00:00Z", memberToken, nil, http.StatusForbidden)
+	requestRaw(t, http.MethodGet, srv.URL+"/api/projects/"+jobID.String()+"/tm/sync?since=1970-01-01T00:00:00Z", memberToken, nil, http.StatusForbidden)
 
 	now := time.Now().UTC()
 	unit := map[string]any{
@@ -143,50 +143,50 @@ func TestHTTPJobTMSyncACLAndAttribution(t *testing.T) {
 		"createdBy":  memberEmail,
 		"updatedBy":  memberEmail,
 	}
-	requestRaw(t, http.MethodPost, srv.URL+"/api/jobs/"+jobID.String()+"/tm/sync", memberToken, map[string]any{
+	requestRaw(t, http.MethodPost, srv.URL+"/api/projects/"+jobID.String()+"/tm/sync", memberToken, map[string]any{
 		"units": []map[string]any{unit},
 	}, http.StatusForbidden)
 
-	requestJSON(t, http.MethodPatch, srv.URL+"/api/jobs/"+jobID.String()+"/resources/preset", ownerToken, map[string]any{
+	requestJSON(t, http.MethodPatch, srv.URL+"/api/projects/"+jobID.String()+"/resources/preset", ownerToken, map[string]any{
 		"kind":     "job_tm",
 		"canRead":  false,
 		"canWrite": false,
 	}, http.StatusOK)
-	requestJSON(t, http.MethodPatch, srv.URL+"/api/jobs/"+jobID.String()+"/resources/me", memberToken, map[string]any{
+	requestJSON(t, http.MethodPatch, srv.URL+"/api/projects/"+jobID.String()+"/resources/me", memberToken, map[string]any{
 		"kind":     "job_tm",
 		"canRead":  true,
 		"canWrite": true,
 	}, http.StatusOK)
-	requestRaw(t, http.MethodPost, srv.URL+"/api/jobs/"+jobID.String()+"/tm/sync", memberToken, map[string]any{
+	requestRaw(t, http.MethodPost, srv.URL+"/api/projects/"+jobID.String()+"/tm/sync", memberToken, map[string]any{
 		"units": []map[string]any{unit},
 	}, http.StatusForbidden)
-	requestJSON(t, http.MethodPatch, srv.URL+"/api/jobs/"+jobID.String()+"/resources/me", viewerToken, map[string]any{
+	requestJSON(t, http.MethodPatch, srv.URL+"/api/projects/"+jobID.String()+"/resources/me", viewerToken, map[string]any{
 		"kind":     "job_tm",
 		"canRead":  true,
 		"canWrite": true,
 	}, http.StatusOK)
-	requestRaw(t, http.MethodPost, srv.URL+"/api/jobs/"+jobID.String()+"/tm/sync", viewerToken, map[string]any{
+	requestRaw(t, http.MethodPost, srv.URL+"/api/projects/"+jobID.String()+"/tm/sync", viewerToken, map[string]any{
 		"units": []map[string]any{unit},
 	}, http.StatusForbidden)
-	ownerResources := requestJSON(t, http.MethodGet, srv.URL+"/api/jobs/"+jobID.String()+"/resources", ownerToken, nil, http.StatusOK)
+	ownerResources := requestJSON(t, http.MethodGet, srv.URL+"/api/projects/"+jobID.String()+"/resources", ownerToken, nil, http.StatusOK)
 	ownerResource := ownerResources["resources"].([]any)[0].(map[string]any)
 	if ownerResource["canWrite"] != false {
 		t.Fatalf("owner should respect preset write ACL: %v", ownerResource)
 	}
-	requestRaw(t, http.MethodPost, srv.URL+"/api/jobs/"+jobID.String()+"/tm/sync", ownerToken, map[string]any{
+	requestRaw(t, http.MethodPost, srv.URL+"/api/projects/"+jobID.String()+"/tm/sync", ownerToken, map[string]any{
 		"units": []map[string]any{unit},
 	}, http.StatusForbidden)
 
-	requestJSON(t, http.MethodPatch, srv.URL+"/api/jobs/"+jobID.String()+"/resources/preset", ownerToken, map[string]any{
+	requestJSON(t, http.MethodPatch, srv.URL+"/api/projects/"+jobID.String()+"/resources/preset", ownerToken, map[string]any{
 		"kind":     "job_tm",
 		"canRead":  true,
 		"canWrite": true,
 	}, http.StatusOK)
-	requestJSON(t, http.MethodPost, srv.URL+"/api/jobs/"+jobID.String()+"/tm/sync", memberToken, map[string]any{
+	requestJSON(t, http.MethodPost, srv.URL+"/api/projects/"+jobID.String()+"/tm/sync", memberToken, map[string]any{
 		"units": []map[string]any{unit},
 	}, http.StatusOK)
 
-	raw := requestRaw(t, http.MethodGet, srv.URL+"/api/jobs/"+jobID.String()+"/tm/sync?since=1970-01-01T00:00:00Z", ownerToken, nil, http.StatusOK)
+	raw := requestRaw(t, http.MethodGet, srv.URL+"/api/projects/"+jobID.String()+"/tm/sync?since=1970-01-01T00:00:00Z", ownerToken, nil, http.StatusOK)
 	if bytes.Contains(bytes.ToLower(raw), []byte(strings.ToLower(memberEmail))) || bytes.Contains(raw, []byte("@")) {
 		t.Fatalf("TM attribution leaked email: %s", raw)
 	}

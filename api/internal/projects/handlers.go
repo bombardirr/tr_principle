@@ -1,4 +1,4 @@
-package jobs
+package projects
 
 import (
 	"encoding/json"
@@ -68,12 +68,12 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusUnauthorized, "unauthorized")
 		return
 	}
-	jobs, err := h.Store.ListJobs(r.Context(), user.ID)
+	projects, err := h.Store.ListJobs(r.Context(), user.ID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "server error")
 		return
 	}
-	writeJSON(w, http.StatusOK, jobs)
+	writeJSON(w, http.StatusOK, projects)
 }
 
 func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
@@ -414,7 +414,7 @@ func (h *Handler) AcceptInvite(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "server error")
 	default:
 		writeJSON(w, http.StatusOK, struct {
-			JobID uuid.UUID `json:"jobId"`
+			JobID uuid.UUID `json:"projectId"`
 			Role  Role      `json:"role"`
 		}{JobID: jobID, Role: role})
 	}

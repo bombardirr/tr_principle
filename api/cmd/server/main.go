@@ -16,7 +16,7 @@ import (
 	"github.com/bombardirr/tr_principle/api/internal/db"
 	"github.com/bombardirr/tr_principle/api/internal/glossary"
 	"github.com/bombardirr/tr_principle/api/internal/httpapi"
-	"github.com/bombardirr/tr_principle/api/internal/jobs"
+	"github.com/bombardirr/tr_principle/api/internal/projects"
 	"github.com/bombardirr/tr_principle/api/internal/tm"
 )
 
@@ -58,10 +58,10 @@ func main() {
 		BackupDir: cfg.BackupDir,
 		Auth:      store,
 	}
-	jobsHandler := &jobs.Handler{
-		Store: jobs.NewStore(pool), TM: tmStore, Glossary: glossaryStore, BackupDir: cfg.BackupDir, Auth: store,
+	projectsHandler := &projects.Handler{
+		Store: projects.NewStore(pool), TM: tmStore, Glossary: glossaryStore, BackupDir: cfg.BackupDir, Auth: store,
 	}
-	api := httpapi.NewRouter(handler, tmHandler, glossaryHandler, backupsHandler, jobsHandler, cfg.AllowedOrigin, cfg.MetricsToken)
+	api := httpapi.NewRouter(handler, tmHandler, glossaryHandler, backupsHandler, projectsHandler, cfg.AllowedOrigin, cfg.MetricsToken)
 	handlerRoot := httpapi.MountSPA(api, cfg.PublicDir)
 
 	purgeCtx, purgeCancel := context.WithCancel(context.Background())

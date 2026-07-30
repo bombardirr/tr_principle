@@ -1,4 +1,4 @@
-package jobs
+package projects
 
 import (
 	"context"
@@ -41,10 +41,10 @@ func (s *Store) CreateInvite(
 
 	var invite Invite
 	err = s.pool.QueryRow(ctx, `
-		INSERT INTO job_invites (
-			job_id, token_hash, role, created_by, expires_at, max_uses
+		INSERT INTO project_invites (
+			project_id, token_hash, role, created_by, expires_at, max_uses
 		) VALUES ($1, $2, $3, $4, $5, $6)
-		RETURNING id, job_id, role, created_by, expires_at, max_uses,
+		RETURNING id, project_id, role, created_by, expires_at, max_uses,
 		          uses_count, revoked_at, created_at
 	`, jobID, hashToken(rawToken), role, createdBy, expiresAt, maxUses).Scan(
 		&invite.ID,
@@ -81,9 +81,9 @@ func (s *Store) AcceptInvite(
 
 	var invite Invite
 	err = tx.QueryRow(ctx, `
-		SELECT id, job_id, role, created_by, expires_at, max_uses,
+		SELECT id, project_id, role, created_by, expires_at, max_uses,
 		       uses_count, revoked_at, created_at
-		FROM job_invites
+		FROM project_invites
 		WHERE token_hash = $1
 		FOR UPDATE
 	`, hashToken(rawToken)).Scan(
@@ -115,7 +115,7 @@ func (s *Store) AcceptInvite(
 	}
 
 	var archived bool
-	err = tx.QueryRow(ctx, `SELECT archived_at IS NOT NULL FROM jobs WHERE id = $1`, invite.JobID).Scan(&archived)
+	err = tx.QueryRow(ctx, `SELECT archived_at IS NOT NULL FROM projects WHERE id = $1`, invite.JobID).Scan(&archived)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return uuid.Nil, "", ErrJobNotFound
 	}
@@ -127,20 +127,20 @@ func (s *Store) AcceptInvite(
 	}
 
 	if _, err := tx.Exec(ctx, `
-		INSERT INTO job_members (job_id, user_id, role, local_project_id)
+		INSERT INTO project_members (project_id, user_id, role, local_project_id)
 		VALUES ($1, $2, $3, $4)
-		ON CONFLICT (job_id, user_id) DO UPDATE SET
+		ON CONFLICT (project_id, user_id) DO UPDATE SET
 			role = CASE
-				WHEN job_members.role = 'owner' THEN job_members.role
+				WHEN project_members.role = 'owner' THEN project_members.role
 				ELSE EXCLUDED.role
 			END,
-			local_project_id = COALESCE(EXCLUDED.local_project_id, job_members.local_project_id)
+			local_project_id = COALESCE(EXCLUDED.local_project_id, project_members.local_project_id)
 	`, invite.JobID, userID, invite.Role, localProjectID); err != nil {
 		return uuid.Nil, "", err
 	}
 
 	if _, err := tx.Exec(ctx, `
-		UPDATE job_invites
+		UPDATE project_invites
 		SET uses_count = uses_count + 1
 		WHERE id = $1
 	`, invite.ID); err != nil {

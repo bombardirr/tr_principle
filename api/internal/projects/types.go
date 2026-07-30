@@ -1,4 +1,4 @@
-package jobs
+package projects
 
 import (
 	"time"
@@ -35,7 +35,7 @@ type Job struct {
 }
 
 type Member struct {
-	JobID          uuid.UUID  `json:"jobId"`
+	JobID          uuid.UUID  `json:"projectId"`
 	UserID         uuid.UUID  `json:"userId"`
 	Role           Role       `json:"role"`
 	LocalProjectID *uuid.UUID `json:"localProjectId,omitempty"`
@@ -48,7 +48,7 @@ type Member struct {
 
 type Invite struct {
 	ID        uuid.UUID  `json:"id"`
-	JobID     uuid.UUID  `json:"jobId"`
+	JobID     uuid.UUID  `json:"projectId"`
 	Role      Role       `json:"role"`
 	CreatedBy uuid.UUID  `json:"createdBy"`
 	ExpiresAt *time.Time `json:"expiresAt,omitempty"`

@@ -17,7 +17,7 @@ import (
 	"github.com/bombardirr/tr_principle/api/internal/db"
 	"github.com/bombardirr/tr_principle/api/internal/glossary"
 	"github.com/bombardirr/tr_principle/api/internal/httpapi"
-	"github.com/bombardirr/tr_principle/api/internal/jobs"
+	"github.com/bombardirr/tr_principle/api/internal/projects"
 	"github.com/bombardirr/tr_principle/api/internal/tm"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -50,7 +50,7 @@ func TestTMBaseCatalogAndSharedSync(t *testing.T) {
 		&tm.Handler{Store: tmStore},
 		&glossary.Handler{Store: glossary.NewStore(pool)},
 		&backups.Handler{Store: backups.NewStore(pool), BackupDir: t.TempDir()},
-		&jobs.Handler{Store: jobs.NewStore(pool), TM: tmStore},
+		&projects.Handler{Store: projects.NewStore(pool), TM: tmStore},
 		"http://localhost",
 		"",
 	))
@@ -91,18 +91,18 @@ func TestTMBaseCatalogAndSharedSync(t *testing.T) {
 	assertPulledUnit(t, pull, ownerUnitID, baseID)
 
 	jobID := uuid.New()
-	requestTMJSON(t, http.MethodPost, srv.URL+"/api/jobs", ownerToken, map[string]any{
+	requestTMJSON(t, http.MethodPost, srv.URL+"/api/projects", ownerToken, map[string]any{
 		"id": jobID, "title": "Shared TM", "sourceLang": "en", "targetLang": "ru",
 		"sourceFilename": "manual.docx", "sourceHash": "hash", "localProjectId": uuid.New(),
 	}, http.StatusCreated)
-	invite := requestTMJSON(t, http.MethodPost, srv.URL+"/api/jobs/"+jobID.String()+"/invites", ownerToken, map[string]any{
+	invite := requestTMJSON(t, http.MethodPost, srv.URL+"/api/projects/"+jobID.String()+"/invites", ownerToken, map[string]any{
 		"role": "translator",
 	}, http.StatusCreated)
 	requestTMJSON(t, http.MethodPost, srv.URL+"/api/job-invites/accept", memberToken, map[string]any{
 		"token": invite["token"],
 	}, http.StatusOK)
 
-	attachment := requestTMJSON(t, http.MethodPost, srv.URL+"/api/jobs/"+jobID.String()+"/tm-attachments", ownerToken, map[string]any{
+	attachment := requestTMJSON(t, http.MethodPost, srv.URL+"/api/projects/"+jobID.String()+"/tm-attachments", ownerToken, map[string]any{
 		"tmBaseId": baseID, "label": "Legal shared", "color": "#654321", "canRead": true, "canWrite": false,
 	}, http.StatusCreated)
 	if attachment["label"] != "Legal updated" || attachment["color"] != "#123456" {
@@ -120,7 +120,7 @@ func TestTMBaseCatalogAndSharedSync(t *testing.T) {
 		"units": []map[string]any{testUnit(uuid.NewString(), baseID, now, "Denied")},
 	}, http.StatusForbidden)
 
-	requestTMJSON(t, http.MethodPatch, srv.URL+"/api/jobs/"+jobID.String()+"/tm-attachments/"+attachmentID, ownerToken, map[string]any{
+	requestTMJSON(t, http.MethodPatch, srv.URL+"/api/projects/"+jobID.String()+"/tm-attachments/"+attachmentID, ownerToken, map[string]any{
 		"canWrite": true,
 	}, http.StatusOK)
 	memberUnitID := uuid.NewString()
@@ -132,7 +132,7 @@ func TestTMBaseCatalogAndSharedSync(t *testing.T) {
 	requestTMJSON(t, http.MethodGet, sharedURL+"&since=1970-01-01T00:00:00Z", strangerToken, nil, http.StatusForbidden)
 
 	promotedID := "promoted-" + uuid.NewString()
-	promoted := requestTMJSON(t, http.MethodPost, srv.URL+"/api/jobs/"+jobID.String()+"/tm-attachments", ownerToken, map[string]any{
+	promoted := requestTMJSON(t, http.MethodPost, srv.URL+"/api/projects/"+jobID.String()+"/tm-attachments", ownerToken, map[string]any{
 		"tmBaseId": promotedID, "label": "Promoted base", "color": "#abcdef",
 	}, http.StatusCreated)
 	if promoted["label"] != "Promoted base" || promoted["color"] != "#abcdef" {
@@ -146,22 +146,22 @@ func TestTMBaseCatalogAndSharedSync(t *testing.T) {
 		"password": "password1",
 	})
 	secondJobID := uuid.New()
-	requestTMJSON(t, http.MethodPost, srv.URL+"/api/jobs", secondOwnerToken, map[string]any{
+	requestTMJSON(t, http.MethodPost, srv.URL+"/api/projects", secondOwnerToken, map[string]any{
 		"id": secondJobID, "title": "Second shared TM", "sourceLang": "en", "targetLang": "ru",
 		"sourceFilename": "second.docx", "sourceHash": "hash-2", "localProjectId": uuid.New(),
 	}, http.StatusCreated)
-	secondInvite := requestTMJSON(t, http.MethodPost, srv.URL+"/api/jobs/"+secondJobID.String()+"/invites", secondOwnerToken, map[string]any{
+	secondInvite := requestTMJSON(t, http.MethodPost, srv.URL+"/api/projects/"+secondJobID.String()+"/invites", secondOwnerToken, map[string]any{
 		"role": "translator",
 	}, http.StatusCreated)
 	requestTMJSON(t, http.MethodPost, srv.URL+"/api/job-invites/accept", memberToken, map[string]any{
 		"token": secondInvite["token"],
 	}, http.StatusOK)
-	requestTMJSON(t, http.MethodPost, srv.URL+"/api/jobs/"+secondJobID.String()+"/tm-attachments", secondOwnerToken, map[string]any{
+	requestTMJSON(t, http.MethodPost, srv.URL+"/api/projects/"+secondJobID.String()+"/tm-attachments", secondOwnerToken, map[string]any{
 		"tmBaseId": baseID, "label": "Other owner's base", "canRead": true,
 	}, http.StatusCreated)
 	requestTMJSON(t, http.MethodGet, srv.URL+"/api/tm/bases/"+baseID+"/sync?since=1970-01-01T00:00:00Z", memberToken, nil, http.StatusBadRequest)
 
-	requestTMJSON(t, http.MethodPost, srv.URL+"/api/jobs/"+jobID.String()+"/tm-attachments", ownerToken, map[string]any{
+	requestTMJSON(t, http.MethodPost, srv.URL+"/api/projects/"+jobID.String()+"/tm-attachments", ownerToken, map[string]any{
 		"tmBaseId": "personal-tm", "label": "Personal TM",
 	}, http.StatusCreated)
 	requestTMJSON(t, http.MethodGet, srv.URL+"/api/tm/bases/personal-tm/sync?since=1970-01-01T00:00:00Z", memberToken, nil, http.StatusBadRequest)
@@ -177,7 +177,7 @@ func TestTMBaseCatalogAndSharedSync(t *testing.T) {
 	requestTMJSON(t, http.MethodDelete, srv.URL+"/api/tm/bases/"+revivedID, ownerToken, nil, http.StatusNoContent)
 	catalog = requestTMJSON(t, http.MethodGet, srv.URL+"/api/tm/bases", ownerToken, nil, http.StatusOK)
 	assertCatalogMissing(t, catalog, revivedID)
-	requestTMJSON(t, http.MethodPost, srv.URL+"/api/jobs/"+jobID.String()+"/tm-attachments", ownerToken, map[string]any{
+	requestTMJSON(t, http.MethodPost, srv.URL+"/api/projects/"+jobID.String()+"/tm-attachments", ownerToken, map[string]any{
 		"tmBaseId": revivedID, "label": "Revived label", "color": "#222222",
 	}, http.StatusCreated)
 	catalog = requestTMJSON(t, http.MethodGet, srv.URL+"/api/tm/bases", ownerToken, nil, http.StatusOK)
@@ -262,7 +262,7 @@ func assertUnitOwnedByJobOwner(t *testing.T, pool *pgxpool.Pool, unitID string, 
 	if err := pool.QueryRow(context.Background(), `
 		SELECT u.user_id = j.owner_user_id
 		FROM tm_units u
-		JOIN jobs j ON j.id = $2
+		JOIN projects j ON j.id = $2
 		WHERE u.id = $1
 	`, unitID, jobID).Scan(&owned); err != nil {
 		t.Fatal(err)

@@ -7,7 +7,7 @@ import (
 	"github.com/bombardirr/tr_principle/api/internal/auth"
 	"github.com/bombardirr/tr_principle/api/internal/backups"
 	"github.com/bombardirr/tr_principle/api/internal/glossary"
-	"github.com/bombardirr/tr_principle/api/internal/jobs"
+	"github.com/bombardirr/tr_principle/api/internal/projects"
 	"github.com/bombardirr/tr_principle/api/internal/tm"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -18,7 +18,7 @@ func NewRouter(
 	tmHandler *tm.Handler,
 	glossaryHandler *glossary.Handler,
 	backupsHandler *backups.Handler,
-	jobsHandler *jobs.Handler,
+	projectsHandler *projects.Handler,
 	allowedOrigin string,
 	metricsToken string,
 ) http.Handler {
@@ -90,38 +90,38 @@ func NewRouter(
 
 	r.Group(func(r chi.Router) {
 		r.Use(authHandler.Middleware)
-		r.Post("/api/jobs", jobsHandler.Create)
-		r.Get("/api/jobs", jobsHandler.List)
-		r.Get("/api/jobs/{id}", jobsHandler.Get)
-		r.Patch("/api/jobs/{id}", jobsHandler.Patch)
-		r.Post("/api/jobs/{id}/archive", jobsHandler.Archive)
-		r.Post("/api/jobs/{id}/leave", jobsHandler.Leave)
-		r.Put("/api/jobs/{id}/original", jobsHandler.PutOriginal)
-		r.Get("/api/jobs/{id}/original", jobsHandler.GetOriginal)
-		r.Head("/api/jobs/{id}/original", jobsHandler.GetOriginal)
-		r.Delete("/api/jobs/{id}/original", jobsHandler.DeleteOriginal)
-		r.Delete("/api/jobs/{id}", jobsHandler.Delete)
-		r.Post("/api/jobs/{id}/transfer", jobsHandler.Transfer)
-		r.Get("/api/jobs/{id}/members", jobsHandler.Members)
-		r.Patch("/api/jobs/{id}/members/me", jobsHandler.PatchMe)
-		r.Delete("/api/jobs/{id}/members/{userId}", jobsHandler.RemoveMember)
-		r.Post("/api/jobs/{id}/invites", jobsHandler.CreateInvite)
-		r.Get("/api/jobs/{id}/invites", jobsHandler.Invites)
-		r.Post("/api/jobs/{id}/invites/{inviteId}/revoke", jobsHandler.RevokeInvite)
-		r.Get("/api/jobs/{id}/tm/sync", jobsHandler.PullJobTM)
-		r.Post("/api/jobs/{id}/tm/sync", jobsHandler.PushJobTM)
-		r.Get("/api/jobs/{id}/resources", jobsHandler.Resources)
-		r.Patch("/api/jobs/{id}/resources/preset", jobsHandler.PatchResourcePreset)
-		r.Patch("/api/jobs/{id}/resources/me", jobsHandler.PatchResourceMe)
-		r.Get("/api/jobs/{id}/tm-attachments", jobsHandler.ListTMAttachments)
-		r.Post("/api/jobs/{id}/tm-attachments", jobsHandler.CreateTMAttachment)
-		r.Patch("/api/jobs/{id}/tm-attachments/{attachmentId}", jobsHandler.PatchTMAttachment)
-		r.Delete("/api/jobs/{id}/tm-attachments/{attachmentId}", jobsHandler.DeleteTMAttachment)
-		r.Get("/api/jobs/{id}/glossary-attachments", jobsHandler.ListGlossaryAttachments)
-		r.Post("/api/jobs/{id}/glossary-attachments", jobsHandler.CreateGlossaryAttachment)
-		r.Patch("/api/jobs/{id}/glossary-attachments/{attachmentId}", jobsHandler.PatchGlossaryAttachment)
-		r.Delete("/api/jobs/{id}/glossary-attachments/{attachmentId}", jobsHandler.DeleteGlossaryAttachment)
-		r.Post("/api/job-invites/accept", jobsHandler.AcceptInvite)
+		r.Post("/api/projects", projectsHandler.Create)
+		r.Get("/api/projects", projectsHandler.List)
+		r.Get("/api/projects/{id}", projectsHandler.Get)
+		r.Patch("/api/projects/{id}", projectsHandler.Patch)
+		r.Post("/api/projects/{id}/archive", projectsHandler.Archive)
+		r.Post("/api/projects/{id}/leave", projectsHandler.Leave)
+		r.Put("/api/projects/{id}/original", projectsHandler.PutOriginal)
+		r.Get("/api/projects/{id}/original", projectsHandler.GetOriginal)
+		r.Head("/api/projects/{id}/original", projectsHandler.GetOriginal)
+		r.Delete("/api/projects/{id}/original", projectsHandler.DeleteOriginal)
+		r.Delete("/api/projects/{id}", projectsHandler.Delete)
+		r.Post("/api/projects/{id}/transfer", projectsHandler.Transfer)
+		r.Get("/api/projects/{id}/members", projectsHandler.Members)
+		r.Patch("/api/projects/{id}/members/me", projectsHandler.PatchMe)
+		r.Delete("/api/projects/{id}/members/{userId}", projectsHandler.RemoveMember)
+		r.Post("/api/projects/{id}/invites", projectsHandler.CreateInvite)
+		r.Get("/api/projects/{id}/invites", projectsHandler.Invites)
+		r.Post("/api/projects/{id}/invites/{inviteId}/revoke", projectsHandler.RevokeInvite)
+		r.Get("/api/projects/{id}/tm/sync", projectsHandler.PullJobTM)
+		r.Post("/api/projects/{id}/tm/sync", projectsHandler.PushJobTM)
+		r.Get("/api/projects/{id}/resources", projectsHandler.Resources)
+		r.Patch("/api/projects/{id}/resources/preset", projectsHandler.PatchResourcePreset)
+		r.Patch("/api/projects/{id}/resources/me", projectsHandler.PatchResourceMe)
+		r.Get("/api/projects/{id}/tm-attachments", projectsHandler.ListTMAttachments)
+		r.Post("/api/projects/{id}/tm-attachments", projectsHandler.CreateTMAttachment)
+		r.Patch("/api/projects/{id}/tm-attachments/{attachmentId}", projectsHandler.PatchTMAttachment)
+		r.Delete("/api/projects/{id}/tm-attachments/{attachmentId}", projectsHandler.DeleteTMAttachment)
+		r.Get("/api/projects/{id}/glossary-attachments", projectsHandler.ListGlossaryAttachments)
+		r.Post("/api/projects/{id}/glossary-attachments", projectsHandler.CreateGlossaryAttachment)
+		r.Patch("/api/projects/{id}/glossary-attachments/{attachmentId}", projectsHandler.PatchGlossaryAttachment)
+		r.Delete("/api/projects/{id}/glossary-attachments/{attachmentId}", projectsHandler.DeleteGlossaryAttachment)
+		r.Post("/api/job-invites/accept", projectsHandler.AcceptInvite)
 	})
 
 	return r

@@ -1,4 +1,4 @@
-package jobs
+package projects
 
 import (
 	"context"
@@ -53,10 +53,10 @@ func (s *Store) ListJobs(ctx context.Context, userID uuid.UUID) ([]Job, error) {
 		       COALESCE(j.source_lang, ''), COALESCE(j.target_lang, ''),
 		       COALESCE(j.source_filename, ''), COALESCE(j.source_hash, ''),
 		       j.created_at, j.updated_at, j.archived_at,
-		       EXISTS(SELECT 1 FROM job_originals o WHERE o.job_id = j.id) AS has_original,
-		       COALESCE((SELECT o.filename FROM job_originals o WHERE o.job_id = j.id), '') AS original_filename
-		FROM jobs j
-		JOIN job_members m ON m.job_id = j.id
+		       EXISTS(SELECT 1 FROM project_originals o WHERE o.project_id = j.id) AS has_original,
+		       COALESCE((SELECT o.filename FROM project_originals o WHERE o.project_id = j.id), '') AS original_filename
+		FROM projects j
+		JOIN project_members m ON m.project_id = j.id
 		WHERE m.user_id = $1
 		ORDER BY j.archived_at NULLS FIRST, j.updated_at DESC, j.id
 	`, userID)
@@ -82,10 +82,10 @@ func (s *Store) GetJob(ctx context.Context, jobID, userID uuid.UUID) (Job, error
 		       COALESCE(j.source_lang, ''), COALESCE(j.target_lang, ''),
 		       COALESCE(j.source_filename, ''), COALESCE(j.source_hash, ''),
 		       j.created_at, j.updated_at, j.archived_at,
-		       EXISTS(SELECT 1 FROM job_originals o WHERE o.job_id = j.id) AS has_original,
-		       COALESCE((SELECT o.filename FROM job_originals o WHERE o.job_id = j.id), '') AS original_filename
-		FROM jobs j
-		JOIN job_members m ON m.job_id = j.id
+		       EXISTS(SELECT 1 FROM project_originals o WHERE o.project_id = j.id) AS has_original,
+		       COALESCE((SELECT o.filename FROM project_originals o WHERE o.project_id = j.id), '') AS original_filename
+		FROM projects j
+		JOIN project_members m ON m.project_id = j.id
 		WHERE j.id = $1 AND m.user_id = $2
 	`, jobID, userID))
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -96,7 +96,7 @@ func (s *Store) GetJob(ctx context.Context, jobID, userID uuid.UUID) (Job, error
 
 func (s *Store) ArchiveJob(ctx context.Context, jobID, ownerID uuid.UUID) (Job, error) {
 	job, err := scanJob(s.pool.QueryRow(ctx, `
-		UPDATE jobs
+		UPDATE projects
 		SET archived_at = COALESCE(archived_at, now()),
 		    updated_at = now()
 		WHERE id = $1 AND owner_user_id = $2
@@ -104,8 +104,8 @@ func (s *Store) ArchiveJob(ctx context.Context, jobID, ownerID uuid.UUID) (Job, 
 		          COALESCE(source_lang, ''), COALESCE(target_lang, ''),
 		          COALESCE(source_filename, ''), COALESCE(source_hash, ''),
 		          created_at, updated_at, archived_at,
-		          EXISTS(SELECT 1 FROM job_originals o WHERE o.job_id = jobs.id) AS has_original,
-		          COALESCE((SELECT o.filename FROM job_originals o WHERE o.job_id = jobs.id), '') AS original_filename
+		          EXISTS(SELECT 1 FROM project_originals o WHERE o.project_id = projects.id) AS has_original,
+		          COALESCE((SELECT o.filename FROM project_originals o WHERE o.project_id = projects.id), '') AS original_filename
 	`, jobID, ownerID))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Job{}, ErrJobNotFound
@@ -116,7 +116,7 @@ func (s *Store) ArchiveJob(ctx context.Context, jobID, ownerID uuid.UUID) (Job, 
 func (s *Store) LeaveJob(ctx context.Context, jobID, userID uuid.UUID) error {
 	var role Role
 	err := s.pool.QueryRow(ctx, `
-		SELECT role FROM job_members WHERE job_id = $1 AND user_id = $2
+		SELECT role FROM project_members WHERE project_id = $1 AND user_id = $2
 	`, jobID, userID).Scan(&role)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ErrMemberAbsent
@@ -128,7 +128,7 @@ func (s *Store) LeaveJob(ctx context.Context, jobID, userID uuid.UUID) error {
 		return ErrOwnerLeave
 	}
 	tag, err := s.pool.Exec(ctx, `
-		DELETE FROM job_members WHERE job_id = $1 AND user_id = $2 AND role <> 'owner'
+		DELETE FROM project_members WHERE project_id = $1 AND user_id = $2 AND role <> 'owner'
 	`, jobID, userID)
 	if err != nil {
 		return err
@@ -141,7 +141,7 @@ func (s *Store) LeaveJob(ctx context.Context, jobID, userID uuid.UUID) error {
 
 func (s *Store) DeleteJob(ctx context.Context, jobID, ownerID uuid.UUID) error {
 	tag, err := s.pool.Exec(ctx, `
-		DELETE FROM jobs WHERE id = $1 AND owner_user_id = $2
+		DELETE FROM projects WHERE id = $1 AND owner_user_id = $2
 	`, jobID, ownerID)
 	if err != nil {
 		return err
@@ -155,7 +155,7 @@ func (s *Store) DeleteJob(ctx context.Context, jobID, ownerID uuid.UUID) error {
 func (s *Store) IsArchived(ctx context.Context, jobID uuid.UUID) (bool, error) {
 	var archived bool
 	err := s.pool.QueryRow(ctx, `
-		SELECT archived_at IS NOT NULL FROM jobs WHERE id = $1
+		SELECT archived_at IS NOT NULL FROM projects WHERE id = $1
 	`, jobID).Scan(&archived)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return false, ErrJobNotFound
@@ -177,7 +177,7 @@ func (s *Store) UpdateJob(ctx context.Context, jobID, ownerID uuid.UUID, patch J
 	var currentSourceHash string
 	if err := tx.QueryRow(ctx, `
 		SELECT COALESCE(source_hash, '')
-		FROM jobs
+		FROM projects
 		WHERE id = $1 AND owner_user_id = $2
 		FOR UPDATE
 	`, jobID, ownerID).Scan(&currentSourceHash); errors.Is(err, pgx.ErrNoRows) {
@@ -187,7 +187,7 @@ func (s *Store) UpdateJob(ctx context.Context, jobID, ownerID uuid.UUID, patch J
 	}
 
 	if _, err := tx.Exec(ctx, `
-		UPDATE jobs
+		UPDATE projects
 		SET title = COALESCE($3, title),
 		    source_lang = COALESCE($4, source_lang),
 		    target_lang = COALESCE($5, target_lang),
@@ -203,7 +203,7 @@ func (s *Store) UpdateJob(ctx context.Context, jobID, ownerID uuid.UUID, patch J
 	if patch.SourceHash != nil &&
 		strings.TrimSpace(*patch.SourceHash) != "" &&
 		*patch.SourceHash != currentSourceHash {
-		tag, err := tx.Exec(ctx, `DELETE FROM job_originals WHERE job_id = $1`, jobID)
+		tag, err := tx.Exec(ctx, `DELETE FROM project_originals WHERE project_id = $1`, jobID)
 		if err != nil {
 			return Job{}, false, err
 		}
@@ -215,9 +215,9 @@ func (s *Store) UpdateJob(ctx context.Context, jobID, ownerID uuid.UUID, patch J
 		       COALESCE(j.source_lang, ''), COALESCE(j.target_lang, ''),
 		       COALESCE(j.source_filename, ''), COALESCE(j.source_hash, ''),
 		       j.created_at, j.updated_at, j.archived_at,
-		       EXISTS(SELECT 1 FROM job_originals o WHERE o.job_id = j.id) AS has_original,
-		       COALESCE((SELECT o.filename FROM job_originals o WHERE o.job_id = j.id), '') AS original_filename
-		FROM jobs j
+		       EXISTS(SELECT 1 FROM project_originals o WHERE o.project_id = j.id) AS has_original,
+		       COALESCE((SELECT o.filename FROM project_originals o WHERE o.project_id = j.id), '') AS original_filename
+		FROM projects j
 		WHERE j.id = $1
 	`, jobID))
 	if err != nil {
@@ -234,12 +234,12 @@ func (s *Store) ListMembers(ctx context.Context, jobID, requesterID uuid.UUID) (
 		SELECT m.user_id, COALESCE(u.display_name, ''), m.role, m.part_done,
 		       m.progress_done, m.progress_total, m.progress_tm, m.last_active_at,
 		       m.local_project_id, m.joined_at
-		FROM job_members m
+		FROM project_members m
 		JOIN users u ON u.id = m.user_id
-		WHERE m.job_id = $1
+		WHERE m.project_id = $1
 		  AND EXISTS (
-			SELECT 1 FROM job_members requester
-			WHERE requester.job_id = $1 AND requester.user_id = $2
+			SELECT 1 FROM project_members requester
+			WHERE requester.project_id = $1 AND requester.user_id = $2
 		  )
 		ORDER BY m.joined_at, m.user_id
 	`, jobID, requesterID)
@@ -285,7 +285,7 @@ func (s *Store) PatchMemberMe(ctx context.Context, jobID, userID uuid.UUID, patc
 
 	var member RosterMember
 	err := s.pool.QueryRow(ctx, `
-		UPDATE job_members m
+		UPDATE project_members m
 		SET part_done = COALESCE($3, m.part_done),
 		    progress_done = COALESCE($4, m.progress_done),
 		    progress_total = COALESCE($5, m.progress_total),
@@ -293,7 +293,7 @@ func (s *Store) PatchMemberMe(ctx context.Context, jobID, userID uuid.UUID, patc
 		    local_project_id = COALESCE($7, m.local_project_id),
 		    last_active_at = now()
 		FROM users u
-		WHERE m.job_id = $1 AND m.user_id = $2 AND u.id = m.user_id
+		WHERE m.project_id = $1 AND m.user_id = $2 AND u.id = m.user_id
 		RETURNING m.user_id, COALESCE(u.display_name, ''), m.role, m.part_done,
 		          m.progress_done, m.progress_total, m.progress_tm, m.last_active_at,
 		          m.local_project_id, m.joined_at
@@ -317,12 +317,12 @@ func (s *Store) PatchMemberMe(ctx context.Context, jobID, userID uuid.UUID, patc
 
 func (s *Store) RemoveMember(ctx context.Context, jobID, ownerID, memberID uuid.UUID) error {
 	tag, err := s.pool.Exec(ctx, `
-		DELETE FROM job_members m
-		USING jobs j
-		WHERE m.job_id = $1
+		DELETE FROM project_members m
+		USING projects j
+		WHERE m.project_id = $1
 		  AND m.user_id = $3
 		  AND m.role <> 'owner'
-		  AND j.id = m.job_id
+		  AND j.id = m.project_id
 		  AND j.owner_user_id = $2
 	`, jobID, ownerID, memberID)
 	if err != nil {
@@ -331,7 +331,7 @@ func (s *Store) RemoveMember(ctx context.Context, jobID, ownerID, memberID uuid.
 	if tag.RowsAffected() == 0 {
 		var role Role
 		err := s.pool.QueryRow(ctx, `
-			SELECT role FROM job_members WHERE job_id = $1 AND user_id = $2
+			SELECT role FROM project_members WHERE project_id = $1 AND user_id = $2
 		`, jobID, memberID).Scan(&role)
 		if err == nil && role == RoleOwner {
 			return ErrOwnerMember
@@ -343,11 +343,11 @@ func (s *Store) RemoveMember(ctx context.Context, jobID, ownerID, memberID uuid.
 
 func (s *Store) ListInvites(ctx context.Context, jobID, ownerID uuid.UUID) ([]Invite, error) {
 	rows, err := s.pool.Query(ctx, `
-		SELECT i.id, i.job_id, i.role, i.created_by, i.expires_at,
+		SELECT i.id, i.project_id, i.role, i.created_by, i.expires_at,
 		       i.max_uses, i.uses_count, i.revoked_at, i.created_at
-		FROM job_invites i
-		JOIN jobs j ON j.id = i.job_id
-		WHERE i.job_id = $1 AND j.owner_user_id = $2
+		FROM project_invites i
+		JOIN projects j ON j.id = i.project_id
+		WHERE i.project_id = $1 AND j.owner_user_id = $2
 		ORDER BY i.created_at DESC, i.id
 	`, jobID, ownerID)
 	if err != nil {
@@ -378,11 +378,11 @@ func (s *Store) ListInvites(ctx context.Context, jobID, ownerID uuid.UUID) ([]In
 
 func (s *Store) RevokeInvite(ctx context.Context, jobID, inviteID, ownerID uuid.UUID) error {
 	tag, err := s.pool.Exec(ctx, `
-		UPDATE job_invites i
+		UPDATE project_invites i
 		SET revoked_at = COALESCE(i.revoked_at, now())
-		FROM jobs j
-		WHERE i.id = $1 AND i.job_id = $2
-		  AND j.id = i.job_id AND j.owner_user_id = $3
+		FROM projects j
+		WHERE i.id = $1 AND i.project_id = $2
+		  AND j.id = i.project_id AND j.owner_user_id = $3
 	`, inviteID, jobID, ownerID)
 	if err != nil {
 		return err
@@ -406,7 +406,7 @@ func (s *Store) TransferOwner(ctx context.Context, jobID, currentOwnerID, nextOw
 
 	var actualOwner uuid.UUID
 	if err := tx.QueryRow(ctx, `
-		SELECT owner_user_id FROM jobs WHERE id = $1 FOR UPDATE
+		SELECT owner_user_id FROM projects WHERE id = $1 FOR UPDATE
 	`, jobID).Scan(&actualOwner); errors.Is(err, pgx.ErrNoRows) {
 		return Job{}, ErrJobNotFound
 	} else if err != nil {
@@ -417,8 +417,8 @@ func (s *Store) TransferOwner(ctx context.Context, jobID, currentOwnerID, nextOw
 	}
 
 	tag, err := tx.Exec(ctx, `
-		UPDATE job_members SET role = 'owner'
-		WHERE job_id = $1 AND user_id = $2
+		UPDATE project_members SET role = 'owner'
+		WHERE project_id = $1 AND user_id = $2
 	`, jobID, nextOwnerID)
 	if err != nil {
 		return Job{}, err
@@ -427,22 +427,22 @@ func (s *Store) TransferOwner(ctx context.Context, jobID, currentOwnerID, nextOw
 		return Job{}, ErrMemberAbsent
 	}
 	if _, err := tx.Exec(ctx, `
-		UPDATE job_members SET role = 'translator'
-		WHERE job_id = $1 AND user_id = $2
+		UPDATE project_members SET role = 'translator'
+		WHERE project_id = $1 AND user_id = $2
 	`, jobID, currentOwnerID); err != nil {
 		return Job{}, err
 	}
 
 	job, err := scanJob(tx.QueryRow(ctx, `
-		UPDATE jobs
+		UPDATE projects
 		SET owner_user_id = $2, updated_at = now()
 		WHERE id = $1
 		RETURNING id, owner_user_id, title,
 		          COALESCE(source_lang, ''), COALESCE(target_lang, ''),
 		          COALESCE(source_filename, ''), COALESCE(source_hash, ''),
 		          created_at, updated_at, archived_at,
-		          EXISTS(SELECT 1 FROM job_originals o WHERE o.job_id = jobs.id) AS has_original,
-		          COALESCE((SELECT o.filename FROM job_originals o WHERE o.job_id = jobs.id), '') AS original_filename
+		          EXISTS(SELECT 1 FROM project_originals o WHERE o.project_id = projects.id) AS has_original,
+		          COALESCE((SELECT o.filename FROM project_originals o WHERE o.project_id = projects.id), '') AS original_filename
 	`, jobID, nextOwnerID))
 	if err != nil {
 		return Job{}, err

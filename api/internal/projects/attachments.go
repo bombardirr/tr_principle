@@ -1,4 +1,4 @@
-package jobs
+package projects
 
 import (
 	"context"
@@ -19,7 +19,7 @@ var (
 
 type Attachment struct {
 	ID        uuid.UUID `json:"id"`
-	JobID     uuid.UUID `json:"jobId"`
+	JobID     uuid.UUID `json:"projectId"`
 	TmBaseID  string    `json:"tmBaseId"`
 	Label     string    `json:"label"`
 	Color     string    `json:"color"`
@@ -55,19 +55,19 @@ func (s *Store) ListAttachments(
 	}
 
 	rows, err := s.pool.Query(ctx, `
-		SELECT a.id, a.job_id, a.tm_base_id,
+		SELECT a.id, a.project_id, a.tm_base_id,
 		       COALESCE(b.label, a.tm_base_id),
 		       COALESCE(b.color, '#5b9fd4'),
 		       j.owner_user_id,
 		       a.can_read, a.can_write, a.can_export, a.can_clone,
 		       a.created_by, a.created_at, a.updated_at
-		FROM job_tm_attachments a
-		JOIN jobs j ON j.id = a.job_id
+		FROM project_tm_attachments a
+		JOIN projects j ON j.id = a.project_id
 		LEFT JOIN tm_bases b
 		  ON b.owner_id = j.owner_user_id
 		 AND b.id = a.tm_base_id
 		 AND b.deleted_at IS NULL
-		WHERE a.job_id = $1
+		WHERE a.project_id = $1
 		ORDER BY a.created_at ASC, a.id ASC
 	`, jobID)
 	if err != nil {
@@ -110,10 +110,10 @@ func (s *Store) CreateAttachment(
 
 	var attachment Attachment
 	err = s.pool.QueryRow(ctx, `
-		INSERT INTO job_tm_attachments (
-			job_id, tm_base_id, can_read, can_write, can_export, can_clone, created_by
+		INSERT INTO project_tm_attachments (
+			project_id, tm_base_id, can_read, can_write, can_export, can_clone, created_by
 		) VALUES ($1, $2, $3, $4, $5, $6, $7)
-		RETURNING id, job_id, tm_base_id,
+		RETURNING id, project_id, tm_base_id,
 		          COALESCE((SELECT label FROM tm_bases WHERE owner_id = $7 AND id = tm_base_id AND deleted_at IS NULL), tm_base_id),
 		          COALESCE((SELECT color FROM tm_bases WHERE owner_id = $7 AND id = tm_base_id AND deleted_at IS NULL), '#5b9fd4'),
 		          $7::uuid,
@@ -160,27 +160,27 @@ func (s *Store) UpdateAttachment(
 
 	var attachment Attachment
 	err = s.pool.QueryRow(ctx, `
-		UPDATE job_tm_attachments SET
+		UPDATE project_tm_attachments SET
 			can_read = COALESCE($3, can_read),
 			can_write = COALESCE($4, can_write),
 			can_export = COALESCE($5, can_export),
 			can_clone = COALESCE($6, can_clone),
 			updated_at = now()
-		WHERE id = $1 AND job_id = $2
-		RETURNING id, job_id, tm_base_id,
+		WHERE id = $1 AND project_id = $2
+		RETURNING id, project_id, tm_base_id,
 		          COALESCE((
 		            SELECT b.label
-		            FROM jobs j
+		            FROM projects j
 		            JOIN tm_bases b ON b.owner_id = j.owner_user_id
-		            WHERE j.id = job_id AND b.id = tm_base_id AND b.deleted_at IS NULL
+		            WHERE j.id = project_id AND b.id = tm_base_id AND b.deleted_at IS NULL
 		          ), tm_base_id),
 		          COALESCE((
 		            SELECT b.color
-		            FROM jobs j
+		            FROM projects j
 		            JOIN tm_bases b ON b.owner_id = j.owner_user_id
-		            WHERE j.id = job_id AND b.id = tm_base_id AND b.deleted_at IS NULL
+		            WHERE j.id = project_id AND b.id = tm_base_id AND b.deleted_at IS NULL
 		          ), '#5b9fd4'),
-		          (SELECT owner_user_id FROM jobs WHERE id = job_id),
+		          (SELECT owner_user_id FROM projects WHERE id = project_id),
 		          can_read, can_write, can_export, can_clone,
 		          created_by, created_at, updated_at
 	`, attachmentID, jobID, patch.CanRead, patch.CanWrite, patch.CanExport, patch.CanClone).Scan(
@@ -216,8 +216,8 @@ func (s *Store) DeleteAttachment(
 	}
 
 	tag, err := s.pool.Exec(ctx, `
-		DELETE FROM job_tm_attachments
-		WHERE id = $1 AND job_id = $2
+		DELETE FROM project_tm_attachments
+		WHERE id = $1 AND project_id = $2
 	`, attachmentID, jobID)
 	if err != nil {
 		return err

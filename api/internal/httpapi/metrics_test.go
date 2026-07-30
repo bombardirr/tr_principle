@@ -9,8 +9,8 @@ import (
 )
 
 func TestPathGroup_ReplacesUUIDs(t *testing.T) {
-	got := httpapi.PathGroup("/api/jobs/550e8400-e29b-41d4-a716-446655440000/members")
-	if got != "/api/jobs/*/members" {
+	got := httpapi.PathGroup("/api/projects/550e8400-e29b-41d4-a716-446655440000/members")
+	if got != "/api/projects/*/members" {
 		t.Fatalf("got %q", got)
 	}
 	if httpapi.PathGroup("/api/health") != "/api/health" {

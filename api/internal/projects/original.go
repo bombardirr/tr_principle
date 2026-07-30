@@ -1,4 +1,4 @@
-package jobs
+package projects
 
 import (
 	"context"
@@ -18,9 +18,9 @@ type OriginalMeta struct {
 
 func (s *Store) UpsertOriginalMeta(ctx context.Context, jobID uuid.UUID, meta OriginalMeta) error {
 	_, err := s.pool.Exec(ctx, `
-		INSERT INTO job_originals (job_id, filename, content_hash, size_bytes, storage_path, uploaded_by, uploaded_at)
+		INSERT INTO project_originals (project_id, filename, content_hash, size_bytes, storage_path, uploaded_by, uploaded_at)
 		VALUES ($1, $2, $3, $4, $5, $6, $7)
-		ON CONFLICT (job_id) DO UPDATE SET
+		ON CONFLICT (project_id) DO UPDATE SET
 		  filename = EXCLUDED.filename,
 		  content_hash = EXCLUDED.content_hash,
 		  size_bytes = EXCLUDED.size_bytes,
@@ -35,8 +35,8 @@ func (s *Store) GetOriginalMeta(ctx context.Context, jobID uuid.UUID) (OriginalM
 	var meta OriginalMeta
 	err := s.pool.QueryRow(ctx, `
 		SELECT filename, content_hash, size_bytes, storage_path, uploaded_by, uploaded_at
-		FROM job_originals
-		WHERE job_id = $1
+		FROM project_originals
+		WHERE project_id = $1
 	`, jobID).Scan(
 		&meta.Filename,
 		&meta.ContentHash,
@@ -50,7 +50,7 @@ func (s *Store) GetOriginalMeta(ctx context.Context, jobID uuid.UUID) (OriginalM
 
 func (s *Store) DeleteOriginalMeta(ctx context.Context, jobID uuid.UUID) error {
 	_, err := s.pool.Exec(ctx, `
-		DELETE FROM job_originals WHERE job_id = $1
+		DELETE FROM project_originals WHERE project_id = $1
 	`, jobID)
 	return err
 }
@@ -58,7 +58,7 @@ func (s *Store) DeleteOriginalMeta(ctx context.Context, jobID uuid.UUID) error {
 func (s *Store) GetJobSourceHash(ctx context.Context, jobID uuid.UUID) (string, error) {
 	var hash string
 	err := s.pool.QueryRow(ctx, `
-		SELECT COALESCE(source_hash, '') FROM jobs WHERE id = $1
+		SELECT COALESCE(source_hash, '') FROM projects WHERE id = $1
 	`, jobID).Scan(&hash)
 	return hash, err
 }

@@ -1,4 +1,4 @@
-package jobs
+package projects
 
 import (
 	"context"
@@ -13,7 +13,7 @@ import (
 
 type GlossaryAttachment struct {
 	ID             uuid.UUID `json:"id"`
-	JobID          uuid.UUID `json:"jobId"`
+	JobID          uuid.UUID `json:"projectId"`
 	GlossaryBaseID string    `json:"glossaryBaseId"`
 	Label          string    `json:"label"`
 	Color          string    `json:"color"`
@@ -48,16 +48,16 @@ func (s *Store) ListGlossaryAttachments(
 		return nil, err
 	}
 	rows, err := s.pool.Query(ctx, `
-		SELECT a.id, a.job_id, a.glossary_base_id, b.label, b.color, j.owner_user_id,
+		SELECT a.id, a.project_id, a.glossary_base_id, b.label, b.color, j.owner_user_id,
 		       a.can_read, a.can_write, a.can_export, a.can_clone,
 		       a.created_by, a.created_at, a.updated_at
-		FROM job_glossary_attachments a
-		JOIN jobs j ON j.id = a.job_id
+		FROM project_glossary_attachments a
+		JOIN projects j ON j.id = a.project_id
 		JOIN glossary_bases b
 		  ON b.owner_id = j.owner_user_id
 		 AND b.id = a.glossary_base_id
 		 AND b.deleted_at IS NULL
-		WHERE a.job_id = $1
+		WHERE a.project_id = $1
 		ORDER BY a.created_at ASC, a.id ASC
 	`, jobID)
 	if err != nil {
@@ -94,16 +94,16 @@ func (s *Store) CreateGlossaryAttachment(
 	var attachment GlossaryAttachment
 	err = s.pool.QueryRow(ctx, `
 		WITH attachment AS (
-			INSERT INTO job_glossary_attachments (
-				job_id, glossary_base_id, can_read, can_write, can_export, can_clone, created_by
+			INSERT INTO project_glossary_attachments (
+				project_id, glossary_base_id, can_read, can_write, can_export, can_clone, created_by
 			) VALUES ($1, $2, $3, $4, $5, $6, $7)
 			RETURNING *
 		)
-		SELECT a.id, a.job_id, a.glossary_base_id, b.label, b.color, j.owner_user_id,
+		SELECT a.id, a.project_id, a.glossary_base_id, b.label, b.color, j.owner_user_id,
 		       a.can_read, a.can_write, a.can_export, a.can_clone,
 		       a.created_by, a.created_at, a.updated_at
 		FROM attachment a
-		JOIN jobs j ON j.id = a.job_id
+		JOIN projects j ON j.id = a.project_id
 		JOIN glossary_bases b
 		  ON b.owner_id = j.owner_user_id
 		 AND b.id = a.glossary_base_id
@@ -137,20 +137,20 @@ func (s *Store) UpdateGlossaryAttachment(
 	var attachment GlossaryAttachment
 	err = s.pool.QueryRow(ctx, `
 		WITH attachment AS (
-			UPDATE job_glossary_attachments SET
+			UPDATE project_glossary_attachments SET
 				can_read = COALESCE($3, can_read),
 				can_write = COALESCE($4, can_write),
 				can_export = COALESCE($5, can_export),
 				can_clone = COALESCE($6, can_clone),
 				updated_at = now()
-			WHERE id = $1 AND job_id = $2
+			WHERE id = $1 AND project_id = $2
 			RETURNING *
 		)
-		SELECT a.id, a.job_id, a.glossary_base_id, b.label, b.color, j.owner_user_id,
+		SELECT a.id, a.project_id, a.glossary_base_id, b.label, b.color, j.owner_user_id,
 		       a.can_read, a.can_write, a.can_export, a.can_clone,
 		       a.created_by, a.created_at, a.updated_at
 		FROM attachment a
-		JOIN jobs j ON j.id = a.job_id
+		JOIN projects j ON j.id = a.project_id
 		JOIN glossary_bases b
 		  ON b.owner_id = j.owner_user_id
 		 AND b.id = a.glossary_base_id
@@ -178,7 +178,7 @@ func (s *Store) DeleteGlossaryAttachment(
 		return ErrNotMember
 	}
 	tag, err := s.pool.Exec(ctx, `
-		DELETE FROM job_glossary_attachments WHERE id = $1 AND job_id = $2
+		DELETE FROM project_glossary_attachments WHERE id = $1 AND project_id = $2
 	`, attachmentID, jobID)
 	if err != nil {
 		return err

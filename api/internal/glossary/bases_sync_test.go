@@ -17,7 +17,7 @@ import (
 	"github.com/bombardirr/tr_principle/api/internal/db"
 	"github.com/bombardirr/tr_principle/api/internal/glossary"
 	"github.com/bombardirr/tr_principle/api/internal/httpapi"
-	"github.com/bombardirr/tr_principle/api/internal/jobs"
+	"github.com/bombardirr/tr_principle/api/internal/projects"
 	"github.com/bombardirr/tr_principle/api/internal/tm"
 	"github.com/google/uuid"
 )
@@ -48,7 +48,7 @@ func TestGlossaryBaseCatalogAndOwnerSync(t *testing.T) {
 		&tm.Handler{Store: tm.NewStore(pool)},
 		&glossary.Handler{Store: glossary.NewStore(pool)},
 		&backups.Handler{Store: backups.NewStore(pool), BackupDir: t.TempDir()},
-		&jobs.Handler{Store: jobs.NewStore(pool)},
+		&projects.Handler{Store: projects.NewStore(pool)},
 		"http://localhost",
 		"",
 	))
@@ -112,7 +112,7 @@ func TestGlossaryJobMemberCannotSyncDeletedBase(t *testing.T) {
 		&tm.Handler{Store: tm.NewStore(pool)},
 		&glossary.Handler{Store: glossary.NewStore(pool)},
 		&backups.Handler{Store: backups.NewStore(pool), BackupDir: t.TempDir()},
-		&jobs.Handler{Store: jobs.NewStore(pool)},
+		&projects.Handler{Store: projects.NewStore(pool)},
 		"http://localhost",
 		"",
 	))
@@ -128,11 +128,11 @@ func TestGlossaryJobMemberCannotSyncDeletedBase(t *testing.T) {
 	})
 
 	jobID := uuid.New()
-	glossaryRequest(t, http.MethodPost, srv.URL+"/api/jobs", ownerToken, map[string]any{
+	glossaryRequest(t, http.MethodPost, srv.URL+"/api/projects", ownerToken, map[string]any{
 		"id": jobID, "title": "Glossary ACL", "sourceLang": "en", "targetLang": "ru",
 		"sourceFilename": "manual.docx", "sourceHash": "hash", "localProjectId": uuid.New(),
 	}, http.StatusCreated)
-	invite := glossaryRequest(t, http.MethodPost, srv.URL+"/api/jobs/"+jobID.String()+"/invites", ownerToken, map[string]any{
+	invite := glossaryRequest(t, http.MethodPost, srv.URL+"/api/projects/"+jobID.String()+"/invites", ownerToken, map[string]any{
 		"role": "translator",
 	}, http.StatusCreated)
 	glossaryRequest(t, http.MethodPost, srv.URL+"/api/job-invites/accept", memberToken, map[string]any{
@@ -148,7 +148,7 @@ func TestGlossaryJobMemberCannotSyncDeletedBase(t *testing.T) {
 		"id": baseID, "label": "Legal", "color": "#123456",
 	}, http.StatusCreated)
 	if _, err := pool.Exec(ctx, `
-		INSERT INTO job_glossary_attachments (job_id, glossary_base_id, created_by)
+		INSERT INTO project_glossary_attachments (project_id, glossary_base_id, created_by)
 		VALUES ($1, $2, $3)`, jobID, baseID, ownerID); err != nil {
 		t.Fatal(err)
 	}

@@ -37,9 +37,9 @@ func (s *Store) ResolveBaseAccess(
 		SELECT j.owner_user_id,
 		       bool_or(a.can_read),
 		       bool_or(a.can_write)
-		FROM job_tm_attachments a
-		JOIN jobs j ON j.id = a.job_id
-		JOIN job_members m ON m.job_id = j.id AND m.user_id = $1
+		FROM project_tm_attachments a
+		JOIN projects j ON j.id = a.project_id
+		JOIN project_members m ON m.project_id = j.id AND m.user_id = $1
 		WHERE a.tm_base_id = $2
 		  AND ($3::uuid IS NULL OR j.id = $3)
 		GROUP BY j.owner_user_id

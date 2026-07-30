@@ -6,7 +6,7 @@ export async function putJobOriginal(jobId: string, blob: Blob, filename: string
   if (token) headers.set('Authorization', `Bearer ${token}`)
   headers.set('Content-Type', 'application/octet-stream')
   headers.set('X-Filename', filename)
-  const res = await fetch(`${apiBase()}/api/jobs/${jobId}/original`, {
+  const res = await fetch(`${apiBase()}/api/projects/${jobId}/original`, {
     method: 'PUT',
     headers,
     body: blob,
@@ -26,9 +26,9 @@ export async function putJobOriginal(jobId: string, blob: Blob, filename: string
 }
 
 export async function getJobOriginal(jobId: string): Promise<Blob> {
-  return apiBlob(`/api/jobs/${jobId}/original`)
+  return apiBlob(`/api/projects/${jobId}/original`)
 }
 
 export async function deleteJobOriginal(jobId: string): Promise<void> {
-  await apiFetch<void>(`/api/jobs/${jobId}/original`, { method: 'DELETE' })
+  await apiFetch<void>(`/api/projects/${jobId}/original`, { method: 'DELETE' })
 }

@@ -1,4 +1,4 @@
-package jobs
+package projects
 
 import (
 	"crypto/sha256"

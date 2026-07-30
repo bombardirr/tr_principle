@@ -1,4 +1,4 @@
-package jobs_test
+package projects_test
 
 import (
 	"bytes"
@@ -18,7 +18,7 @@ import (
 	"github.com/bombardirr/tr_principle/api/internal/db"
 	"github.com/bombardirr/tr_principle/api/internal/glossary"
 	"github.com/bombardirr/tr_principle/api/internal/httpapi"
-	"github.com/bombardirr/tr_principle/api/internal/jobs"
+	"github.com/bombardirr/tr_principle/api/internal/projects"
 	"github.com/bombardirr/tr_principle/api/internal/tm"
 	"github.com/google/uuid"
 )
@@ -50,7 +50,7 @@ func TestHTTPCreateInviteAcceptAndListMembers(t *testing.T) {
 		&tm.Handler{Store: tm.NewStore(pool)},
 		&glossary.Handler{Store: glossary.NewStore(pool)},
 		&backups.Handler{Store: backups.NewStore(pool), BackupDir: t.TempDir()},
-		&jobs.Handler{Store: jobs.NewStore(pool)},
+		&projects.Handler{Store: projects.NewStore(pool)},
 		"http://localhost",
 		"",
 	))
@@ -60,7 +60,7 @@ func TestHTTPCreateInviteAcceptAndListMembers(t *testing.T) {
 	memberToken := registerHTTPUser(t, srv.URL, "Translator")
 	jobID := uuid.New()
 
-	created := requestJSON(t, http.MethodPost, srv.URL+"/api/jobs", ownerToken, map[string]any{
+	created := requestJSON(t, http.MethodPost, srv.URL+"/api/projects", ownerToken, map[string]any{
 		"id":             jobID,
 		"title":          "Shared manual",
 		"sourceLang":     "en",
@@ -73,7 +73,7 @@ func TestHTTPCreateInviteAcceptAndListMembers(t *testing.T) {
 		t.Fatalf("created job id = %v, want %s", created["id"], jobID)
 	}
 
-	invite := requestJSON(t, http.MethodPost, srv.URL+"/api/jobs/"+jobID.String()+"/invites", ownerToken, map[string]any{
+	invite := requestJSON(t, http.MethodPost, srv.URL+"/api/projects/"+jobID.String()+"/invites", ownerToken, map[string]any{
 		"role":    "translator",
 		"maxUses": 1,
 	}, http.StatusCreated)
@@ -86,18 +86,18 @@ func TestHTTPCreateInviteAcceptAndListMembers(t *testing.T) {
 		"token":          rawToken,
 		"localProjectId": uuid.New(),
 	}, http.StatusOK)
-	if accepted["jobId"] != jobID.String() || accepted["role"] != "translator" {
+	if accepted["projectId"] != jobID.String() || accepted["role"] != "translator" {
 		t.Fatalf("accepted invite = %v", accepted)
 	}
 
-	membersRaw := requestRaw(t, http.MethodGet, srv.URL+"/api/jobs/"+jobID.String()+"/members", ownerToken, nil, http.StatusOK)
+	membersRaw := requestRaw(t, http.MethodGet, srv.URL+"/api/projects/"+jobID.String()+"/members", ownerToken, nil, http.StatusOK)
 	if bytes.Contains(bytes.ToLower(membersRaw), []byte(`"email"`)) {
 		t.Fatalf("member response leaked email: %s", membersRaw)
 	}
 	var members []struct {
-		UserID      uuid.UUID `json:"userId"`
-		DisplayName string    `json:"displayName"`
-		Role        jobs.Role `json:"role"`
+		UserID      uuid.UUID     `json:"userId"`
+		DisplayName string        `json:"displayName"`
+		Role        projects.Role `json:"role"`
 	}
 	if err := json.Unmarshal(membersRaw, &members); err != nil {
 		t.Fatalf("decode members: %v: %s", err, membersRaw)
@@ -105,37 +105,37 @@ func TestHTTPCreateInviteAcceptAndListMembers(t *testing.T) {
 	if len(members) != 2 {
 		t.Fatalf("members count = %d, want 2: %s", len(members), membersRaw)
 	}
-	gotNames := map[string]jobs.Role{}
+	gotNames := map[string]projects.Role{}
 	for _, member := range members {
 		gotNames[member.DisplayName] = member.Role
 	}
-	if gotNames["Owner"] != jobs.RoleOwner || gotNames["Translator"] != jobs.RoleTranslator {
+	if gotNames["Owner"] != projects.RoleOwner || gotNames["Translator"] != projects.RoleTranslator {
 		t.Fatalf("member names and roles = %v", gotNames)
 	}
 
 	var ownerID, memberID uuid.UUID
 	for _, member := range members {
-		if member.Role == jobs.RoleOwner {
+		if member.Role == projects.RoleOwner {
 			ownerID = member.UserID
 		} else {
 			memberID = member.UserID
 		}
 	}
 
-	jobsRaw := requestRaw(t, http.MethodGet, srv.URL+"/api/jobs", ownerToken, nil, http.StatusOK)
-	var listedJobs []jobs.Job
+	jobsRaw := requestRaw(t, http.MethodGet, srv.URL+"/api/projects", ownerToken, nil, http.StatusOK)
+	var listedJobs []projects.Job
 	if err := json.Unmarshal(jobsRaw, &listedJobs); err != nil || len(listedJobs) != 1 {
-		t.Fatalf("list jobs = %s, error = %v", jobsRaw, err)
+		t.Fatalf("list projects = %s, error = %v", jobsRaw, err)
 	}
-	requestJSON(t, http.MethodGet, srv.URL+"/api/jobs/"+jobID.String(), ownerToken, nil, http.StatusOK)
-	updated := requestJSON(t, http.MethodPatch, srv.URL+"/api/jobs/"+jobID.String(), ownerToken, map[string]any{
+	requestJSON(t, http.MethodGet, srv.URL+"/api/projects/"+jobID.String(), ownerToken, nil, http.StatusOK)
+	updated := requestJSON(t, http.MethodPatch, srv.URL+"/api/projects/"+jobID.String(), ownerToken, map[string]any{
 		"title": "Updated manual",
 	}, http.StatusOK)
 	if updated["title"] != "Updated manual" {
 		t.Fatalf("updated job = %v", updated)
 	}
 
-	patchedMember := requestJSON(t, http.MethodPatch, srv.URL+"/api/jobs/"+jobID.String()+"/members/me", memberToken, map[string]any{
+	patchedMember := requestJSON(t, http.MethodPatch, srv.URL+"/api/projects/"+jobID.String()+"/members/me", memberToken, map[string]any{
 		"partDone":      true,
 		"progressDone":  3,
 		"progressTotal": 5,
@@ -144,21 +144,21 @@ func TestHTTPCreateInviteAcceptAndListMembers(t *testing.T) {
 		t.Fatalf("patched member = %v", patchedMember)
 	}
 
-	invitesRaw := requestRaw(t, http.MethodGet, srv.URL+"/api/jobs/"+jobID.String()+"/invites", ownerToken, nil, http.StatusOK)
-	var invites []jobs.Invite
+	invitesRaw := requestRaw(t, http.MethodGet, srv.URL+"/api/projects/"+jobID.String()+"/invites", ownerToken, nil, http.StatusOK)
+	var invites []projects.Invite
 	if err := json.Unmarshal(invitesRaw, &invites); err != nil || len(invites) != 1 {
 		t.Fatalf("list invites = %s, error = %v", invitesRaw, err)
 	}
 	requestRaw(
 		t,
 		http.MethodPost,
-		srv.URL+"/api/jobs/"+jobID.String()+"/invites/"+invites[0].ID.String()+"/revoke",
+		srv.URL+"/api/projects/"+jobID.String()+"/invites/"+invites[0].ID.String()+"/revoke",
 		ownerToken,
 		nil,
 		http.StatusNoContent,
 	)
 
-	transferred := requestJSON(t, http.MethodPost, srv.URL+"/api/jobs/"+jobID.String()+"/transfer", ownerToken, map[string]any{
+	transferred := requestJSON(t, http.MethodPost, srv.URL+"/api/projects/"+jobID.String()+"/transfer", ownerToken, map[string]any{
 		"userId": memberID,
 	}, http.StatusOK)
 	if transferred["ownerUserId"] != memberID.String() {
@@ -167,7 +167,7 @@ func TestHTTPCreateInviteAcceptAndListMembers(t *testing.T) {
 	requestRaw(
 		t,
 		http.MethodDelete,
-		srv.URL+"/api/jobs/"+jobID.String()+"/members/"+ownerID.String(),
+		srv.URL+"/api/projects/"+jobID.String()+"/members/"+ownerID.String(),
 		memberToken,
 		nil,
 		http.StatusNoContent,
@@ -201,7 +201,7 @@ func TestHTTPDeleteJobOwnerOnly(t *testing.T) {
 		&tm.Handler{Store: tm.NewStore(pool)},
 		&glossary.Handler{Store: glossary.NewStore(pool)},
 		&backups.Handler{Store: backups.NewStore(pool), BackupDir: t.TempDir()},
-		&jobs.Handler{Store: jobs.NewStore(pool)},
+		&projects.Handler{Store: projects.NewStore(pool)},
 		"http://localhost",
 		"",
 	))
@@ -211,12 +211,12 @@ func TestHTTPDeleteJobOwnerOnly(t *testing.T) {
 	memberToken := registerHTTPUser(t, srv.URL, "Translator")
 	jobID := uuid.New()
 
-	requestJSON(t, http.MethodPost, srv.URL+"/api/jobs", ownerToken, map[string]any{
+	requestJSON(t, http.MethodPost, srv.URL+"/api/projects", ownerToken, map[string]any{
 		"id":    jobID,
 		"title": "To delete",
 	}, http.StatusCreated)
 
-	invite := requestJSON(t, http.MethodPost, srv.URL+"/api/jobs/"+jobID.String()+"/invites", ownerToken, map[string]any{
+	invite := requestJSON(t, http.MethodPost, srv.URL+"/api/projects/"+jobID.String()+"/invites", ownerToken, map[string]any{
 		"role": "translator",
 	}, http.StatusCreated)
 	rawToken, _ := invite["token"].(string)
@@ -224,9 +224,9 @@ func TestHTTPDeleteJobOwnerOnly(t *testing.T) {
 		"token": rawToken,
 	}, http.StatusOK)
 
-	requestRaw(t, http.MethodDelete, srv.URL+"/api/jobs/"+jobID.String(), memberToken, nil, http.StatusNotFound)
-	requestRaw(t, http.MethodDelete, srv.URL+"/api/jobs/"+jobID.String(), ownerToken, nil, http.StatusNoContent)
-	requestRaw(t, http.MethodGet, srv.URL+"/api/jobs/"+jobID.String(), ownerToken, nil, http.StatusNotFound)
+	requestRaw(t, http.MethodDelete, srv.URL+"/api/projects/"+jobID.String(), memberToken, nil, http.StatusNotFound)
+	requestRaw(t, http.MethodDelete, srv.URL+"/api/projects/"+jobID.String(), ownerToken, nil, http.StatusNoContent)
+	requestRaw(t, http.MethodGet, srv.URL+"/api/projects/"+jobID.String(), ownerToken, nil, http.StatusNotFound)
 }
 
 func registerHTTPUser(t *testing.T, baseURL, displayName string) string {

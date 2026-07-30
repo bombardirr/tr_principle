@@ -9,7 +9,7 @@ import type {
 
 export async function listJobGlossaryAttachments(jobId: string) {
   const res = await apiFetch<{ attachments: JobGlossaryAttachment[] }>(
-    `/api/jobs/${jobId}/glossary-attachments`,
+    `/api/projects/${jobId}/glossary-attachments`,
   )
   return res.attachments ?? []
 }
@@ -22,7 +22,7 @@ export async function createJobGlossaryAttachment(
   const base = await ensureGlossaryBase(input.glossaryBaseId)
   await markGlossaryBaseDirty(base.id)
   await syncGlossaryBase(base.id, { pushOnly: true })
-  return apiFetch<JobGlossaryAttachment>(`/api/jobs/${jobId}/glossary-attachments`, {
+  return apiFetch<JobGlossaryAttachment>(`/api/projects/${jobId}/glossary-attachments`, {
     method: 'POST',
     body: JSON.stringify(input),
   })
@@ -34,7 +34,7 @@ export async function patchJobGlossaryAttachment(
   input: PatchJobGlossaryAttachmentInput,
 ) {
   return apiFetch<JobGlossaryAttachment>(
-    `/api/jobs/${jobId}/glossary-attachments/${attachmentId}`,
+    `/api/projects/${jobId}/glossary-attachments/${attachmentId}`,
     {
       method: 'PATCH',
       body: JSON.stringify(input),
@@ -43,7 +43,7 @@ export async function patchJobGlossaryAttachment(
 }
 
 export async function deleteJobGlossaryAttachment(jobId: string, attachmentId: string) {
-  await apiFetch<void>(`/api/jobs/${jobId}/glossary-attachments/${attachmentId}`, {
+  await apiFetch<void>(`/api/projects/${jobId}/glossary-attachments/${attachmentId}`, {
     method: 'DELETE',
   })
 }

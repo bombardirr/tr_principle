@@ -1,4 +1,4 @@
-package jobs
+package projects
 
 import (
 	"context"
@@ -109,11 +109,11 @@ const effectiveResourcesQuery = `
 	         WHEN 'translator' THEN p.can_clone AND COALESCE(o.can_clone, true)
 	         ELSE false END AS can_clone,
 	       p.can_read, p.can_write, p.can_export, p.can_clone
-	FROM job_resource_presets p
-	JOIN job_members m ON m.job_id = p.job_id AND m.user_id = $2
-	LEFT JOIN job_member_resource_overrides o
-	  ON o.job_id = p.job_id AND o.user_id = m.user_id AND o.kind = p.kind
-	WHERE p.job_id = $1`
+	FROM project_resource_presets p
+	JOIN project_members m ON m.project_id = p.project_id AND m.user_id = $2
+	LEFT JOIN project_member_resource_overrides o
+	  ON o.project_id = p.project_id AND o.user_id = m.user_id AND o.kind = p.kind
+	WHERE p.project_id = $1`
 
 func scanResource(row interface{ Scan(dest ...any) error }) (Resource, error) {
 	var resource Resource
@@ -137,18 +137,18 @@ func (s *Store) PatchResourcePreset(
 	}
 	var preset ResourceACL
 	err := s.pool.QueryRow(ctx, `
-		INSERT INTO job_resource_presets (
-			job_id, kind, enabled, can_read, can_write, can_export, can_clone
+		INSERT INTO project_resource_presets (
+			project_id, kind, enabled, can_read, can_write, can_export, can_clone
 		) VALUES (
 			$1, $2, COALESCE($3, false), COALESCE($4, true), COALESCE($5, true),
 			COALESCE($6, false), COALESCE($7, false)
 		)
-		ON CONFLICT (job_id, kind) DO UPDATE SET
-			enabled = COALESCE($3, job_resource_presets.enabled),
-			can_read = COALESCE($4, job_resource_presets.can_read),
-			can_write = COALESCE($5, job_resource_presets.can_write),
-			can_export = COALESCE($6, job_resource_presets.can_export),
-			can_clone = COALESCE($7, job_resource_presets.can_clone),
+		ON CONFLICT (project_id, kind) DO UPDATE SET
+			enabled = COALESCE($3, project_resource_presets.enabled),
+			can_read = COALESCE($4, project_resource_presets.can_read),
+			can_write = COALESCE($5, project_resource_presets.can_write),
+			can_export = COALESCE($6, project_resource_presets.can_export),
+			can_clone = COALESCE($7, project_resource_presets.can_clone),
 			updated_at = now()
 		RETURNING can_read, can_write, can_export, can_clone
 	`, jobID, kind, patch.Enabled, patch.CanRead, patch.CanWrite, patch.CanExport, patch.CanClone).Scan(
@@ -173,15 +173,15 @@ func (s *Store) PatchMemberResource(
 		return Resource{}, err
 	}
 	_, err := s.pool.Exec(ctx, `
-		INSERT INTO job_member_resource_overrides (
-			job_id, user_id, kind, enabled, can_read, can_write, can_export, can_clone
+		INSERT INTO project_member_resource_overrides (
+			project_id, user_id, kind, enabled, can_read, can_write, can_export, can_clone
 		) VALUES ($1, $2, $3, COALESCE($4, true), $5, $6, $7, $8)
-		ON CONFLICT (job_id, user_id, kind) DO UPDATE SET
-			enabled = COALESCE($4, job_member_resource_overrides.enabled),
-			can_read = COALESCE($5, job_member_resource_overrides.can_read),
-			can_write = COALESCE($6, job_member_resource_overrides.can_write),
-			can_export = COALESCE($7, job_member_resource_overrides.can_export),
-			can_clone = COALESCE($8, job_member_resource_overrides.can_clone),
+		ON CONFLICT (project_id, user_id, kind) DO UPDATE SET
+			enabled = COALESCE($4, project_member_resource_overrides.enabled),
+			can_read = COALESCE($5, project_member_resource_overrides.can_read),
+			can_write = COALESCE($6, project_member_resource_overrides.can_write),
+			can_export = COALESCE($7, project_member_resource_overrides.can_export),
+			can_clone = COALESCE($8, project_member_resource_overrides.can_clone),
 			updated_at = now()
 	`, jobID, userID, kind, patch.Enabled, patch.CanRead, patch.CanWrite, patch.CanExport, patch.CanClone)
 	if err != nil {
@@ -201,10 +201,10 @@ func (s *Store) PullJobTM(
 	}
 	rows, err := s.pool.Query(ctx, `
 		SELECT id, source, target, source_key, source_lang, target_lang,
-		       created_at, updated_at, deleted_at, job_id::text, created_by, updated_by,
+		       created_at, updated_at, deleted_at, project_id::text, created_by, updated_by,
 		       context_before, context_after
-		FROM job_tm_units
-		WHERE job_id = $1 AND updated_at > $2
+		FROM project_tm_units
+		WHERE project_id = $1 AND updated_at > $2
 		ORDER BY updated_at, id
 		LIMIT $3
 	`, jobID, since, limit+1)
@@ -258,12 +258,12 @@ func (s *Store) UpsertJobTM(ctx context.Context, jobID uuid.UUID, actor string, 
 	}
 
 	_, err = s.pool.Exec(ctx, `
-		INSERT INTO job_tm_units (
-			job_id, id, source, target, source_key, source_lang, target_lang,
+		INSERT INTO project_tm_units (
+			project_id, id, source, target, source_key, source_lang, target_lang,
 			created_at, updated_at, deleted_at, created_by, updated_by,
 			context_before, context_after
 		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$11,$12,$13)
-		ON CONFLICT (job_id, id) DO UPDATE SET
+		ON CONFLICT (project_id, id) DO UPDATE SET
 			source = EXCLUDED.source,
 			target = EXCLUDED.target,
 			source_key = EXCLUDED.source_key,
@@ -274,7 +274,7 @@ func (s *Store) UpsertJobTM(ctx context.Context, jobID uuid.UUID, actor string, 
 			updated_by = EXCLUDED.updated_by,
 			context_before = EXCLUDED.context_before,
 			context_after = EXCLUDED.context_after
-		WHERE job_tm_units.updated_at < EXCLUDED.updated_at
+		WHERE project_tm_units.updated_at < EXCLUDED.updated_at
 	`, jobID, id, unit.Source, unit.Target, unit.SourceKey, unit.SourceLang, unit.TargetLang,
 		createdAt, updatedAt, deletedAt, actor, unit.ContextBefore, unit.ContextAfter)
 	return err

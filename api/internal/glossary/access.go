@@ -34,9 +34,9 @@ func (s *Store) ResolveBaseAccess(
 
 	rows, err := s.pool.Query(ctx, `
 		SELECT j.owner_user_id, bool_or(a.can_read), bool_or(a.can_write)
-		FROM job_glossary_attachments a
-		JOIN jobs j ON j.id = a.job_id
-		JOIN job_members m ON m.job_id = j.id AND m.user_id = $1
+		FROM project_glossary_attachments a
+		JOIN projects j ON j.id = a.project_id
+		JOIN project_members m ON m.project_id = j.id AND m.user_id = $1
 		JOIN glossary_bases b ON b.owner_id = j.owner_user_id
 			AND b.id = a.glossary_base_id
 			AND b.deleted_at IS NULL

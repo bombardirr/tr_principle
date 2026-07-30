@@ -47,7 +47,7 @@ func licenseHint(plaintext string) string {
 	return p[:7] + "…" + p[len(p)-4:]
 }
 
-// CloudStorageUsed sums project backups + job originals for jobs owned by the user.
+// CloudStorageUsed sums project backups and originals for projects owned by the user.
 func (s *Store) CloudStorageUsed(ctx context.Context, userID uuid.UUID) (int64, error) {
 	var backups, originals int64
 	err := s.pool.QueryRow(ctx, `
@@ -58,8 +58,8 @@ func (s *Store) CloudStorageUsed(ctx context.Context, userID uuid.UUID) (int64, 
 	}
 	err = s.pool.QueryRow(ctx, `
 		SELECT COALESCE(SUM(o.size_bytes), 0)
-		FROM job_originals o
-		INNER JOIN jobs j ON j.id = o.job_id
+		FROM project_originals o
+		INNER JOIN projects j ON j.id = o.project_id
 		WHERE j.owner_user_id = $1
 	`, userID).Scan(&originals)
 	if err != nil {

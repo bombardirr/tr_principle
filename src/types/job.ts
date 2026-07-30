@@ -29,7 +29,7 @@ export type JobMember = {
 
 export type JobInvite = {
   id: string
-  jobId: string
+  projectId: string
   role: JobRole
   createdBy: string
   expiresAt?: string | null
@@ -74,7 +74,7 @@ export type AcceptInviteInput = {
 }
 
 export type AcceptInviteResponse = {
-  jobId: string
+  projectId: string
   role: JobRole
 }
 
@@ -110,7 +110,7 @@ export type PatchJobResourceInput = {
 
 export type JobTmAttachment = {
   id: string
-  jobId: string
+  projectId: string
   tmBaseId: string
   label?: string
   color?: string
@@ -141,7 +141,7 @@ export type PatchJobTmAttachmentInput = {
 
 export type JobGlossaryAttachment = {
   id: string
-  jobId: string
+  projectId: string
   glossaryBaseId: string
   label?: string
   color?: string

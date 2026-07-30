@@ -11,7 +11,7 @@ import (
 	"github.com/bombardirr/tr_principle/api/internal/backups"
 	"github.com/bombardirr/tr_principle/api/internal/glossary"
 	"github.com/bombardirr/tr_principle/api/internal/httpapi"
-	"github.com/bombardirr/tr_principle/api/internal/jobs"
+	"github.com/bombardirr/tr_principle/api/internal/projects"
 	"github.com/bombardirr/tr_principle/api/internal/tm"
 )
 
@@ -24,7 +24,7 @@ func TestBackupRoutes_NoTrailingSlash(t *testing.T) {
 		&tm.Handler{},
 		&glossary.Handler{},
 		&backups.Handler{},
-		&jobs.Handler{},
+		&projects.Handler{},
 		"http://localhost",
 		"",
 	)
@@ -64,7 +64,7 @@ func TestOldProjectBackupRoutes_NotFound(t *testing.T) {
 		&tm.Handler{},
 		&glossary.Handler{},
 		&backups.Handler{},
-		&jobs.Handler{},
+		&projects.Handler{},
 		"http://localhost",
 		"",
 	)
@@ -92,7 +92,7 @@ func TestOldProjectBackupRoutes_NotFound(t *testing.T) {
 	}
 }
 
-func TestJobsRouteRequiresAuthentication(t *testing.T) {
+func TestProjectsRouteRequiresAuthentication(t *testing.T) {
 	authHandler := &auth.Handler{
 		Tokens: auth.NewTokenIssuer([]byte("test-secret-key-32bytes-minimum!!"), time.Hour),
 	}
@@ -101,7 +101,7 @@ func TestJobsRouteRequiresAuthentication(t *testing.T) {
 		&tm.Handler{},
 		&glossary.Handler{},
 		&backups.Handler{},
-		&jobs.Handler{},
+		&projects.Handler{},
 		"http://localhost",
 		"",
 	)
@@ -110,10 +110,10 @@ func TestJobsRouteRequiresAuthentication(t *testing.T) {
 		method string
 		path   string
 	}{
-		{http.MethodGet, "/api/jobs"},
-		{http.MethodPut, "/api/jobs/test-id/original"},
-		{http.MethodGet, "/api/jobs/test-id/original"},
-		{http.MethodDelete, "/api/jobs/test-id/original"},
+		{http.MethodGet, "/api/projects"},
+		{http.MethodPut, "/api/projects/test-id/original"},
+		{http.MethodGet, "/api/projects/test-id/original"},
+		{http.MethodDelete, "/api/projects/test-id/original"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.method+" "+tt.path, func(t *testing.T) {
@@ -126,6 +126,29 @@ func TestJobsRouteRequiresAuthentication(t *testing.T) {
 	}
 }
 
+func TestOldJobsRoutesNotFound(t *testing.T) {
+	authHandler := &auth.Handler{
+		Tokens: auth.NewTokenIssuer([]byte("test-secret-key-32bytes-minimum!!"), time.Hour),
+	}
+	handler := httpapi.NewRouter(
+		authHandler,
+		&tm.Handler{},
+		&glossary.Handler{},
+		&backups.Handler{},
+		&projects.Handler{},
+		"http://localhost",
+		"",
+	)
+
+	for _, path := range []string{"/api/jobs", "/api/jobs/test-id/original"} {
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
+		if rec.Code != http.StatusNotFound {
+			t.Fatalf("%s = %d, want 404", path, rec.Code)
+		}
+	}
+}
+
 func TestMetricsRoute_TokenOK(t *testing.T) {
 	authHandler := &auth.Handler{
 		Tokens: auth.NewTokenIssuer([]byte("test-secret-key-32bytes-minimum!!"), time.Hour),
@@ -135,7 +158,7 @@ func TestMetricsRoute_TokenOK(t *testing.T) {
 		&tm.Handler{},
 		&glossary.Handler{},
 		&backups.Handler{},
-		&jobs.Handler{},
+		&projects.Handler{},
 		"http://localhost",
 		"metrics-secret",
 	)
@@ -160,7 +183,7 @@ func TestMetricsRoute_NoAuth401(t *testing.T) {
 		&tm.Handler{},
 		&glossary.Handler{},
 		&backups.Handler{},
-		&jobs.Handler{},
+		&projects.Handler{},
 		"http://localhost",
 		"metrics-secret",
 	)

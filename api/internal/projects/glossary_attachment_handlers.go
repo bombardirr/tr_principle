@@ -1,36 +1,38 @@
-package jobs
+package projects
 
 import (
 	"errors"
 	"net/http"
+	"strings"
 
+	"github.com/bombardirr/tr_principle/api/internal/glossary"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 )
 
-type attachmentCreateRequest struct {
-	TmBaseID  string `json:"tmBaseId"`
-	Label     string `json:"label"`
-	Color     string `json:"color"`
-	CanRead   *bool  `json:"canRead"`
-	CanWrite  *bool  `json:"canWrite"`
-	CanExport *bool  `json:"canExport"`
-	CanClone  *bool  `json:"canClone"`
+type glossaryAttachmentCreateRequest struct {
+	GlossaryBaseID string `json:"glossaryBaseId"`
+	Label          string `json:"label"`
+	Color          string `json:"color"`
+	CanRead        *bool  `json:"canRead"`
+	CanWrite       *bool  `json:"canWrite"`
+	CanExport      *bool  `json:"canExport"`
+	CanClone       *bool  `json:"canClone"`
 }
 
-type attachmentPatchRequest struct {
+type glossaryAttachmentPatchRequest struct {
 	CanRead   *bool `json:"canRead"`
 	CanWrite  *bool `json:"canWrite"`
 	CanExport *bool `json:"canExport"`
 	CanClone  *bool `json:"canClone"`
 }
 
-func (h *Handler) ListTMAttachments(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) ListGlossaryAttachments(w http.ResponseWriter, r *http.Request) {
 	user, jobID, ok := requestJob(w, r)
 	if !ok {
 		return
 	}
-	attachments, err := h.Store.ListAttachments(r.Context(), jobID, user.ID)
+	attachments, err := h.Store.ListGlossaryAttachments(r.Context(), jobID, user.ID)
 	switch {
 	case errors.Is(err, ErrNotMember):
 		writeError(w, http.StatusNotFound, "job not found")
@@ -41,7 +43,7 @@ func (h *Handler) ListTMAttachments(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (h *Handler) CreateTMAttachment(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) CreateGlossaryAttachment(w http.ResponseWriter, r *http.Request) {
 	user, jobID, ok := requestJob(w, r)
 	if !ok {
 		return
@@ -49,12 +51,31 @@ func (h *Handler) CreateTMAttachment(w http.ResponseWriter, r *http.Request) {
 	if !requireJobOwner(w, r, h, jobID, user.ID) {
 		return
 	}
-
-	var body attachmentCreateRequest
+	var body glossaryAttachmentCreateRequest
 	if !decodeJSON(w, r, &body) {
 		return
 	}
-	flags := AttachmentFlags{CanRead: true}
+	body.GlossaryBaseID = strings.TrimSpace(body.GlossaryBaseID)
+	if body.GlossaryBaseID == "" {
+		writeError(w, http.StatusBadRequest, ErrInvalidAttachment.Error())
+		return
+	}
+	if h.Glossary == nil {
+		writeError(w, http.StatusInternalServerError, "server error")
+		return
+	}
+	if err := h.Glossary.EnsureBase(
+		r.Context(), user.ID, body.GlossaryBaseID,
+		glossaryAttachmentLabel(body.GlossaryBaseID, body.Label), body.Color,
+	); err != nil {
+		if errors.Is(err, glossary.ErrInvalidBase) {
+			writeError(w, http.StatusBadRequest, err.Error())
+		} else {
+			writeError(w, http.StatusInternalServerError, "server error")
+		}
+		return
+	}
+	flags := GlossaryAttachmentFlags{CanRead: true}
 	if body.CanRead != nil {
 		flags.CanRead = *body.CanRead
 	}
@@ -67,20 +88,7 @@ func (h *Handler) CreateTMAttachment(w http.ResponseWriter, r *http.Request) {
 	if body.CanClone != nil {
 		flags.CanClone = *body.CanClone
 	}
-
-	if h.TM != nil {
-		if err := h.TM.EnsureBase(
-			r.Context(),
-			user.ID,
-			body.TmBaseID,
-			attachmentLabel(body.TmBaseID, body.Label),
-			body.Color,
-		); err != nil {
-			writeError(w, http.StatusInternalServerError, "server error")
-			return
-		}
-	}
-	attachment, err := h.Store.CreateAttachment(r.Context(), jobID, user.ID, body.TmBaseID, flags)
+	attachment, err := h.Store.CreateGlossaryAttachment(r.Context(), jobID, user.ID, body.GlossaryBaseID, flags)
 	switch {
 	case errors.Is(err, ErrInvalidAttachment):
 		writeError(w, http.StatusBadRequest, err.Error())
@@ -93,17 +101,7 @@ func (h *Handler) CreateTMAttachment(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func attachmentLabel(baseID, label string) string {
-	if label != "" {
-		return label
-	}
-	if baseID == "personal-tm" {
-		return "Personal TM"
-	}
-	return baseID
-}
-
-func (h *Handler) PatchTMAttachment(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) PatchGlossaryAttachment(w http.ResponseWriter, r *http.Request) {
 	user, jobID, ok := requestJob(w, r)
 	if !ok {
 		return
@@ -116,16 +114,12 @@ func (h *Handler) PatchTMAttachment(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid attachment id")
 		return
 	}
-
-	var body attachmentPatchRequest
+	var body glossaryAttachmentPatchRequest
 	if !decodeJSON(w, r, &body) {
 		return
 	}
-	attachment, err := h.Store.UpdateAttachment(r.Context(), jobID, user.ID, attachmentID, AttachmentPatch{
-		CanRead:   body.CanRead,
-		CanWrite:  body.CanWrite,
-		CanExport: body.CanExport,
-		CanClone:  body.CanClone,
+	attachment, err := h.Store.UpdateGlossaryAttachment(r.Context(), jobID, user.ID, attachmentID, GlossaryAttachmentPatch{
+		CanRead: body.CanRead, CanWrite: body.CanWrite, CanExport: body.CanExport, CanClone: body.CanClone,
 	})
 	switch {
 	case errors.Is(err, ErrAttachmentMissing):
@@ -137,7 +131,7 @@ func (h *Handler) PatchTMAttachment(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (h *Handler) DeleteTMAttachment(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) DeleteGlossaryAttachment(w http.ResponseWriter, r *http.Request) {
 	user, jobID, ok := requestJob(w, r)
 	if !ok {
 		return
@@ -150,8 +144,7 @@ func (h *Handler) DeleteTMAttachment(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid attachment id")
 		return
 	}
-
-	err = h.Store.DeleteAttachment(r.Context(), jobID, user.ID, attachmentID)
+	err = h.Store.DeleteGlossaryAttachment(r.Context(), jobID, user.ID, attachmentID)
 	switch {
 	case errors.Is(err, ErrAttachmentMissing):
 		writeError(w, http.StatusNotFound, "attachment not found")
@@ -162,20 +155,12 @@ func (h *Handler) DeleteTMAttachment(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func requireJobOwner(
-	w http.ResponseWriter,
-	r *http.Request,
-	h *Handler,
-	jobID, userID uuid.UUID,
-) bool {
-	owner, err := h.Store.IsOwner(r.Context(), jobID, userID)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, "server error")
-		return false
+func glossaryAttachmentLabel(baseID, label string) string {
+	if label = strings.TrimSpace(label); label != "" {
+		return label
 	}
-	if !owner {
-		writeError(w, http.StatusNotFound, "job not found")
-		return false
+	if baseID == "personal-glossary" {
+		return "Personal glossary"
 	}
-	return true
+	return baseID
 }

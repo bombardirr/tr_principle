@@ -1,4 +1,4 @@
-package jobs_test
+package projects_test
 
 import (
 	"context"
@@ -15,7 +15,7 @@ import (
 	"github.com/bombardirr/tr_principle/api/internal/db"
 	"github.com/bombardirr/tr_principle/api/internal/glossary"
 	"github.com/bombardirr/tr_principle/api/internal/httpapi"
-	"github.com/bombardirr/tr_principle/api/internal/jobs"
+	"github.com/bombardirr/tr_principle/api/internal/projects"
 	"github.com/bombardirr/tr_principle/api/internal/tm"
 	"github.com/google/uuid"
 )
@@ -46,7 +46,7 @@ func TestHTTPJobTMAttachmentsCRUDAndACL(t *testing.T) {
 		&tm.Handler{Store: tm.NewStore(pool)},
 		&glossary.Handler{Store: glossary.NewStore(pool)},
 		&backups.Handler{Store: backups.NewStore(pool), BackupDir: t.TempDir()},
-		&jobs.Handler{Store: jobs.NewStore(pool)},
+		&projects.Handler{Store: projects.NewStore(pool)},
 		"http://localhost",
 		"",
 	))
@@ -55,7 +55,7 @@ func TestHTTPJobTMAttachmentsCRUDAndACL(t *testing.T) {
 	ownerToken := registerHTTPUser(t, srv.URL, "Owner")
 	memberToken := registerHTTPUser(t, srv.URL, "Translator")
 	jobID := uuid.New()
-	requestJSON(t, http.MethodPost, srv.URL+"/api/jobs", ownerToken, map[string]any{
+	requestJSON(t, http.MethodPost, srv.URL+"/api/projects", ownerToken, map[string]any{
 		"id":             jobID,
 		"title":          "Shared TM",
 		"sourceLang":     "en",
@@ -64,14 +64,14 @@ func TestHTTPJobTMAttachmentsCRUDAndACL(t *testing.T) {
 		"sourceHash":     "hash",
 		"localProjectId": uuid.New(),
 	}, http.StatusCreated)
-	invite := requestJSON(t, http.MethodPost, srv.URL+"/api/jobs/"+jobID.String()+"/invites", ownerToken, map[string]any{
+	invite := requestJSON(t, http.MethodPost, srv.URL+"/api/projects/"+jobID.String()+"/invites", ownerToken, map[string]any{
 		"role": "translator",
 	}, http.StatusCreated)
 	requestJSON(t, http.MethodPost, srv.URL+"/api/job-invites/accept", memberToken, map[string]any{
 		"token": invite["token"],
 	}, http.StatusOK)
 
-	base := srv.URL + "/api/jobs/" + jobID.String() + "/tm-attachments"
+	base := srv.URL + "/api/projects/" + jobID.String() + "/tm-attachments"
 	list := requestJSON(t, http.MethodGet, base, memberToken, nil, http.StatusOK)
 	if len(list["attachments"].([]any)) != 0 {
 		t.Fatalf("want empty list, got %v", list)
@@ -151,7 +151,7 @@ func TestHTTPJobGlossaryAttachmentsACL(t *testing.T) {
 		&tm.Handler{Store: tm.NewStore(pool)},
 		&glossary.Handler{Store: glossaryStore},
 		&backups.Handler{Store: backups.NewStore(pool), BackupDir: t.TempDir()},
-		&jobs.Handler{Store: jobs.NewStore(pool), Glossary: glossaryStore},
+		&projects.Handler{Store: projects.NewStore(pool), Glossary: glossaryStore},
 		"http://localhost",
 		"",
 	))
@@ -160,11 +160,11 @@ func TestHTTPJobGlossaryAttachmentsACL(t *testing.T) {
 	ownerToken := registerHTTPUser(t, srv.URL, "Owner")
 	memberToken := registerHTTPUser(t, srv.URL, "Translator")
 	jobID := uuid.New()
-	requestJSON(t, http.MethodPost, srv.URL+"/api/jobs", ownerToken, map[string]any{
+	requestJSON(t, http.MethodPost, srv.URL+"/api/projects", ownerToken, map[string]any{
 		"id": jobID, "title": "Shared glossary", "sourceLang": "en", "targetLang": "ru",
 		"sourceFilename": "manual.docx", "sourceHash": "hash", "localProjectId": uuid.New(),
 	}, http.StatusCreated)
-	invite := requestJSON(t, http.MethodPost, srv.URL+"/api/jobs/"+jobID.String()+"/invites", ownerToken, map[string]any{
+	invite := requestJSON(t, http.MethodPost, srv.URL+"/api/projects/"+jobID.String()+"/invites", ownerToken, map[string]any{
 		"role": "translator",
 	}, http.StatusCreated)
 	requestJSON(t, http.MethodPost, srv.URL+"/api/job-invites/accept", memberToken, map[string]any{
@@ -172,7 +172,7 @@ func TestHTTPJobGlossaryAttachmentsACL(t *testing.T) {
 	}, http.StatusOK)
 
 	baseID := "team-glossary"
-	attachmentsURL := srv.URL + "/api/jobs/" + jobID.String() + "/glossary-attachments"
+	attachmentsURL := srv.URL + "/api/projects/" + jobID.String() + "/glossary-attachments"
 	created := requestJSON(t, http.MethodPost, attachmentsURL, ownerToken, map[string]any{
 		"glossaryBaseId": baseID, "label": "Legal", "color": "#123456",
 	}, http.StatusCreated)

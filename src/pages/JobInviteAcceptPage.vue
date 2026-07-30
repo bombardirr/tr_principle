@@ -19,7 +19,7 @@ async function join() {
   error.value = ''
   try {
     const accepted = await acceptInvite({ token: token.value })
-    await router.push({ name: 'projects', query: { job: accepted.jobId } })
+    await router.push({ name: 'projects', query: { job: accepted.projectId } })
   } catch (err) {
     error.value = err instanceof Error ? err.message : String(err)
   } finally {

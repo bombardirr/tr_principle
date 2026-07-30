@@ -1,4 +1,4 @@
-package jobs
+package projects
 
 import (
 	"context"
@@ -14,8 +14,8 @@ func (s *Store) RoleOf(ctx context.Context, jobID, userID uuid.UUID) (Role, erro
 	var role Role
 	err := s.pool.QueryRow(ctx, `
 		SELECT role
-		FROM job_members
-		WHERE job_id = $1 AND user_id = $2
+		FROM project_members
+		WHERE project_id = $1 AND user_id = $2
 	`, jobID, userID).Scan(&role)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return "", ErrNotMember
@@ -28,7 +28,7 @@ func (s *Store) IsOwner(ctx context.Context, jobID, userID uuid.UUID) (bool, err
 	err := s.pool.QueryRow(ctx, `
 		SELECT EXISTS (
 			SELECT 1
-			FROM jobs
+			FROM projects
 			WHERE id = $1 AND owner_user_id = $2
 		)
 	`, jobID, userID).Scan(&isOwner)

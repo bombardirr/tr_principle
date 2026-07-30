@@ -13,82 +13,82 @@ import type {
 } from '@/types/job'
 
 export async function createJob(input: CreateJobInput) {
-  return apiFetch<Job>('/api/jobs', {
+  return apiFetch<Job>('/api/projects', {
     method: 'POST',
     body: JSON.stringify(input),
   })
 }
 
 export async function listJobs() {
-  return apiFetch<Job[]>('/api/jobs')
+  return apiFetch<Job[]>('/api/projects')
 }
 
 export async function getJob(jobId: string) {
-  return apiFetch<Job>(`/api/jobs/${jobId}`)
+  return apiFetch<Job>(`/api/projects/${jobId}`)
 }
 
 export async function patchJob(jobId: string, input: PatchJobInput) {
-  return apiFetch<Job>(`/api/jobs/${jobId}`, {
+  return apiFetch<Job>(`/api/projects/${jobId}`, {
     method: 'PATCH',
     body: JSON.stringify(input),
   })
 }
 
 export async function deleteJob(jobId: string) {
-  return apiFetch<void>(`/api/jobs/${jobId}`, {
+  return apiFetch<void>(`/api/projects/${jobId}`, {
     method: 'DELETE',
   })
 }
 
 export async function archiveJob(jobId: string) {
-  return apiFetch<Job>(`/api/jobs/${jobId}/archive`, {
+  return apiFetch<Job>(`/api/projects/${jobId}/archive`, {
     method: 'POST',
   })
 }
 
 export async function leaveJob(jobId: string) {
-  return apiFetch<void>(`/api/jobs/${jobId}/leave`, {
+  return apiFetch<void>(`/api/projects/${jobId}/leave`, {
     method: 'POST',
   })
 }
 
 export async function transferJob(jobId: string, userId: string) {
-  return apiFetch<Job>(`/api/jobs/${jobId}/transfer`, {
+  return apiFetch<Job>(`/api/projects/${jobId}/transfer`, {
     method: 'POST',
     body: JSON.stringify({ userId }),
   })
 }
 
 export async function listMembers(jobId: string) {
-  return apiFetch<JobMember[]>(`/api/jobs/${jobId}/members`)
+  return apiFetch<JobMember[]>(`/api/projects/${jobId}/members`)
 }
 
 export async function patchJobMemberMe(jobId: string, input: PatchJobMemberInput) {
-  return apiFetch<JobMember>(`/api/jobs/${jobId}/members/me`, {
+  return apiFetch<JobMember>(`/api/projects/${jobId}/members/me`, {
     method: 'PATCH',
     body: JSON.stringify(input),
   })
 }
 
 export async function removeMember(jobId: string, userId: string) {
-  return apiFetch<void>(`/api/jobs/${jobId}/members/${userId}`, {
+  return apiFetch<void>(`/api/projects/${jobId}/members/${userId}`, {
     method: 'DELETE',
   })
 }
 
 export async function createInvite(jobId: string, input: CreateInviteInput) {
-  return apiFetch<CreateInviteResponse>(`/api/jobs/${jobId}/invites`, {
+  return apiFetch<CreateInviteResponse>(`/api/projects/${jobId}/invites`, {
     method: 'POST',
     body: JSON.stringify(input),
   })
 }
 
 export async function listInvites(jobId: string) {
-  return apiFetch<JobInvite[]>(`/api/jobs/${jobId}/invites`)
+  return apiFetch<JobInvite[]>(`/api/projects/${jobId}/invites`)
 }
 
 export async function revokeInvite(jobId: string, inviteId: string) {
-  return apiFetch<void>(`/api/jobs/${jobId}/invites/${inviteId}/revoke`, {
+  return apiFetch<void>(`/api/projects/${jobId}/invites/${inviteId}/revoke`, {
     method: 'POST',
   })
 }

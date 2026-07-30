@@ -1,4 +1,4 @@
-package jobs
+package projects
 
 import (
 	"encoding/json"

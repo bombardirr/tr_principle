@@ -1,4 +1,4 @@
-package jobs
+package projects
 
 import (
 	"context"
@@ -39,7 +39,7 @@ func (s *Store) CreateJob(
 
 	var job Job
 	err = tx.QueryRow(ctx, `
-		INSERT INTO jobs (
+		INSERT INTO projects (
 			id, owner_user_id, title, source_lang, target_lang,
 			source_filename, source_hash
 		) VALUES ($1, $2, $3, $4, $5, $6, $7)
@@ -68,7 +68,7 @@ func (s *Store) CreateJob(
 		localID = &localProjectID
 	}
 	if _, err := tx.Exec(ctx, `
-		INSERT INTO job_members (job_id, user_id, role, local_project_id)
+		INSERT INTO project_members (project_id, user_id, role, local_project_id)
 		VALUES ($1, $2, $3, $4)
 	`, jobID, ownerID, RoleOwner, localID); err != nil {
 		return Job{}, err

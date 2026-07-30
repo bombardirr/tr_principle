@@ -18,7 +18,7 @@ import (
 	"github.com/bombardirr/tr_principle/api/internal/db"
 	"github.com/bombardirr/tr_principle/api/internal/glossary"
 	"github.com/bombardirr/tr_principle/api/internal/httpapi"
-	"github.com/bombardirr/tr_principle/api/internal/jobs"
+	"github.com/bombardirr/tr_principle/api/internal/projects"
 	"github.com/bombardirr/tr_principle/api/internal/tm"
 	"github.com/google/uuid"
 )
@@ -53,7 +53,7 @@ func TestTmSyncFlow(t *testing.T) {
 	srv := httptest.NewServer(httpapi.NewRouter(authHandler, tmHandler, glossaryHandler, &backups.Handler{
 		Store:     backups.NewStore(pool),
 		BackupDir: t.TempDir(),
-	}, &jobs.Handler{Store: jobs.NewStore(pool)}, "http://localhost", ""))
+	}, &projects.Handler{Store: projects.NewStore(pool)}, "http://localhost", ""))
 	t.Cleanup(srv.Close)
 
 	emailA := fmt.Sprintf("tmtest_a_%s@example.com", time.Now().Format("150405.000000000"))
@@ -171,7 +171,7 @@ func TestTmSyncBaseID(t *testing.T) {
 	srv := httptest.NewServer(httpapi.NewRouter(authHandler, tmHandler, glossaryHandler, &backups.Handler{
 		Store:     backups.NewStore(pool),
 		BackupDir: t.TempDir(),
-	}, &jobs.Handler{Store: jobs.NewStore(pool)}, "http://localhost", ""))
+	}, &projects.Handler{Store: projects.NewStore(pool)}, "http://localhost", ""))
 	t.Cleanup(srv.Close)
 
 	email := fmt.Sprintf("tmtest_base_%s@example.com", time.Now().Format("150405.000000000"))

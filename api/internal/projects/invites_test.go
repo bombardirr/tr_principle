@@ -1,4 +1,4 @@
-package jobs_test
+package projects_test
 
 import (
 	"context"
@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/bombardirr/tr_principle/api/internal/db"
-	"github.com/bombardirr/tr_principle/api/internal/jobs"
+	"github.com/bombardirr/tr_principle/api/internal/projects"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -37,7 +37,7 @@ func TestInviteMaxUsesOneBurnsAfterAcceptance(t *testing.T) {
 	ownerID := createUser(t, ctx, pool)
 	firstUserID := createUser(t, ctx, pool)
 	secondUserID := createUser(t, ctx, pool)
-	store := jobs.NewStore(pool)
+	store := projects.NewStore(pool)
 	jobID := uuid.New()
 
 	if _, err := store.CreateJob(
@@ -45,7 +45,7 @@ func TestInviteMaxUsesOneBurnsAfterAcceptance(t *testing.T) {
 		ownerID,
 		jobID,
 		"Burn test",
-		jobs.Langs{Source: "en", Target: "ru"},
+		projects.Langs{Source: "en", Target: "ru"},
 		"source.docx",
 		"abc123",
 		uuid.New(),
@@ -58,7 +58,7 @@ func TestInviteMaxUsesOneBurnsAfterAcceptance(t *testing.T) {
 		ctx,
 		jobID,
 		ownerID,
-		jobs.RoleTranslator,
+		projects.RoleTranslator,
 		nil,
 		&maxUses,
 	)
@@ -67,7 +67,7 @@ func TestInviteMaxUsesOneBurnsAfterAcceptance(t *testing.T) {
 	}
 	var storedHash string
 	if err := pool.QueryRow(ctx, `
-		SELECT token_hash FROM job_invites WHERE id = $1
+		SELECT token_hash FROM project_invites WHERE id = $1
 	`, invite.ID).Scan(&storedHash); err != nil {
 		t.Fatal(err)
 	}
@@ -80,13 +80,13 @@ func TestInviteMaxUsesOneBurnsAfterAcceptance(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if acceptedJobID != jobID || role != jobs.RoleTranslator {
-		t.Fatalf("accepted invite = (%s, %q), want (%s, %q)", acceptedJobID, role, jobID, jobs.RoleTranslator)
+	if acceptedJobID != jobID || role != projects.RoleTranslator {
+		t.Fatalf("accepted invite = (%s, %q), want (%s, %q)", acceptedJobID, role, jobID, projects.RoleTranslator)
 	}
 
 	_, _, err = store.AcceptInvite(ctx, rawToken, secondUserID, nil)
-	if !errors.Is(err, jobs.ErrInviteExhausted) {
-		t.Fatalf("second acceptance error = %v, want %v", err, jobs.ErrInviteExhausted)
+	if !errors.Is(err, projects.ErrInviteExhausted) {
+		t.Fatalf("second acceptance error = %v, want %v", err, projects.ErrInviteExhausted)
 	}
 }
 
@@ -108,7 +108,7 @@ func TestCreateJobStoresFingerprintAndOwnerMembership(t *testing.T) {
 	}
 
 	ownerID := createUser(t, ctx, pool)
-	store := jobs.NewStore(pool)
+	store := projects.NewStore(pool)
 	jobID := uuid.New()
 	localProjectID := uuid.New()
 
@@ -117,7 +117,7 @@ func TestCreateJobStoresFingerprintAndOwnerMembership(t *testing.T) {
 		ownerID,
 		jobID,
 		"Fingerprint test",
-		jobs.Langs{Source: "en", Target: "de"},
+		projects.Langs{Source: "en", Target: "de"},
 		"manual.docx",
 		"feedface",
 		localProjectID,
@@ -133,8 +133,8 @@ func TestCreateJobStoresFingerprintAndOwnerMembership(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if role != jobs.RoleOwner {
-		t.Fatalf("owner role = %q, want %q", role, jobs.RoleOwner)
+	if role != projects.RoleOwner {
+		t.Fatalf("owner role = %q, want %q", role, projects.RoleOwner)
 	}
 	isOwner, err := store.IsOwner(ctx, jobID, ownerID)
 	if err != nil {
@@ -147,8 +147,8 @@ func TestCreateJobStoresFingerprintAndOwnerMembership(t *testing.T) {
 	var storedLocalProjectID *uuid.UUID
 	if err := pool.QueryRow(ctx, `
 		SELECT local_project_id
-		FROM job_members
-		WHERE job_id = $1 AND user_id = $2
+		FROM project_members
+		WHERE project_id = $1 AND user_id = $2
 	`, jobID, ownerID).Scan(&storedLocalProjectID); err != nil {
 		t.Fatal(err)
 	}
