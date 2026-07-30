@@ -49,7 +49,7 @@ function addFlags(
  * Personal is not implicit — only attached bases appear.
  */
 export function resolveTmBaseAccess(input: TmBaseAccessInput): TmBaseAccess {
-  const jobContext = isJobEditorContext(input.jobQueryId, input.projectMeta.jobId)
+  const jobContext = isJobEditorContext(input.jobQueryId, input.projectMeta.projectId)
   const map = new Map<string, { canRead: boolean; canWrite: boolean }>()
 
   for (const row of normalizeProjectTmAttachments(input.projectMeta)) {

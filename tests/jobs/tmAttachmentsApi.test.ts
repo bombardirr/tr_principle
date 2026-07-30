@@ -37,7 +37,7 @@ describe('tmAttachmentsApi', () => {
         attachments: [
           {
             id: 'a1',
-            jobId: 'j1',
+            projectId: 'j1',
             tmBaseId: 'personal-tm',
             canRead: true,
             canWrite: false,
@@ -53,14 +53,14 @@ describe('tmAttachmentsApi', () => {
     const items = await listJobTmAttachmentsApi('j1')
     expect(items).toHaveLength(1)
     expect(items[0]!.tmBaseId).toBe('personal-tm')
-    expect(String(fetchMock.mock.calls[0]![0])).toContain('/api/jobs/j1/tm-attachments')
+    expect(String(fetchMock.mock.calls[0]![0])).toContain('/api/projects/j1/tm-attachments')
   })
 
   it('creates attachment', async () => {
     fetchMock.mockResolvedValueOnce(
       jsonResponse(201, {
         id: 'a1',
-        jobId: 'j1',
+        projectId: 'j1',
         tmBaseId: 'personal-tm',
         canRead: true,
         canWrite: true,
@@ -82,7 +82,7 @@ describe('tmAttachmentsApi', () => {
       .mockResolvedValueOnce(
         jsonResponse(200, {
           id: 'a1',
-          jobId: 'j1',
+          projectId: 'j1',
           tmBaseId: 'personal-tm',
           canRead: true,
           canWrite: false,

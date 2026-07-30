@@ -52,7 +52,7 @@ export function cloneProjectRecord(record: ProjectRecord): ProjectRecord {
       segmentSchemaVersion: record.meta.segmentSchemaVersion,
       segmentCount: record.meta.segmentCount,
       doneCount: record.meta.doneCount,
-      jobId: record.meta.jobId,
+      projectId: record.meta.projectId,
       sourceFilename: record.meta.sourceFilename,
       sourceHash: record.meta.sourceHash,
       tmAttachments: record.meta.tmAttachments?.map(a => ({

@@ -38,7 +38,7 @@ import { sharedTmLocalId } from '@/storage/tmBasesIdb'
 import { cloneSharedJobTm, exportSharedJobTm } from '@/tm/jobTmIo'
 import type { TmUnit } from '@/types/tm'
 
-const jobId = 'job-1'
+const projectId = 'job-1'
 const ownerId = 'owner-1'
 const tmBaseId = 'shared-base-1'
 const targetBaseId = 'personal-tm'
@@ -71,14 +71,14 @@ describe('jobTmIo', () => {
       listTmUnits.mockResolvedValueOnce([]).mockResolvedValueOnce([unit])
 
       const result = await exportSharedJobTm({
-        jobId,
+        projectId,
         ownerId,
         tmBaseId,
         label: 'My Base',
       })
 
       expect(listTmUnits).toHaveBeenCalledWith({ baseIds: [localId] })
-      expect(syncTmBase).toHaveBeenCalledWith(tmBaseId, { jobId })
+      expect(syncTmBase).toHaveBeenCalledWith(tmBaseId, { projectId })
       expect(exportTmx).toHaveBeenCalledWith([unit], {
         sourceLang: undefined,
         targetLang: undefined,
@@ -90,9 +90,9 @@ describe('jobTmIo', () => {
     it('returns count 0 without download when still empty after sync', async () => {
       listTmUnits.mockResolvedValue([])
 
-      const result = await exportSharedJobTm({ jobId, ownerId, tmBaseId })
+      const result = await exportSharedJobTm({ projectId, ownerId, tmBaseId })
 
-      expect(syncTmBase).toHaveBeenCalledWith(tmBaseId, { jobId })
+      expect(syncTmBase).toHaveBeenCalledWith(tmBaseId, { projectId })
       expect(downloadBlob).not.toHaveBeenCalled()
       expect(result).toEqual({ count: 0 })
     })
@@ -107,7 +107,7 @@ describe('jobTmIo', () => {
       importTmUnits.mockResolvedValue({ count: 1, ids: [newId] })
 
       const result = await cloneSharedJobTm({
-        jobId,
+        projectId,
         ownerId,
         tmBaseId,
         targetBaseId,

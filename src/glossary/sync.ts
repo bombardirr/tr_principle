@@ -112,7 +112,7 @@ export function scheduleGlossaryPush(delayMs = 1500, jobId?: string) {
   if (pushTimer) clearTimeout(pushTimer)
   pushTimer = setTimeout(() => {
     pushTimer = null
-    void syncGlossary({ pushOnly: true, jobId })
+    void syncGlossary({ pushOnly: true, projectId: jobId })
   }, delayMs)
 }
 
@@ -220,7 +220,7 @@ async function reconcileOwnedCatalog(serverBaseIds: Set<string>): Promise<void> 
 
 export async function syncGlossaryBase(
   baseId: string,
-  opts?: { jobId?: string; pushOnly?: boolean },
+  opts?: { projectId?: string; pushOnly?: boolean },
 ): Promise<void> {
   if (!getStorageAccountId()) return
   return runExclusive(async () => {
@@ -234,13 +234,15 @@ export async function syncGlossaryBase(
         }
       }
     }
-    if (!opts?.pushOnly) await pullAll(baseId, opts?.jobId)
-    await pushDirty(baseId, opts?.jobId)
+    if (!opts?.pushOnly) await pullAll(baseId, opts?.projectId)
+    await pushDirty(baseId, opts?.projectId)
   })
 }
 
 /** Pull then push each owned catalog base. */
-export async function syncGlossary(opts?: { pushOnly?: boolean; jobId?: string }): Promise<void> {
+export async function syncGlossary(
+  opts?: { pushOnly?: boolean; projectId?: string },
+): Promise<void> {
   if (!getStorageAccountId()) return
   return runExclusive(async () => {
     const ownedBaseIds = await listOwnedGlossaryBaseIds()
@@ -265,12 +267,12 @@ export async function syncGlossary(opts?: { pushOnly?: boolean; jobId?: string }
       const ownedBaseId = dirtyBaseIds().find(
         id => !attempted.has(`owned:${id}`) && ownedBaseIds.has(id),
       )
-      const sharedBaseId = opts?.jobId
-        ? dirtyBaseIds(opts.jobId).find(id => !attempted.has(`shared:${id}`))
+      const sharedBaseId = opts?.projectId
+        ? dirtyBaseIds(opts.projectId).find(id => !attempted.has(`shared:${id}`))
         : undefined
       const baseId = ownedBaseId ?? sharedBaseId
       if (!baseId) break
-      const jobId = ownedBaseId ? undefined : opts?.jobId
+      const jobId = ownedBaseId ? undefined : opts?.projectId
       attempted.add(`${jobId ? 'shared' : 'owned'}:${baseId}`)
       try {
         await pushDirty(baseId, jobId)

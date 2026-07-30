@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { bindProjectToJob, inviteLink, projectFingerprint } from '@/jobs/localProject'
-import type { Job } from '@/types/job'
+import {
+  bindLocalProjectToCloudProject,
+  inviteLink,
+  projectFingerprint,
+} from '@/jobs/localProject'
+import type { CloudProject } from '@/types/cloudProject'
 import type { ProjectRecord } from '@/types/project'
 
 function project(): ProjectRecord {
@@ -18,8 +22,8 @@ function project(): ProjectRecord {
   }
 }
 
-const job: Job = {
-  id: 'job-id',
+const cloudProject: CloudProject = {
+  id: 'cloud-project-id',
   ownerUserId: 'owner-id',
   title: 'Manual',
   sourceLang: 'en',
@@ -48,17 +52,17 @@ describe('projectFingerprint', () => {
   })
 })
 
-describe('bindProjectToJob', () => {
-  it('links the local project and stores the canonical job fingerprint', () => {
+describe('bindLocalProjectToCloudProject', () => {
+  it('links the local project and stores the canonical cloud project fingerprint', () => {
     const record = project()
-    const linked = bindProjectToJob(record, job)
+    const linked = bindLocalProjectToCloudProject(record, cloudProject)
 
     expect(linked.meta).toMatchObject({
-      jobId: 'job-id',
+      projectId: 'cloud-project-id',
       sourceFilename: 'source.docx',
       sourceHash: 'source-hash',
     })
-    expect(record.meta.jobId).toBeUndefined()
+    expect(record.meta.projectId).toBeUndefined()
   })
 })
 

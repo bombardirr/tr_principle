@@ -17,7 +17,7 @@ const { toast, toastVisible } = useJoinToast()
     >
       <p class="join-toast__title">{{ t('jobs.joinToastTitle') }}</p>
       <p class="join-toast__body">
-        {{ t('jobs.joinToastBody', { name: toast.memberName, work: toast.jobTitle }) }}
+        {{ t('jobs.joinToastBody', { name: toast.memberName, work: toast.projectTitle }) }}
       </p>
     </div>
   </Teleport>

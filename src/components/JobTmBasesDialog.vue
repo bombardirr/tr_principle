@@ -7,12 +7,12 @@ import { deleteJobTmAttachment, patchJobTmAttachment } from '@/jobs/tmAttachment
 import { getPersonalTmStats } from '@/storage/tmIdb'
 import { PERSONAL_TM_ATTACHMENT_ID, type TmAttachmentCatalogItem } from '@/tm/projectAttachments'
 import { listTmCatalog } from '@/tm/tmBasesCatalog'
-import type { JobTmAttachment } from '@/types/job'
+import type { CloudProjectTmAttachment } from '@/types/cloudProject'
 
 const props = defineProps<{
   open: boolean
-  jobId: string
-  attachments: JobTmAttachment[]
+  projectId: string
+  attachments: CloudProjectTmAttachment[]
   isOwner: boolean
 }>()
 
@@ -97,7 +97,7 @@ async function detach(attachmentId: string) {
   busy.value = true
   emit('error', '')
   try {
-    await deleteJobTmAttachment(props.jobId, attachmentId)
+    await deleteJobTmAttachment(props.projectId, attachmentId)
     emit('changed')
   } catch (err) {
     emit('error', err instanceof Error ? err.message : String(err))
@@ -115,7 +115,7 @@ async function togglePermission(
   busy.value = true
   emit('error', '')
   try {
-    await patchJobTmAttachment(props.jobId, attachmentId, { [permission]: value })
+    await patchJobTmAttachment(props.projectId, attachmentId, { [permission]: value })
     emit('changed')
   } catch (err) {
     emit('error', err instanceof Error ? err.message : String(err))

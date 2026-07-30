@@ -19,7 +19,7 @@ import { sharedGlossaryLocalId } from '@/storage/glossaryBasesIdb'
 import { cloneSharedJobGlossary, exportSharedJobGlossary } from '@/glossary/jobGlossaryIo'
 import type { GlossaryTerm } from '@/types/glossary'
 
-const jobId = 'job-1'
+const projectId = 'job-1'
 const ownerId = 'owner-1'
 const glossaryBaseId = 'shared-base-1'
 const targetBaseId = 'personal-glossary'
@@ -55,14 +55,14 @@ describe('jobGlossaryIo', () => {
     listGlossaryTerms.mockResolvedValueOnce([]).mockResolvedValueOnce([term])
 
     const result = await exportSharedJobGlossary({
-      jobId,
+      projectId,
       ownerId,
       glossaryBaseId,
       label: 'My glossary',
     })
 
     expect(listGlossaryTerms).toHaveBeenCalledWith({ baseIds: [localId] })
-    expect(syncGlossaryBase).toHaveBeenCalledWith(localId, { jobId })
+    expect(syncGlossaryBase).toHaveBeenCalledWith(localId, { projectId })
     expect(exportTbx).toHaveBeenCalledWith([term])
     expect(downloadBlob).toHaveBeenCalledOnce()
     expect(result).toEqual({ count: 1 })
@@ -70,7 +70,7 @@ describe('jobGlossaryIo', () => {
 
   it('returns zero without a download when sync has no terms', async () => {
     listGlossaryTerms.mockResolvedValue([])
-    await expect(exportSharedJobGlossary({ jobId, ownerId, glossaryBaseId })).resolves.toEqual({
+    await expect(exportSharedJobGlossary({ projectId, ownerId, glossaryBaseId })).resolves.toEqual({
       count: 0,
     })
     expect(downloadBlob).not.toHaveBeenCalled()
@@ -83,7 +83,7 @@ describe('jobGlossaryIo', () => {
     vi.spyOn(crypto, 'randomUUID').mockReturnValue(newId)
 
     await expect(
-      cloneSharedJobGlossary({ jobId, ownerId, glossaryBaseId, targetBaseId }),
+      cloneSharedJobGlossary({ projectId, ownerId, glossaryBaseId, targetBaseId }),
     ).resolves.toEqual({ count: 1 })
 
     expect(putGlossaryTerm).toHaveBeenCalledWith(

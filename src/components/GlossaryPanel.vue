@@ -30,7 +30,7 @@ const props = defineProps<{
   readableBaseIds?: string[]
   writableBaseIds?: string[]
   exportableBaseIds?: string[]
-  jobId?: string
+  projectId?: string
 }>()
 
 const emit = defineEmits<{
@@ -94,7 +94,7 @@ const draftReady = computed(
 const writableBaseIds = computed(() => props.writableBaseIds ?? [PERSONAL_GLOSSARY_BASE_ID])
 const writableBaseIdSet = computed(() => new Set(writableBaseIds.value))
 const hasWritableBase = computed(() => writableBaseIds.value.length > 0)
-const canExport = computed(() => !props.jobId || (props.exportableBaseIds?.length ?? 0) > 0)
+const canExport = computed(() => !props.projectId || (props.exportableBaseIds?.length ?? 0) > 0)
 
 const pairLabel = computed(() => {
   if (!props.sourceLang || !props.targetLang) return ''
@@ -119,7 +119,9 @@ async function reload() {
   error.value = ''
   try {
     const baseIds = props.readableBaseIds ?? [PERSONAL_GLOSSARY_BASE_ID]
-    await Promise.all(baseIds.map(baseId => syncGlossaryBase(baseId, { jobId: props.jobId })))
+    await Promise.all(
+      baseIds.map(baseId => syncGlossaryBase(baseId, { projectId: props.projectId })),
+    )
     terms.value = await listGlossaryTerms({ baseIds })
   } catch {
     error.value = t('glossary.loadFail')
@@ -220,7 +222,7 @@ async function saveDraft() {
     createdBy: existing?.createdBy ?? (publicActorLabel(user.value) || 'local'),
   }))
   for (const row of rows) await putGlossaryTerm(row)
-  if (props.jobId) markJobGlossaryDirty(props.jobId, ...rows.map(row => row.id))
+  if (props.projectId) markJobGlossaryDirty(props.projectId, ...rows.map(row => row.id))
   else markGlossaryDirty(...rows.map(row => row.id))
   closeCompose()
   terms.value = await listGlossaryTerms({ baseIds: props.readableBaseIds ?? [PERSONAL_GLOSSARY_BASE_ID] })
@@ -241,7 +243,7 @@ async function setTermStatus(termId: string, status: GlossaryTermStatus) {
   if (editingId.value === termId) draftStatus.value = status
   // Persist before notifying the editor — otherwise reloadGlossary races and reads stale IDB.
   await putGlossaryTerm(row)
-  if (props.jobId) markJobGlossaryDirty(props.jobId, row.id)
+  if (props.projectId) markJobGlossaryDirty(props.projectId, row.id)
   else markGlossaryDirty(row.id)
   emit('changed')
 }
@@ -251,7 +253,7 @@ async function removeTerm(id: string) {
   if (!term || !writableBaseIdSet.value.has(term.baseId)) return
   const row = await softDeleteGlossaryTerm(id)
   if (row) {
-    if (props.jobId) markJobGlossaryDirty(props.jobId, row.id)
+    if (props.projectId) markJobGlossaryDirty(props.projectId, row.id)
     else markGlossaryDirty(row.id)
     terms.value = await listGlossaryTerms({ baseIds: props.readableBaseIds ?? [PERSONAL_GLOSSARY_BASE_ID] })
     if (editingId.value === id) closeCompose()
@@ -260,7 +262,7 @@ async function removeTerm(id: string) {
 }
 
 async function exportFile() {
-  const exportableBaseIds = props.jobId
+  const exportableBaseIds = props.projectId
     ? new Set(props.exportableBaseIds ?? [])
     : await listOwnedGlossaryBaseIds()
   const xml = exportTbx(terms.value.filter(term => exportableBaseIds.has(term.baseId)))
@@ -302,7 +304,7 @@ async function onImportChange(e: Event) {
         dirty.push(row.id)
       }
     }
-    if (props.jobId) markJobGlossaryDirty(props.jobId, ...dirty)
+    if (props.projectId) markJobGlossaryDirty(props.projectId, ...dirty)
     else markGlossaryDirty(...dirty)
     terms.value = await listGlossaryTerms({ baseIds: props.readableBaseIds ?? [PERSONAL_GLOSSARY_BASE_ID] })
     emit('changed')

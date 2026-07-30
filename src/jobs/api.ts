@@ -2,93 +2,93 @@ import { apiFetch } from '@/auth/api'
 import type {
   AcceptInviteInput,
   AcceptInviteResponse,
+  CloudProject,
+  CloudProjectInvite,
+  CloudProjectMember,
   CreateInviteInput,
   CreateInviteResponse,
-  CreateJobInput,
-  Job,
-  JobInvite,
-  JobMember,
-  PatchJobInput,
-  PatchJobMemberInput,
-} from '@/types/job'
+  CreateCloudProjectInput,
+  PatchCloudProjectInput,
+  PatchCloudProjectMemberInput,
+} from '@/types/cloudProject'
 
-export async function createJob(input: CreateJobInput) {
-  return apiFetch<Job>('/api/projects', {
+export async function createJob(input: CreateCloudProjectInput) {
+  return apiFetch<CloudProject>('/api/projects', {
     method: 'POST',
     body: JSON.stringify(input),
   })
 }
 
 export async function listJobs() {
-  return apiFetch<Job[]>('/api/projects')
+  return apiFetch<CloudProject[]>('/api/projects')
 }
 
-export async function getJob(jobId: string) {
-  return apiFetch<Job>(`/api/projects/${jobId}`)
+export async function getJob(projectId: string) {
+  return apiFetch<CloudProject>(`/api/projects/${projectId}`)
 }
 
-export async function patchJob(jobId: string, input: PatchJobInput) {
-  return apiFetch<Job>(`/api/projects/${jobId}`, {
+export async function patchJob(projectId: string, input: PatchCloudProjectInput) {
+  return apiFetch<CloudProject>(`/api/projects/${projectId}`, {
     method: 'PATCH',
     body: JSON.stringify(input),
   })
 }
 
-export async function deleteJob(jobId: string) {
-  return apiFetch<void>(`/api/projects/${jobId}`, {
+export async function deleteJob(projectId: string) {
+  return apiFetch<void>(`/api/projects/${projectId}`, {
     method: 'DELETE',
   })
 }
 
-export async function archiveJob(jobId: string) {
-  return apiFetch<Job>(`/api/projects/${jobId}/archive`, {
+export async function archiveJob(projectId: string) {
+  return apiFetch<CloudProject>(`/api/projects/${projectId}/archive`, {
     method: 'POST',
   })
 }
 
-export async function leaveJob(jobId: string) {
-  return apiFetch<void>(`/api/projects/${jobId}/leave`, {
+export async function leaveJob(projectId: string) {
+  return apiFetch<void>(`/api/projects/${projectId}/leave`, {
     method: 'POST',
   })
 }
 
-export async function transferJob(jobId: string, userId: string) {
-  return apiFetch<Job>(`/api/projects/${jobId}/transfer`, {
+export async function transferJob(projectId: string, userId: string) {
+  return apiFetch<CloudProject>(`/api/projects/${projectId}/transfer`, {
     method: 'POST',
     body: JSON.stringify({ userId }),
   })
 }
 
-export async function listMembers(jobId: string) {
-  return apiFetch<JobMember[]>(`/api/projects/${jobId}/members`)
+export async function listMembers(projectId: string) {
+  return apiFetch<CloudProjectMember[]>(`/api/projects/${projectId}/members`)
 }
 
-export async function patchJobMemberMe(jobId: string, input: PatchJobMemberInput) {
-  return apiFetch<JobMember>(`/api/projects/${jobId}/members/me`, {
+export async function patchJobMemberMe(projectId: string, input: PatchCloudProjectMemberInput) {
+  return apiFetch<CloudProjectMember>(`/api/projects/${projectId}/members/me`, {
     method: 'PATCH',
     body: JSON.stringify(input),
   })
 }
 
-export async function removeMember(jobId: string, userId: string) {
-  return apiFetch<void>(`/api/projects/${jobId}/members/${userId}`, {
+export async function removeMember(projectId: string, userId: string) {
+  return apiFetch<void>(`/api/projects/${projectId}/members/${userId}`, {
     method: 'DELETE',
   })
 }
 
-export async function createInvite(jobId: string, input: CreateInviteInput) {
-  return apiFetch<CreateInviteResponse>(`/api/projects/${jobId}/invites`, {
+export async function createInvite(projectId: string, input: CreateInviteInput) {
+  return apiFetch<CreateInviteResponse>(`/api/projects/${projectId}/invites`, {
     method: 'POST',
     body: JSON.stringify(input),
   })
 }
 
-export async function listInvites(jobId: string) {
-  return apiFetch<JobInvite[]>(`/api/projects/${jobId}/invites`)
+export async function listInvites(projectId: string) {
+  return apiFetch<CloudProjectInvite[]>(`/api/projects/${projectId}/invites`)
 }
 
-export async function revokeInvite(jobId: string, inviteId: string) {
-  return apiFetch<void>(`/api/projects/${jobId}/invites/${inviteId}/revoke`, {
+export async function revokeInvite(projectId: string, inviteId: string) {
+  return apiFetch<void>(`/api/projects/${projectId}/invites/${inviteId}/revoke`, {
     method: 'POST',
   })
 }

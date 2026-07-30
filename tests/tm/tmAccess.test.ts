@@ -38,7 +38,7 @@ describe('resolveTmBaseAccess', () => {
 
   it('namespaces job shared layers by their owner in job context', () => {
     const out = resolveTmBaseAccess({
-      projectMeta: meta({ jobId: 'j1', tmAttachments: [] }),
+      projectMeta: meta({ projectId: 'j1', tmAttachments: [] }),
       jobQueryId: 'j1',
       jobShared: [{ tmBaseId: 'named-b', ownerId: 'owner-1', canRead: true, canWrite: true }],
       jobLocal: [{ id: PERSONAL_TM_ATTACHMENT_ID, canRead: true, canWrite: false }],
@@ -52,7 +52,7 @@ describe('resolveTmBaseAccess', () => {
 
   it('ignores job layers without matching job query', () => {
     const out = resolveTmBaseAccess({
-      projectMeta: meta({ jobId: 'j1', tmAttachments: [] }),
+      projectMeta: meta({ projectId: 'j1', tmAttachments: [] }),
       jobQueryId: undefined,
       jobShared: [{ tmBaseId: 'named-b', canRead: true, canWrite: true }],
     })

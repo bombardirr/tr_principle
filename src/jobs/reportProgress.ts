@@ -1,7 +1,7 @@
 import { patchJobMemberMe } from '@/jobs/api'
 import { computeProgress, computeTmCoverage } from '@/jobs/progress'
 import { listTmUnits } from '@/storage/tmIdb'
-import type { JobMember } from '@/types/job'
+import type { CloudProjectMember } from '@/types/cloudProject'
 import type { ProjectRecord } from '@/types/project'
 
 export async function computeLocalJobProgress(record: ProjectRecord) {
@@ -27,12 +27,12 @@ export async function computeLocalJobProgress(record: ProjectRecord) {
 
 /** Push local project progress to the job roster. Returns updated member or null. */
 export async function reportJobMemberProgress(
-  jobId: string,
+  projectId: string,
   record: ProjectRecord,
-): Promise<JobMember | null> {
+): Promise<CloudProjectMember | null> {
   const progress = await computeLocalJobProgress(record)
   try {
-    return await patchJobMemberMe(jobId, {
+    return await patchJobMemberMe(projectId, {
       ...progress,
       localProjectId: record.meta.id,
     })

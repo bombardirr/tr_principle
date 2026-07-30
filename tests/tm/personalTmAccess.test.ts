@@ -19,7 +19,7 @@ function meta(partial: Partial<ProjectMeta> = {}): ProjectMeta {
 }
 
 describe('isJobEditorContext', () => {
-  it('requires matching query and meta.jobId', () => {
+  it('requires matching query and meta.projectId', () => {
     expect(isJobEditorContext('j1', 'j1')).toBe(true)
     expect(isJobEditorContext('j1', 'j2')).toBe(false)
     expect(isJobEditorContext(undefined, 'j1')).toBe(false)
@@ -31,7 +31,7 @@ describe('resolvePersonalTmAccess', () => {
   it('uses only project flags without job query', () => {
     const out = resolvePersonalTmAccess({
       projectMeta: meta({
-        jobId: 'j1',
+        projectId: 'j1',
         tmAttachments: [{ id: PERSONAL_TM_ATTACHMENT_ID, canRead: true, canWrite: false }],
       }),
       jobQueryId: undefined,
@@ -44,7 +44,7 @@ describe('resolvePersonalTmAccess', () => {
   it('ignores mismatched job query', () => {
     const out = resolvePersonalTmAccess({
       projectMeta: meta({
-        jobId: 'j1',
+        projectId: 'j1',
         tmAttachments: [],
       }),
       jobQueryId: 'other',
@@ -58,7 +58,7 @@ describe('resolvePersonalTmAccess', () => {
   it('ORs job shared flags when in job context', () => {
     const out = resolvePersonalTmAccess({
       projectMeta: meta({
-        jobId: 'j1',
+        projectId: 'j1',
         tmAttachments: [],
       }),
       jobQueryId: 'j1',
@@ -70,7 +70,7 @@ describe('resolvePersonalTmAccess', () => {
   it('ORs local overlay when in job context', () => {
     const out = resolvePersonalTmAccess({
       projectMeta: meta({
-        jobId: 'j1',
+        projectId: 'j1',
         tmAttachments: [{ id: PERSONAL_TM_ATTACHMENT_ID, canRead: false, canWrite: false }],
       }),
       jobQueryId: 'j1',

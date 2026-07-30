@@ -5,9 +5,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 vi.mock('../../src/jobs/tmAttachmentsApi', () => ({
   listJobTmAttachmentsApi: vi.fn(async () => []),
   createJobTmAttachment: vi.fn(
-    async (_jobId: string, input: { tmBaseId: string; canRead?: boolean; canWrite?: boolean }) => ({
+    async (_projectId: string, input: { tmBaseId: string; canRead?: boolean; canWrite?: boolean }) => ({
       id: 'att-created',
-      jobId: 'job-1',
+      projectId: 'job-1',
       tmBaseId: input.tmBaseId,
       canRead: input.canRead ?? true,
       canWrite: input.canWrite ?? true,
@@ -20,7 +20,7 @@ vi.mock('../../src/jobs/tmAttachmentsApi', () => ({
   ),
   patchJobTmAttachment: vi.fn(async () => ({
     id: 'att-server',
-    jobId: 'job-1',
+    projectId: 'job-1',
     tmBaseId: 'personal-tm',
     canRead: false,
     canWrite: true,
@@ -108,7 +108,7 @@ const messages = {
 
 const mounted: { unmount: () => void }[] = []
 
-function mountPanel(props = { jobId: 'job-1', isOwner: false, myRole: 'translator' as const }) {
+function mountPanel(props = { projectId: 'job-1', isOwner: false, myRole: 'translator' as const }) {
   const host = document.createElement('div')
   document.body.append(host)
   const app = createApp({ render: () => h(JobMemoriesPanel, props) })
@@ -166,8 +166,8 @@ describe('JobMemoriesPanel', () => {
   })
 
   it('only shows the shared add control to the owner', async () => {
-    const ownerHost = mountPanel({ jobId: 'job-1', isOwner: true, myRole: 'owner' })
-    const memberHost = mountPanel({ jobId: 'job-1', isOwner: false, myRole: 'translator' })
+    const ownerHost = mountPanel({ projectId: 'job-1', isOwner: true, myRole: 'owner' })
+    const memberHost = mountPanel({ projectId: 'job-1', isOwner: false, myRole: 'translator' })
     await settle()
 
     expect(ownerHost.querySelector('[data-testid="job-tm-add"]')).not.toBeNull()
@@ -176,7 +176,7 @@ describe('JobMemoriesPanel', () => {
   })
 
   it('owner attaches a shared base through the server API', async () => {
-    const host = mountPanel({ jobId: 'job-1', isOwner: true, myRole: 'owner' })
+    const host = mountPanel({ projectId: 'job-1', isOwner: true, myRole: 'owner' })
     await settle()
 
     host.querySelector<HTMLButtonElement>('[data-testid="job-tm-add"]')!.click()
@@ -198,7 +198,7 @@ describe('JobMemoriesPanel', () => {
     vi.mocked(listJobTmAttachmentsApi).mockResolvedValue([
       {
         id: 'att-server',
-        jobId: 'job-1',
+        projectId: 'job-1',
         tmBaseId: 'personal-tm',
         canRead: true,
         canWrite: true,
@@ -218,7 +218,7 @@ describe('JobMemoriesPanel', () => {
     expect([...memberCheckboxes].every(input => input.disabled)).toBe(true)
     expect(memberHost.querySelector('[data-testid="job-tm-shared-detach"]')).toBeNull()
 
-    const ownerHost = mountPanel({ jobId: 'job-1', isOwner: true, myRole: 'owner' })
+    const ownerHost = mountPanel({ projectId: 'job-1', isOwner: true, myRole: 'owner' })
     await settle()
     const ownerRead = ownerHost.querySelector<HTMLInputElement>(
       '[data-testid="job-tm-shared-read"]'
@@ -238,7 +238,7 @@ describe('JobMemoriesPanel', () => {
     vi.mocked(listJobTmAttachmentsApi).mockResolvedValue([
       {
         id: 'att-server',
-        jobId: 'job-1',
+        projectId: 'job-1',
         tmBaseId: 'shared-base',
         ownerId: 'owner-1',
         canRead: true,
@@ -250,7 +250,7 @@ describe('JobMemoriesPanel', () => {
         updatedAt: '2026-01-01T00:00:00Z',
       },
     ])
-    const host = mountPanel({ jobId: 'job-1', isOwner: true, myRole: 'owner' })
+    const host = mountPanel({ projectId: 'job-1', isOwner: true, myRole: 'owner' })
     await settle()
 
     host.querySelector<HTMLInputElement>('[data-testid="job-tm-shared-export"]')!.click()
@@ -270,7 +270,7 @@ describe('JobMemoriesPanel', () => {
     vi.mocked(listJobTmAttachmentsApi).mockResolvedValue([
       {
         id: 'att-server',
-        jobId: 'job-1',
+        projectId: 'job-1',
         tmBaseId: 'shared-base',
         ownerId: 'owner-1',
         canRead: true,
@@ -293,7 +293,7 @@ describe('JobMemoriesPanel', () => {
     vi.mocked(listJobTmAttachmentsApi).mockResolvedValue([
       {
         id: 'att-server',
-        jobId: 'job-1',
+        projectId: 'job-1',
         tmBaseId: 'shared-base',
         label: 'Shared base',
         ownerId: 'owner-1',
@@ -313,7 +313,7 @@ describe('JobMemoriesPanel', () => {
     await settle()
 
     expect(exportSharedJobTm).toHaveBeenCalledWith({
-      jobId: 'job-1',
+      projectId: 'job-1',
       ownerId: 'owner-1',
       tmBaseId: 'shared-base',
       label: 'Shared base',
@@ -325,7 +325,7 @@ describe('JobMemoriesPanel', () => {
     vi.mocked(listJobTmAttachmentsApi).mockResolvedValue([
       {
         id: 'att-server',
-        jobId: 'job-1',
+        projectId: 'job-1',
         tmBaseId: 'shared-base',
         ownerId: 'owner-1',
         canRead: true,
@@ -368,7 +368,7 @@ describe('JobMemoriesPanel', () => {
     await settle()
 
     expect(cloneSharedJobTm).toHaveBeenCalledWith({
-      jobId: 'job-1',
+      projectId: 'job-1',
       ownerId: 'owner-1',
       tmBaseId: 'shared-base',
       targetBaseId: 'personal-tm',
@@ -380,7 +380,7 @@ describe('JobMemoriesPanel', () => {
     vi.mocked(listJobTmAttachmentsApi).mockResolvedValue([
       {
         id: 'att-readable',
-        jobId: 'job-1',
+        projectId: 'job-1',
         tmBaseId: 'shared-base',
         label: 'Shared base',
         color: '#123456',
@@ -395,7 +395,7 @@ describe('JobMemoriesPanel', () => {
       },
       {
         id: 'att-hidden',
-        jobId: 'job-1',
+        projectId: 'job-1',
         tmBaseId: 'hidden-base',
         canRead: false,
         canWrite: false,
@@ -415,7 +415,9 @@ describe('JobMemoriesPanel', () => {
         label: 'Shared base',
         color: '#123456',
       })
-      expect(syncTmBase).toHaveBeenCalledWith('share:owner-1:shared-base', { jobId: 'job-1' })
+      expect(syncTmBase).toHaveBeenCalledWith('share:owner-1:shared-base', {
+        projectId: 'job-1',
+      })
     })
     expect(document.body.textContent).toContain('Shared base')
     expect(syncTmBase).not.toHaveBeenCalledWith('hidden-base', expect.anything())
@@ -425,7 +427,7 @@ describe('JobMemoriesPanel', () => {
     vi.mocked(listJobTmAttachmentsApi).mockResolvedValue([
       {
         id: 'att-readable',
-        jobId: 'job-1',
+        projectId: 'job-1',
         tmBaseId: 'shared-base',
         label: 'Shared base',
         canRead: true,
@@ -471,7 +473,7 @@ describe('JobMemoriesPanel', () => {
     const oldLoad = deferred<Awaited<ReturnType<typeof listJobTmAttachmentsApi>>>()
     const attachment = {
       id: 'att-old',
-      jobId: 'job-1',
+      projectId: 'job-1',
       tmBaseId: 'old-base',
       canRead: true,
       canWrite: true,
@@ -484,12 +486,12 @@ describe('JobMemoriesPanel', () => {
     vi.mocked(listJobTmAttachmentsApi)
       .mockImplementationOnce(() => oldLoad.promise)
       .mockResolvedValueOnce([
-        { ...attachment, id: 'att-new', jobId: 'job-2', tmBaseId: 'new-base' },
+        { ...attachment, id: 'att-new', projectId: 'job-2', tmBaseId: 'new-base' },
       ])
-    const props = reactive({ jobId: 'job-1', isOwner: true, myRole: 'owner' as const })
+    const props = reactive({ projectId: 'job-1', isOwner: true, myRole: 'owner' as const })
     const host = mountPanel(props)
 
-    props.jobId = 'job-2'
+    props.projectId = 'job-2'
     await settle()
     expect(host.textContent).toContain('new-base')
 
@@ -503,7 +505,7 @@ describe('JobMemoriesPanel', () => {
     const newLoad = deferred<Awaited<ReturnType<typeof listJobTmAttachmentsApi>>>()
     const attachment = {
       id: 'att-old',
-      jobId: 'job-1',
+      projectId: 'job-1',
       tmBaseId: 'old-base',
       canRead: true,
       canWrite: true,
@@ -516,12 +518,12 @@ describe('JobMemoriesPanel', () => {
     vi.mocked(listJobTmAttachmentsApi)
       .mockResolvedValueOnce([attachment])
       .mockImplementationOnce(() => newLoad.promise)
-    const props = reactive({ jobId: 'job-1', isOwner: true, myRole: 'owner' as const })
+    const props = reactive({ projectId: 'job-1', isOwner: true, myRole: 'owner' as const })
     const host = mountPanel(props)
     await settle()
 
     expect(host.textContent).toContain('old-base')
-    props.jobId = 'job-2'
+    props.projectId = 'job-2'
     await nextTick()
 
     expect(listJobTmAttachmentsApi).toHaveBeenLastCalledWith('job-2')
@@ -536,7 +538,7 @@ describe('JobMemoriesPanel', () => {
     const oldPatch = deferred<Awaited<ReturnType<typeof patchJobTmAttachment>>>()
     const attachment = {
       id: 'att-old',
-      jobId: 'job-1',
+      projectId: 'job-1',
       tmBaseId: 'old-base',
       canRead: true,
       canWrite: true,
@@ -548,14 +550,14 @@ describe('JobMemoriesPanel', () => {
     }
     vi.mocked(listJobTmAttachmentsApi)
       .mockResolvedValueOnce([attachment])
-      .mockResolvedValueOnce([{ ...attachment, jobId: 'job-2', tmBaseId: 'new-base' }])
+      .mockResolvedValueOnce([{ ...attachment, projectId: 'job-2', tmBaseId: 'new-base' }])
     vi.mocked(patchJobTmAttachment).mockImplementationOnce(() => oldPatch.promise)
-    const props = reactive({ jobId: 'job-1', isOwner: true, myRole: 'owner' as const })
+    const props = reactive({ projectId: 'job-1', isOwner: true, myRole: 'owner' as const })
     const host = mountPanel(props)
     await settle()
 
     host.querySelector<HTMLInputElement>('[data-testid="job-tm-shared-read"]')!.click()
-    props.jobId = 'job-2'
+    props.projectId = 'job-2'
     await settle()
     oldPatch.resolve({ ...attachment, canRead: false })
     await settle()
@@ -569,7 +571,7 @@ describe('JobMemoriesPanel', () => {
     vi.mocked(listJobTmAttachmentsApi).mockResolvedValue([
       {
         id: 'att-server',
-        jobId: 'job-1',
+        projectId: 'job-1',
         tmBaseId: 'shared-base',
         ownerId: 'owner-1',
         canRead: true,
@@ -582,12 +584,12 @@ describe('JobMemoriesPanel', () => {
       },
     ])
     vi.mocked(listTmBases).mockImplementationOnce(() => oldList.promise)
-    const props = reactive({ jobId: 'job-1', isOwner: false, myRole: 'translator' as const })
+    const props = reactive({ projectId: 'job-1', isOwner: false, myRole: 'translator' as const })
     const host = mountPanel(props)
     await settle()
 
     host.querySelector<HTMLButtonElement>('[data-testid="job-tm-clone"]')!.click()
-    props.jobId = 'job-2'
+    props.projectId = 'job-2'
     await settle()
 
     oldList.resolve([
@@ -609,7 +611,7 @@ describe('JobMemoriesPanel', () => {
   it('keeps a mutation error visible after refreshing shared attachments', async () => {
     const attachment = {
       id: 'att-server',
-      jobId: 'job-1',
+      projectId: 'job-1',
       tmBaseId: 'personal-tm',
       canRead: true,
       canWrite: true,
@@ -621,7 +623,7 @@ describe('JobMemoriesPanel', () => {
     }
     vi.mocked(listJobTmAttachmentsApi).mockResolvedValue([attachment])
     vi.mocked(patchJobTmAttachment).mockRejectedValueOnce(new Error('Permission update failed'))
-    const host = mountPanel({ jobId: 'job-1', isOwner: true, myRole: 'owner' })
+    const host = mountPanel({ projectId: 'job-1', isOwner: true, myRole: 'owner' })
     await settle()
 
     host.querySelector<HTMLInputElement>('[data-testid="job-tm-shared-read"]')!.click()

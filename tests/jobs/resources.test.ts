@@ -6,9 +6,9 @@ import {
   readCachedJobResource,
 } from '@/jobs/resources'
 import { setStorageAccountId } from '@/storage/scope'
-import type { JobResource } from '@/types/job'
+import type { CloudProjectResource } from '@/types/cloudProject'
 
-const base: JobResource = {
+const base: CloudProjectResource = {
   kind: 'job_tm',
   enabled: true,
   canRead: true,

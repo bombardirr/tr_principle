@@ -12,22 +12,26 @@ import {
 } from '@/jobs/api'
 import { inviteLink } from '@/jobs/localProject'
 import { useAuth } from '@/auth/session'
-import type { Job, JobInvite, JobMember } from '@/types/job'
+import type {
+  CloudProject,
+  CloudProjectInvite,
+  CloudProjectMember,
+} from '@/types/cloudProject'
 import JobMemoriesPanel from '@/components/JobMemoriesPanel.vue'
 import JobGlossaryPanel from '@/components/JobGlossaryPanel.vue'
 
 const props = defineProps<{
   open: boolean
-  jobId: string
+  projectId: string
 }>()
 
 const emit = defineEmits<{ close: []; 'glossary-attachments-changed': [] }>()
 const { t } = useI18n()
 const { user } = useAuth()
 
-const job = ref<Job | null>(null)
-const members = ref<JobMember[]>([])
-const invites = ref<JobInvite[]>([])
+const job = ref<CloudProject | null>(null)
+const members = ref<CloudProjectMember[]>([])
+const invites = ref<CloudProjectInvite[]>([])
 const role = ref<'translator' | 'viewer'>('translator')
 const oneTime = ref(true)
 const inviteUrl = ref('')
@@ -45,7 +49,7 @@ const myMember = computed(() => members.value.find(member => member.userId === u
 const canMarkPartDone = computed(() => myMember.value && myMember.value.role !== 'viewer')
 
 watch(
-  () => [props.open, props.jobId] as const,
+  () => [props.open, props.projectId] as const,
   ([open]) => {
     if (open) void load()
   },
@@ -58,12 +62,12 @@ async function load() {
   inviteUrl.value = ''
   try {
     const [nextJob, nextMembers] = await Promise.all([
-      getJob(props.jobId),
-      listMembers(props.jobId),
+      getJob(props.projectId),
+      listMembers(props.projectId),
     ])
     job.value = nextJob
     members.value = nextMembers
-    invites.value = nextJob.ownerUserId === user.value?.id ? await listInvites(props.jobId) : []
+    invites.value = nextJob.ownerUserId === user.value?.id ? await listInvites(props.projectId) : []
   } catch (err) {
     error.value = err instanceof Error ? err.message : String(err)
   } finally {
@@ -71,7 +75,7 @@ async function load() {
   }
 }
 
-function memberName(member: JobMember) {
+function memberName(member: CloudProjectMember) {
   return member.displayName?.trim() || `anon:${member.userId}`
 }
 
@@ -79,7 +83,7 @@ function checked(event: Event) {
   return (event.target as HTMLInputElement).checked
 }
 
-function roleLabel(value: JobMember['role']) {
+function roleLabel(value: CloudProjectMember['role']) {
   return t(`jobs.roles.${value}`)
 }
 
@@ -88,7 +92,7 @@ function formatDate(value?: string | null) {
   return new Date(value).toLocaleString()
 }
 
-function progressLabel(member: JobMember) {
+function progressLabel(member: CloudProjectMember) {
   return `${member.progressDone} / ${member.progressTotal}`
 }
 
@@ -97,7 +101,7 @@ async function updatePartDone(value: boolean) {
   busy.value = true
   error.value = ''
   try {
-    const updated = await patchJobMemberMe(props.jobId, { partDone: value })
+    const updated = await patchJobMemberMe(props.projectId, { partDone: value })
     members.value = members.value.map(member =>
       member.userId === updated.userId ? updated : member
     )
@@ -114,7 +118,7 @@ async function makeInvite() {
   error.value = ''
   copied.value = false
   try {
-    const response = await createInvite(props.jobId, {
+    const response = await createInvite(props.projectId, {
       role: role.value,
       maxUses: oneTime.value ? 1 : undefined,
     })
@@ -133,12 +137,12 @@ async function copyInvite() {
   copied.value = true
 }
 
-async function revoke(invite: JobInvite) {
+async function revoke(invite: CloudProjectInvite) {
   if (busy.value || invite.revokedAt) return
   busy.value = true
   error.value = ''
   try {
-    await revokeInvite(props.jobId, invite.id)
+    await revokeInvite(props.projectId, invite.id)
     invites.value = invites.value.map(item =>
       item.id === invite.id ? { ...item, revokedAt: new Date().toISOString() } : item
     )
@@ -157,8 +161,8 @@ async function transferOwnership() {
   busy.value = true
   error.value = ''
   try {
-    job.value = await transferJob(props.jobId, transferTargetId.value)
-    members.value = await listMembers(props.jobId)
+    job.value = await transferJob(props.projectId, transferTargetId.value)
+    members.value = await listMembers(props.projectId)
     transferTargetId.value = ''
     invites.value = []
   } catch (err) {
@@ -249,13 +253,13 @@ async function transferOwnership() {
 
         <JobMemoriesPanel
           v-if="job"
-          :job-id="jobId"
+          :project-id="projectId"
           :is-owner="isOwner"
           :my-role="myMember?.role ?? null"
         />
         <JobGlossaryPanel
           v-if="job"
-          :job-id="jobId"
+          :project-id="projectId"
           :is-owner="isOwner"
           @glossary-attachments-changed="emit('glossary-attachments-changed')"
         />

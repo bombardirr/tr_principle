@@ -1,17 +1,17 @@
 import { computed, reactive, ref } from 'vue'
 import { listMembers } from '@/jobs/api'
-import type { Job, JobMember } from '@/types/job'
+import type { CloudProject, CloudProjectMember } from '@/types/cloudProject'
 
 const ACK_PREFIX = 'tr.jobJoinAck.'
 const ANNOUNCED_PREFIX = 'tr.jobJoinAnnounced.'
 
 export type JoinToast = {
-  jobId: string
-  jobTitle: string
+  projectId: string
+  projectTitle: string
   memberName: string
 }
 
-/** jobId → count of members not yet acknowledged by opening the work */
+/** projectId → count of members not yet acknowledged by opening the work */
 const unreadByJob = reactive<Record<string, number>>({})
 const toast = ref<JoinToast | null>(null)
 const toastVisible = ref(false)
@@ -37,11 +37,11 @@ function saveMap(key: string, map: Record<string, string[]>) {
   localStorage.setItem(key, JSON.stringify(map))
 }
 
-function memberIds(members: JobMember[]) {
+function memberIds(members: CloudProjectMember[]) {
   return members.map(m => m.userId)
 }
 
-function displayName(member: JobMember) {
+function displayName(member: CloudProjectMember) {
   return member.displayName?.trim() || `anon:${member.userId.slice(0, 8)}`
 }
 
@@ -49,8 +49,8 @@ export const joinUnreadCount = computed(() =>
   Object.values(unreadByJob).reduce((sum, n) => sum + (n > 0 ? 1 : 0), 0),
 )
 
-export function jobHasJoinUnread(jobId: string) {
-  return (unreadByJob[jobId] ?? 0) > 0
+export function projectHasJoinUnread(projectId: string) {
+  return (unreadByJob[projectId] ?? 0) > 0
 }
 
 export function useJoinToast() {
@@ -76,20 +76,24 @@ function showJoinToast(payload: JoinToast) {
 }
 
 /** Acknowledge roster so the badge clears (after opening panel / hub). */
-export function acknowledgeJobJoins(userId: string, jobId: string, members: JobMember[]) {
+export function acknowledgeProjectJoins(
+  userId: string,
+  projectId: string,
+  members: CloudProjectMember[],
+) {
   const ackKey = ACK_PREFIX + userId
   const annKey = ANNOUNCED_PREFIX + userId
   const ack = loadMap(ackKey)
   const ann = loadMap(annKey)
-  ack[jobId] = memberIds(members)
-  ann[jobId] = []
+  ack[projectId] = memberIds(members)
+  ann[projectId] = []
   saveMap(ackKey, ack)
   saveMap(annKey, ann)
-  delete unreadByJob[jobId]
+  delete unreadByJob[projectId]
 }
 
-export async function checkOwnedJobJoins(userId: string, jobs: Job[]) {
-  const owned = jobs.filter(j => j.ownerUserId === userId)
+export async function checkOwnedProjectJoins(userId: string, projects: CloudProject[]) {
+  const owned = projects.filter(project => project.ownerUserId === userId)
   const ackKey = ACK_PREFIX + userId
   const annKey = ANNOUNCED_PREFIX + userId
   const ack = loadMap(ackKey)
@@ -97,45 +101,45 @@ export async function checkOwnedJobJoins(userId: string, jobs: Job[]) {
   let ackDirty = false
   let annDirty = false
 
-  for (const job of owned) {
-    let members: JobMember[]
+  for (const project of owned) {
+    let members: CloudProjectMember[]
     try {
-      members = await listMembers(job.id)
+      members = await listMembers(project.id)
     } catch {
       continue
     }
 
     const ids = memberIds(members)
-    const prev = ack[job.id]
+    const prev = ack[project.id]
     if (!prev) {
-      ack[job.id] = ids
+      ack[project.id] = ids
       ackDirty = true
-      delete unreadByJob[job.id]
+      delete unreadByJob[project.id]
       continue
     }
 
     const prevSet = new Set(prev)
     const newcomers = members.filter(m => m.role !== 'owner' && !prevSet.has(m.userId))
-    unreadByJob[job.id] = newcomers.length
+    unreadByJob[project.id] = newcomers.length
     if (!newcomers.length) continue
 
-    const announced = new Set(ann[job.id] ?? [])
+    const announced = new Set(ann[project.id] ?? [])
     let toasted = false
     for (const member of newcomers) {
       if (announced.has(member.userId)) continue
       announced.add(member.userId)
       if (!toasted) {
         showJoinToast({
-          jobId: job.id,
-          jobTitle: job.title,
+          projectId: project.id,
+          projectTitle: project.title,
           memberName: displayName(member),
         })
         toasted = true
       }
     }
     const nextAnn = [...announced]
-    if (nextAnn.length !== (ann[job.id]?.length ?? 0)) {
-      ann[job.id] = nextAnn
+    if (nextAnn.length !== (ann[project.id]?.length ?? 0)) {
+      ann[project.id] = nextAnn
       annDirty = true
     }
   }
@@ -144,12 +148,16 @@ export async function checkOwnedJobJoins(userId: string, jobs: Job[]) {
   if (annDirty) saveMap(annKey, ann)
 }
 
-export function startJoinActivityPolling(userId: string, getJobs: () => Job[], intervalMs = 18000) {
+export function startJoinActivityPolling(
+  userId: string,
+  getProjects: () => CloudProject[],
+  intervalMs = 18000,
+) {
   stopJoinActivityPolling()
   pollingUserId = userId
   const tick = () => {
     if (pollingUserId !== userId) return
-    void checkOwnedJobJoins(userId, getJobs())
+    void checkOwnedProjectJoins(userId, getProjects())
   }
   tick()
   pollTimer = setInterval(tick, intervalMs)

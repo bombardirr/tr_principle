@@ -6,19 +6,19 @@ import { exportTmx } from '@/tm/tmx'
 import type { TmUnit } from '@/types/tm'
 
 export async function ensureSharedUnitsForJob(opts: {
-  jobId: string
+  projectId: string
   ownerId: string
   tmBaseId: string
 }): Promise<TmUnit[]> {
   const localId = sharedTmLocalId(opts.ownerId, opts.tmBaseId)
   let units = await listTmUnits({ baseIds: [localId] })
   if (units.length) return units
-  await syncTmBase(opts.tmBaseId, { jobId: opts.jobId })
+  await syncTmBase(opts.tmBaseId, { projectId: opts.projectId })
   return listTmUnits({ baseIds: [localId] })
 }
 
 export async function exportSharedJobTm(opts: {
-  jobId: string
+  projectId: string
   ownerId: string
   tmBaseId: string
   label?: string
@@ -37,7 +37,7 @@ export async function exportSharedJobTm(opts: {
 }
 
 export async function cloneSharedJobTm(opts: {
-  jobId: string
+  projectId: string
   ownerId: string
   tmBaseId: string
   targetBaseId: string

@@ -92,7 +92,7 @@ export interface ProjectMeta {
   segmentSchemaVersion?: number
   segmentCount: number
   doneCount: number
-  jobId?: string
+  projectId?: string
   sourceFilename?: string
   sourceHash?: string
   tmAttachments?: ProjectTmAttachment[]

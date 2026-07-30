@@ -154,7 +154,7 @@ describe('per-base TM sync', () => {
     })
 
     markTmDirty(shared.id)
-    await syncTm({ pushOnly: true, jobId: 'job-1' })
+    await syncTm({ pushOnly: true, projectId: 'job-1' })
 
     expect(apiFetch).toHaveBeenCalledWith('/api/tm/bases/shared-base/sync?jobId=job-1', {
       method: 'POST',
@@ -173,7 +173,7 @@ describe('per-base TM sync', () => {
     apiFetch.mockResolvedValue({ ok: true, until: '2026-07-21T11:00:00.000Z' })
 
     markTmDirty(shared.id)
-    await syncTmBase(shared.baseId, { pushOnly: true, jobId: 'job-1' })
+    await syncTmBase(shared.baseId, { pushOnly: true, projectId: 'job-1' })
 
     expect(apiFetch).toHaveBeenCalledWith('/api/tm/bases/personal-tm/sync?jobId=job-1', {
       method: 'POST',
@@ -196,7 +196,7 @@ describe('per-base TM sync', () => {
     })
 
     markTmDirty(owned.id)
-    await syncTmBase('shared-base', { jobId: 'job-1' })
+    await syncTmBase('shared-base', { projectId: 'job-1' })
 
     expect(apiFetch).toHaveBeenCalledWith('/api/tm/bases/owned-base/sync', {
       method: 'POST',
@@ -243,7 +243,7 @@ describe('per-base TM sync', () => {
       hasMore: false,
     })
 
-    await syncTmBase(sharedTmLocalId('owner-1', 'personal-tm'), { jobId: 'job-1' })
+    await syncTmBase(sharedTmLocalId('owner-1', 'personal-tm'), { projectId: 'job-1' })
 
     expect(await getTmUnit(remote.id)).toMatchObject({
       ...remote,

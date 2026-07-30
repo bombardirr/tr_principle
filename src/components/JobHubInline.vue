@@ -14,9 +14,13 @@ import TmAttachmentStrip from '@/components/TmAttachmentStrip.vue'
 import TmCollectionDialog from '@/components/TmCollectionDialog.vue'
 import { downloadBlob } from '@/docx/exportDocx'
 import { openDocx } from '@/docx/openDocx'
-import { createEmptyJobProject } from '@/jobs/createProject'
+import { createEmptyLocalProject } from '@/jobs/createProject'
 import { fingerprintDocx, fingerprintMismatch } from '@/jobs/fingerprint'
-import { bindProjectToJob, projectFingerprint, unlinkLocalProjectsFromJob } from '@/jobs/localProject'
+import {
+  bindLocalProjectToCloudProject,
+  projectFingerprint,
+  unlinkLocalProjectsFromCloudProject,
+} from '@/jobs/localProject'
 import { getJob, listMembers, deleteJob, archiveJob, leaveJob, patchJob } from '@/jobs/api'
 import { deleteJobOriginal, getJobOriginal, putJobOriginal } from '@/jobs/originalApi'
 import {
@@ -30,16 +34,20 @@ import { langPairLabel } from '@/tm/langPairs'
 import { PERSONAL_TM_ATTACHMENT_ID } from '@/tm/projectAttachments'
 import { unpackProjectFile } from '@/storage/projectFile'
 import { SEGMENT_SCHEMA_DATE_SAFE, type ProjectMeta, type ProjectRecord, type ProjectTmAttachmentId } from '@/types/project'
-import { acknowledgeJobJoins } from '@/jobs/joinActivity'
+import { acknowledgeProjectJoins } from '@/jobs/joinActivity'
 import { progressPercent } from '@/jobs/progress'
 import {
   computeLocalJobProgress,
   reportJobMemberProgress,
 } from '@/jobs/reportProgress'
-import type { Job, JobMember, JobTmAttachment } from '@/types/job'
+import type {
+  CloudProject,
+  CloudProjectMember,
+  CloudProjectTmAttachment,
+} from '@/types/cloudProject'
 
 const props = defineProps<{
-  jobId: string
+  projectId: string
 }>()
 
 const emit = defineEmits<{
@@ -52,8 +60,8 @@ const emit = defineEmits<{
 const { t } = useI18n()
 const { user } = useAuth()
 
-const job = ref<Job | null>(null)
-const members = ref<JobMember[]>([])
+const job = ref<CloudProject | null>(null)
+const members = ref<CloudProjectMember[]>([])
 const projects = ref<ProjectMeta[]>([])
 const selectedId = ref('')
 const docxInput = ref<HTMLInputElement | null>(null)
@@ -72,7 +80,7 @@ const myLiveProgress = ref<{
   progressTm: number
 } | null>(null)
 
-const jobTmAttachments = ref<JobTmAttachment[]>([])
+const jobTmAttachments = ref<CloudProjectTmAttachment[]>([])
 const jobTmBasesOpen = ref(false)
 const jobTmCollectionOpen = ref(false)
 const jobTmCollectionMode = ref<'pick' | 'browse'>('pick')
@@ -88,7 +96,7 @@ const canHaveProject = computed(
 )
 const linkedProject = computed(() => {
   const localId = myMember.value?.localProjectId
-  return projects.value.find(project => project.id === localId || project.jobId === props.jobId)
+  return projects.value.find(project => project.id === localId || project.projectId === props.projectId)
 })
 
 const jobTmStripItems = computed(() =>
@@ -115,7 +123,7 @@ const displayMembers = computed(() =>
 )
 
 watch(
-  () => props.jobId,
+  () => props.projectId,
   () => {
     void load()
   },
@@ -136,7 +144,7 @@ onUnmounted(() => {
 })
 
 async function load() {
-  if (!props.jobId) return
+  if (!props.projectId) return
   busy.value = true
   error.value = ''
   job.value = null
@@ -144,15 +152,15 @@ async function load() {
   jobTmAttachments.value = []
   try {
     const [nextJob, nextMembers, nextProjects] = await Promise.all([
-      getJob(props.jobId),
-      listMembers(props.jobId),
+      getJob(props.projectId),
+      listMembers(props.projectId),
       listProjects(),
     ])
     job.value = nextJob
     members.value = nextMembers
     projects.value = nextProjects
     if (user.value?.id && nextJob.ownerUserId === user.value.id) {
-      acknowledgeJobJoins(user.value.id, nextJob.id, nextMembers)
+      acknowledgeProjectJoins(user.value.id, nextJob.id, nextMembers)
     }
     await Promise.all([syncMyProgressFromLocal(), refreshJobTmAttachments()])
   } catch (err) {
@@ -163,9 +171,9 @@ async function load() {
 }
 
 async function refreshJobTmAttachments() {
-  if (!props.jobId) return
+  if (!props.projectId) return
   try {
-    jobTmAttachments.value = await listJobTmAttachmentsApi(props.jobId)
+    jobTmAttachments.value = await listJobTmAttachmentsApi(props.projectId)
     await refreshPersonalTmStatsForStrip()
   } catch (err) {
     jobTmAttachments.value = []
@@ -222,7 +230,7 @@ function onJobTmCollectionClose() {
 async function onJobTmAttach(id: ProjectTmAttachmentId) {
   if (!isOwner.value) return
   try {
-    await createJobTmAttachment(props.jobId, {
+    await createJobTmAttachment(props.projectId, {
       tmBaseId: id,
       canRead: true,
       canWrite: true,
@@ -240,7 +248,7 @@ async function syncMyProgressFromLocal() {
   if (!job.value || !canHaveProject.value) return
   const localId =
     myMember.value?.localProjectId ||
-    projects.value.find(project => project.jobId === props.jobId)?.id
+    projects.value.find(project => project.projectId === props.projectId)?.id
   if (!localId) return
   const record = await getProject(localId)
   if (!record) return
@@ -280,7 +288,7 @@ async function confirmPendingAction() {
   try {
     if (kind === 'leave') {
       await leaveJob(job.value.id)
-      await unlinkLocalProjectsFromJob(job.value.id, projects.value)
+      await unlinkLocalProjectsFromCloudProject(job.value.id, projects.value)
       pendingAction.value = null
       emit('changed')
       emit('close')
@@ -300,7 +308,7 @@ async function confirmPendingAction() {
       return
     }
     await deleteJob(job.value.id)
-    await unlinkLocalProjectsFromJob(job.value.id, projects.value)
+    await unlinkLocalProjectsFromCloudProject(job.value.id, projects.value)
     pendingAction.value = null
     emit('changed')
     emit('close')
@@ -377,28 +385,28 @@ async function onProjectChanged() {
   emit('changed')
 }
 
-function memberName(member: JobMember) {
+function memberName(member: CloudProjectMember) {
   if (user.value?.id && member.userId === user.value.id) {
     return publicActorLabel(user.value) || member.displayName?.trim() || `anon:${member.userId}`
   }
   return member.displayName?.trim() || `anon:${member.userId}`
 }
 
-function roleLabel(role: JobMember['role']) {
+function roleLabel(role: CloudProjectMember['role']) {
   return t(`jobs.roles.${role}`)
 }
 
-function memberPct(member: JobMember) {
+function memberPct(member: CloudProjectMember) {
   return progressPercent(member.progressDone, member.progressTotal)
 }
 
-function memberTmPct(member: JobMember) {
+function memberTmPct(member: CloudProjectMember) {
   return progressPercent(member.progressTm ?? 0, member.progressTotal)
 }
 
 async function bind(record: ProjectRecord) {
   if (!job.value) return
-  const linked = bindProjectToJob(record, job.value)
+  const linked = bindLocalProjectToCloudProject(record, job.value)
   await saveProject(linked)
   await reportJobMemberProgress(job.value.id, linked)
   mismatchOpen.value = false
@@ -454,7 +462,7 @@ async function onDocxSelected(event: Event) {
         segmentSchemaVersion: SEGMENT_SCHEMA_DATE_SAFE,
         segmentCount: opened.segments.length,
         doneCount: 0,
-        jobId: job.value.id,
+        projectId: job.value.id,
         sourceFilename: file.name,
       },
       segments: opened.segments,
@@ -476,7 +484,7 @@ async function createEmpty() {
   busy.value = true
   error.value = ''
   try {
-    await bind(await createEmptyJobProject(job.value, createProjectId()))
+    await bind(await createEmptyLocalProject(job.value, createProjectId()))
   } catch (err) {
     error.value = err instanceof Error ? err.message : String(err)
   } finally {
@@ -692,7 +700,7 @@ async function onLangPairChange(payload: { sourceLang: string; targetLang: strin
       <ul v-if="linkedProject" class="list">
         <ProjectListItem
           :project="linkedProject"
-          :job-id="jobId"
+          :cloud-project-id="projectId"
           :source-lang="job?.sourceLang"
           :target-lang="job?.targetLang"
           glow
@@ -743,7 +751,7 @@ async function onLangPairChange(payload: { sourceLang: string; targetLang: strin
       </section>
       <JobTmBasesDialog
         :open="jobTmBasesOpen"
-        :job-id="jobId"
+        :project-id="projectId"
         :attachments="jobTmAttachments"
         :is-owner="Boolean(isOwner)"
         @close="jobTmBasesOpen = false"
@@ -756,7 +764,7 @@ async function onLangPairChange(payload: { sourceLang: string; targetLang: strin
         :mode="jobTmCollectionMode"
         :return-to="jobTmCollectionReturnTo"
         :attached-ids="jobTmAttachedIds"
-        :context-label="job?.title || jobId"
+        :context-label="job?.title || projectId"
         @close="onJobTmCollectionClose"
         @attach="onJobTmAttach"
         @deleted="refreshJobTmAttachments"
@@ -787,7 +795,7 @@ async function onLangPairChange(payload: { sourceLang: string; targetLang: strin
     <SharedWorkPanel
       v-if="panelOpen"
       :open="panelOpen"
-      :job-id="jobId"
+      :project-id="projectId"
       @close="closePanel"
     />
 

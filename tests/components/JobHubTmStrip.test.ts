@@ -51,7 +51,7 @@ vi.mock('../../src/jobs/reportProgress', () => ({
 }))
 
 vi.mock('../../src/jobs/joinActivity', () => ({
-  acknowledgeJobJoins: vi.fn(),
+  acknowledgeProjectJoins: vi.fn(),
 }))
 
 vi.mock('../../src/storage/tmIdb', () => ({
@@ -117,7 +117,7 @@ const mounted: { unmount: () => void }[] = []
 function mountHub() {
   const host = document.createElement('div')
   document.body.append(host)
-  const app = createApp({ render: () => h(JobHubInline, { jobId: 'job-1' }) })
+  const app = createApp({ render: () => h(JobHubInline, { projectId: 'job-1' }) })
   app.use(createI18n({ legacy: false, locale: 'en', messages, missingWarn: false }))
   app.mount(host)
   mounted.push({

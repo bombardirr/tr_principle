@@ -22,22 +22,22 @@ import { syncTmBase } from '@/tm/sync'
 import { cloneSharedJobTm, exportSharedJobTm } from '@/tm/jobTmIo'
 import type { TmAttachmentCatalogItem } from '@/tm/projectAttachments'
 import type { TmBaseRecord } from '@/storage/tmBasesIdb'
-import type { JobRole, JobTmAttachment } from '@/types/job'
+import type { CloudProjectRole, CloudProjectTmAttachment } from '@/types/cloudProject'
 import type { ProjectTmAttachmentId } from '@/types/project'
 
 const props = defineProps<{
-  jobId: string
+  projectId: string
   isOwner: boolean
-  myRole: JobRole | null
+  myRole: CloudProjectRole | null
 }>()
 
 const { t } = useI18n()
-const shared = ref<JobTmAttachment[]>([])
-const localOverlay = ref(listJobTmAttachments(props.jobId))
+const shared = ref<CloudProjectTmAttachment[]>([])
+const localOverlay = ref(listJobTmAttachments(props.projectId))
 const loadError = ref<string | null>(null)
 const ioNotice = ref<string | null>(null)
 const actionBusyId = ref<string | null>(null)
-const cloneSource = ref<JobTmAttachment | null>(null)
+const cloneSource = ref<CloudProjectTmAttachment | null>(null)
 const cloneTargets = ref<TmBaseRecord[]>([])
 const cloneTargetId = ref('')
 const collectionOpen = ref(false)
@@ -62,7 +62,7 @@ async function refreshCatalog() {
 }
 
 watch(
-  () => props.jobId,
+  () => props.projectId,
   jobId => {
     jobGeneration += 1
     shared.value = []
@@ -82,7 +82,7 @@ onMounted(() => {
 })
 
 async function refreshShared(options: { keepError?: boolean } = {}) {
-  const jobId = props.jobId
+  const jobId = props.projectId
   const generation = jobGeneration
   const requestGeneration = ++sharedRequestGeneration
   if (!options.keepError) loadError.value = null
@@ -102,7 +102,7 @@ async function refreshShared(options: { keepError?: boolean } = {}) {
           label: attachment.label ?? attachment.tmBaseId,
           color: attachment.color ?? '#5b9fd4',
         })
-        await syncTmBase(localId, { jobId })
+        await syncTmBase(localId, { projectId: jobId })
       } catch (error) {
         if (!isCurrentRequest(jobId, generation, requestGeneration)) return
         loadError.value = error instanceof Error ? error.message : String(error)
@@ -117,7 +117,7 @@ async function refreshShared(options: { keepError?: boolean } = {}) {
 }
 
 function isCurrentJob(jobId: string, generation: number) {
-  return props.jobId === jobId && jobGeneration === generation
+  return props.projectId === jobId && jobGeneration === generation
 }
 
 function isCurrentRequest(jobId: string, generation: number, requestGeneration: number) {
@@ -157,13 +157,13 @@ async function attach(id: ProjectTmAttachmentId) {
     await attachShared(id)
     return
   }
-  localOverlay.value = attachJobTm(props.jobId, id)
+  localOverlay.value = attachJobTm(props.projectId, id)
   closeCollection()
 }
 
 async function attachShared(tmBaseId: ProjectTmAttachmentId) {
   if (!props.isOwner) return
-  const jobId = props.jobId
+  const jobId = props.projectId
   const generation = jobGeneration
   loadError.value = null
   try {
@@ -184,7 +184,7 @@ async function attachShared(tmBaseId: ProjectTmAttachmentId) {
 
 async function detachShared(attachmentId: string) {
   if (!props.isOwner) return
-  const jobId = props.jobId
+  const jobId = props.projectId
   const generation = jobGeneration
   loadError.value = null
   try {
@@ -204,7 +204,7 @@ async function toggleShared(
   value: boolean
 ) {
   if (!props.isOwner) return
-  const jobId = props.jobId
+  const jobId = props.projectId
   const generation = jobGeneration
   loadError.value = null
   try {
@@ -220,16 +220,16 @@ async function toggleShared(
   }
 }
 
-async function exportShared(attachment: JobTmAttachment) {
+async function exportShared(attachment: CloudProjectTmAttachment) {
   if (!attachment.canRead || !attachment.canExport || !attachment.ownerId) return
-  const jobId = props.jobId
+  const jobId = props.projectId
   const generation = jobGeneration
   actionBusyId.value = attachment.id
   loadError.value = null
   ioNotice.value = null
   try {
     const result = await exportSharedJobTm({
-      jobId,
+      projectId: jobId,
       ownerId: attachment.ownerId,
       tmBaseId: attachment.tmBaseId,
       label: attachment.label,
@@ -247,9 +247,9 @@ async function exportShared(attachment: JobTmAttachment) {
   }
 }
 
-async function openClone(attachment: JobTmAttachment) {
+async function openClone(attachment: CloudProjectTmAttachment) {
   if (!attachment.canRead || !attachment.canClone || !attachment.ownerId) return
-  const jobId = props.jobId
+  const jobId = props.projectId
   const generation = jobGeneration
   loadError.value = null
   ioNotice.value = null
@@ -274,14 +274,14 @@ function closeClone() {
 async function confirmClone() {
   const attachment = cloneSource.value
   if (!attachment?.ownerId || !cloneTargetId.value) return
-  const jobId = props.jobId
+  const jobId = props.projectId
   const generation = jobGeneration
   actionBusyId.value = attachment.id
   loadError.value = null
   ioNotice.value = null
   try {
     const result = await cloneSharedJobTm({
-      jobId,
+      projectId: jobId,
       ownerId: attachment.ownerId,
       tmBaseId: attachment.tmBaseId,
       targetBaseId: cloneTargetId.value,
@@ -299,7 +299,7 @@ async function confirmClone() {
 }
 
 function detachLocal(id: ProjectTmAttachmentId) {
-  localOverlay.value = detachJobTm(props.jobId, id)
+  localOverlay.value = detachJobTm(props.projectId, id)
 }
 
 function toggleLocal(
@@ -307,7 +307,7 @@ function toggleLocal(
   permission: 'canRead' | 'canWrite',
   value: boolean
 ) {
-  localOverlay.value = updateJobTmAttachment(props.jobId, id, { [permission]: value })
+  localOverlay.value = updateJobTmAttachment(props.projectId, id, { [permission]: value })
 }
 </script>
 
@@ -517,7 +517,7 @@ function toggleLocal(
       :mode="collectionMode"
       :return-to="collectionReturnTo"
       :attached-ids="attachedIds"
-      :context-label="jobId"
+      :context-label="projectId"
       @close="closeCollection"
       @attach="attach"
       @open-full="openFullFromPick"

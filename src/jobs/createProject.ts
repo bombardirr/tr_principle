@@ -1,6 +1,6 @@
 import JSZip from 'jszip'
 import { SEGMENT_SCHEMA_DATE_SAFE, type ProjectRecord } from '@/types/project'
-import type { Job } from '@/types/job'
+import type { CloudProject } from '@/types/cloudProject'
 
 async function emptyDocx(): Promise<ArrayBuffer> {
   const zip = new JSZip()
@@ -29,25 +29,25 @@ async function emptyDocx(): Promise<ArrayBuffer> {
   return zip.generateAsync({ type: 'arraybuffer' })
 }
 
-export async function createEmptyJobProject(
-  job: Job,
-  projectId: string,
+export async function createEmptyLocalProject(
+  cloudProject: CloudProject,
+  localProjectId: string,
   now = new Date().toISOString()
 ): Promise<ProjectRecord> {
   return {
     meta: {
-      id: projectId,
-      name: job.title || 'Untitled',
+      id: localProjectId,
+      name: cloudProject.title || 'Untitled',
       createdAt: now,
       updatedAt: now,
-      sourceLang: job.sourceLang || undefined,
-      targetLang: job.targetLang || undefined,
+      sourceLang: cloudProject.sourceLang || undefined,
+      targetLang: cloudProject.targetLang || undefined,
       segmentSchemaVersion: SEGMENT_SCHEMA_DATE_SAFE,
       segmentCount: 0,
       doneCount: 0,
-      jobId: job.id,
-      sourceFilename: job.sourceFilename || undefined,
-      sourceHash: job.sourceHash || undefined,
+      projectId: cloudProject.id,
+      sourceFilename: cloudProject.sourceFilename || undefined,
+      sourceHash: cloudProject.sourceHash || undefined,
     },
     segments: [],
     docx: await emptyDocx(),

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { JobResource } from '@/types/job'
+import type { CloudProjectResource } from '@/types/cloudProject'
 import type { TmUnit } from '@/types/tm'
 
 const listJobResources = vi.fn()
@@ -26,7 +26,7 @@ vi.mock('@/storage/scope', () => ({
   onStorageAccountChange: () => () => {},
 }))
 
-const resource: JobResource = {
+const resource: CloudProjectResource = {
   kind: 'job_tm',
   enabled: true,
   canRead: true,
@@ -41,7 +41,7 @@ const resource: JobResource = {
   },
 }
 
-const writableResource: JobResource = {
+const writableResource: CloudProjectResource = {
   ...resource,
   canWrite: true,
   preset: {

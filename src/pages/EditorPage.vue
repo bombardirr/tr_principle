@@ -80,15 +80,20 @@ import {
 import { pickMagnetRowId } from '@/editor/magnetGeometry'
 import MagneticSegmentRail from '@/components/MagneticSegmentRail.vue'
 import ParagraphBlock from '@/components/ParagraphBlock.vue'
-import { bindProjectToJob } from '@/jobs/localProject'
+import { bindLocalProjectToCloudProject } from '@/jobs/localProject'
 import { listMembers, getJob } from '@/jobs/api'
 import {
-  acknowledgeJobJoins,
-  jobHasJoinUnread,
+  acknowledgeProjectJoins,
+  projectHasJoinUnread,
   startJoinActivityPolling,
   stopJoinActivityPolling,
 } from '@/jobs/joinActivity'
-import type { Job, JobGlossaryAttachment, JobRole, JobTmAttachment } from '@/types/job'
+import type {
+  CloudProject,
+  CloudProjectGlossaryAttachment,
+  CloudProjectRole,
+  CloudProjectTmAttachment,
+} from '@/types/cloudProject'
 import { reportJobMemberProgress } from '@/jobs/reportProgress'
 import { fingerprintDocx, fingerprintMismatch } from '@/jobs/fingerprint'
 
@@ -102,8 +107,8 @@ const { user } = useAuth()
 const record = shallowRef<ProjectRecord | null>(null)
 const error = ref('')
 const notice = ref('')
-const jobSharedAttachments = ref<JobTmAttachment[]>([])
-const jobGlossaryAttachments = ref<JobGlossaryAttachment[]>([])
+const jobSharedAttachments = ref<CloudProjectTmAttachment[]>([])
+const jobGlossaryAttachments = ref<CloudProjectGlossaryAttachment[]>([])
 const sharedTmWarnOpen = ref(false)
 const sharedTmWarnSegId = ref<string | null>(null)
 
@@ -160,7 +165,7 @@ const projectLease = useProjectAccess(() => props.id)
 const { settings: tmSettings, toggleAutoSaveToTm } = useTmSettings()
 const { bindings: shortcutBindings, reload: reloadShortcuts } = useShortcutBindings()
 const tmUnits = shallowRef<TmUnit[]>([])
-const jobRole = ref<JobRole | null>(null)
+const jobRole = ref<CloudProjectRole | null>(null)
 const glossaryTerms = shallowRef<GlossaryTerm[]>([])
 const glossaryOpen = ref(false)
 const tmImportInput = ref<HTMLInputElement | null>(null)
@@ -240,10 +245,10 @@ const resegmentOpen = ref(false)
 const shareOpen = ref(false)
 const sharedCreateOpen = ref(false)
 const sharedPanelOpen = ref(false)
-const editorOwnedJob = ref<Job | null>(null)
+const editorOwnedJob = ref<CloudProject | null>(null)
 const sharedJoinUnread = computed(() => {
-  const jobId = record.value?.meta.jobId
-  return Boolean(jobId && jobHasJoinUnread(jobId))
+  const jobId = record.value?.meta.projectId
+  return Boolean(jobId && projectHasJoinUnread(jobId))
 })
 const emptyDocxInput = ref<HTMLInputElement | null>(null)
 const emptyProjectInput = ref<HTMLInputElement | null>(null)
@@ -427,7 +432,7 @@ function setSaveError(e: unknown) {
   }
 }
 
-async function reloadJobMembership(jobId = record.value?.meta.jobId) {
+async function reloadJobMembership(jobId = record.value?.meta.projectId) {
   jobRole.value = null
   if (!jobId || !user.value) return
   try {
@@ -439,7 +444,7 @@ async function reloadJobMembership(jobId = record.value?.meta.jobId) {
 }
 
 async function reportJobProgress() {
-  const jobId = record.value?.meta.jobId
+  const jobId = record.value?.meta.projectId
   if (!jobId || jobRole.value === 'viewer' || !record.value) return
   await reportJobMemberProgress(jobId, record.value)
 }
@@ -533,7 +538,7 @@ async function restorePageScroll() {
 
 async function refreshJobTmLayers() {
   const jobId = jobQueryId.value
-  const metaJob = record.value?.meta.jobId
+  const metaJob = record.value?.meta.projectId
   if (!jobId || !metaJob || jobId !== metaJob) {
     jobSharedAttachments.value = []
     return
@@ -553,7 +558,7 @@ async function refreshJobTmLayers() {
           label: attachment.label ?? attachment.tmBaseId,
           color: attachment.color ?? '#5b9fd4',
         })
-        await syncTmBase(localId, { jobId })
+        await syncTmBase(localId, { projectId: jobId })
       } catch {
         // Keep other readable job bases available if one sync fails.
       }
@@ -570,7 +575,7 @@ async function onJobGlossaryAttachmentsChanged() {
 
 async function refreshJobGlossaryLayers() {
   const jobId = jobQueryId.value
-  const metaJob = record.value?.meta.jobId
+  const metaJob = record.value?.meta.projectId
   if (!jobId || !metaJob || jobId !== metaJob) {
     jobGlossaryAttachments.value = []
     return
@@ -580,7 +585,9 @@ async function refreshJobGlossaryLayers() {
     jobGlossaryAttachments.value = attachments
     await Promise.all(
       attachments.filter(item => item.canRead && item.ownerId).map(item =>
-        syncGlossaryBase(sharedGlossaryLocalId(item.ownerId!, item.glossaryBaseId), { jobId }),
+        syncGlossaryBase(sharedGlossaryLocalId(item.ownerId!, item.glossaryBaseId), {
+          projectId: jobId,
+        }),
       ),
     )
   } catch {
@@ -613,7 +620,7 @@ async function load() {
   if (gen !== loadGen) return
   await reloadPersonalTmUnits()
   if (gen !== loadGen) return
-  await reloadJobMembership(loaded.meta.jobId)
+  await reloadJobMembership(loaded.meta.projectId)
   if (gen !== loadGen) return
   const emptyNoticeKey = `tr.emptyDocNotice:${props.id}`
   if (!loaded.segments.length && sessionStorage.getItem(emptyNoticeKey)) {
@@ -677,7 +684,7 @@ watch(
 )
 
 watch(
-  () => [jobQueryId.value, record.value?.meta.jobId] as const,
+  () => [jobQueryId.value, record.value?.meta.projectId] as const,
   async () => {
     if (!record.value) return
     await refreshJobTmLayers()
@@ -688,7 +695,7 @@ watch(
 )
 
 watch(
-  () => [record.value?.meta.jobId, user.value?.id] as const,
+  () => [record.value?.meta.projectId, user.value?.id] as const,
   async ([jobId, userId]) => {
     stopJoinActivityPolling()
     editorOwnedJob.value = null
@@ -706,12 +713,12 @@ watch(
 )
 
 watch(sharedPanelOpen, async open => {
-  const jobId = record.value?.meta.jobId
+  const jobId = record.value?.meta.projectId
   const userId = user.value?.id
   if (!open || !jobId || !userId) return
   try {
     const members = await listMembers(jobId)
-    acknowledgeJobJoins(userId, jobId, members)
+    acknowledgeProjectJoins(userId, jobId, members)
   } catch {
     // Opening the panel still works without clearing the badge.
   }
@@ -1618,7 +1625,7 @@ async function applyEmptyProjectContent(next: ProjectRecord) {
 }
 
 async function confirmJobFingerprint(docx: ArrayBuffer, filename: string) {
-  const jobId = record.value?.meta.jobId
+  const jobId = record.value?.meta.projectId
   if (!jobId) return true
   try {
     const job = await getJob(jobId)
@@ -1686,7 +1693,7 @@ async function onEmptyProjectSelected(event: Event) {
       meta: {
         ...imported.meta,
         id: record.value.meta.id,
-        jobId: record.value.meta.jobId,
+        projectId: record.value.meta.projectId,
         createdAt: record.value.meta.createdAt,
         updatedAt: now,
         sourceLang: imported.meta.sourceLang || record.value.meta.sourceLang,
@@ -1709,17 +1716,17 @@ async function onEmptyProjectSelected(event: Event) {
 
 function openSharedWork() {
   if (!record.value) return
-  if (record.value.meta.jobId) {
+  if (record.value.meta.projectId) {
     sharedPanelOpen.value = true
   } else if (!projectLease.blocked.value) {
     sharedCreateOpen.value = true
   }
 }
 
-async function onSharedWorkCreated(job: Job) {
+async function onSharedWorkCreated(job: CloudProject) {
   if (!record.value) return
   try {
-    record.value = bindProjectToJob(record.value, job)
+    record.value = bindLocalProjectToCloudProject(record.value, job)
     await saveProject(record.value)
     await reloadJobMembership(job.id)
     await reportJobProgress()
@@ -1876,10 +1883,10 @@ async function goBack() {
             <EditorGlyph name="archive" />
           </IconButton>
           <IconButton
-            :title="record.meta.jobId ? t('jobs.openPanelHint') : t('jobs.createFromEditorHint')"
-            :active="Boolean(record.meta.jobId)"
+            :title="record.meta.projectId ? t('jobs.openPanelHint') : t('jobs.createFromEditorHint')"
+            :active="Boolean(record.meta.projectId)"
             :badge="sharedJoinUnread"
-            :disabled="!record.meta.jobId && editorReadOnly"
+            :disabled="!record.meta.projectId && editorReadOnly"
             @click="openSharedWork"
           >
             <EditorGlyph name="send" />
@@ -2089,7 +2096,7 @@ async function goBack() {
       :readable-base-ids="glossaryBaseAccess.readableBaseIds"
       :writable-base-ids="glossaryBaseAccess.writableBaseIds"
       :exportable-base-ids="glossaryBaseAccess.exportableBaseIds"
-      :job-id="glossaryBaseAccess.jobContext ? jobQueryId ?? undefined : undefined"
+      :project-id="glossaryBaseAccess.jobContext ? jobQueryId ?? undefined : undefined"
       @close="glossaryOpen = false"
       @changed="reloadGlossary"
     />
@@ -2120,9 +2127,9 @@ async function goBack() {
       @created="onSharedWorkCreated"
     />
     <SharedWorkPanel
-      v-if="record.meta.jobId"
+      v-if="record.meta.projectId"
       :open="sharedPanelOpen"
-      :job-id="record.meta.jobId"
+      :project-id="record.meta.projectId"
       @close="sharedPanelOpen = false"
       @glossary-attachments-changed="onJobGlossaryAttachmentsChanged"
     />

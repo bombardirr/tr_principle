@@ -19,15 +19,15 @@ import EditorGlyph from '@/components/EditorGlyph.vue'
 import { useAuth } from '@/auth/session'
 import { listJobs, deleteJob, archiveJob, leaveJob } from '@/jobs/api'
 import { parseJobInviteToken } from '@/jobs/inviteToken'
-import { unlinkLocalProjectsFromJob } from '@/jobs/localProject'
+import { unlinkLocalProjectsFromCloudProject } from '@/jobs/localProject'
 import {
   joinUnreadCount,
-  jobHasJoinUnread,
+  projectHasJoinUnread,
   startJoinActivityPolling,
   stopJoinActivityPolling,
 } from '@/jobs/joinActivity'
 import { langPairLabel } from '@/tm/langPairs'
-import type { Job } from '@/types/job'
+import type { CloudProject } from '@/types/cloudProject'
 import type { ProjectMeta } from '@/types/project'
 
 const { t } = useI18n()
@@ -36,7 +36,7 @@ const router = useRouter()
 const { user } = useAuth()
 
 const projects = ref<ProjectMeta[]>([])
-const sharedJobs = ref<Job[]>([])
+const sharedJobs = ref<CloudProject[]>([])
 const error = ref('')
 const notice = ref('')
 const busy = ref(false)
@@ -47,7 +47,7 @@ const inviteError = ref('')
 const openJobId = ref('')
 const hoverJobId = ref('')
 const pendingJobAction = ref<{
-  jobId: string
+  projectId: string
   kind: 'leave' | 'archive' | 'delete'
 } | null>(null)
 const actionBusy = ref(false)
@@ -58,14 +58,14 @@ const sectionUnread = computed(() => joinUnreadCount.value)
 const relatedJobId = computed(() => hoverJobId.value || openJobId.value)
 
 function isRelatedProject(project: ProjectMeta) {
-  return Boolean(relatedJobId.value && project.jobId === relatedJobId.value)
+  return Boolean(relatedJobId.value && project.projectId === relatedJobId.value)
 }
 
-function isJobOwner(job: Job) {
+function isJobOwner(job: CloudProject) {
   return Boolean(user.value?.id && job.ownerUserId === user.value.id)
 }
 
-function isJobArchived(job: Job) {
+function isJobArchived(job: CloudProject) {
   return Boolean(job.archivedAt)
 }
 
@@ -73,23 +73,23 @@ function cancelJobAction() {
   pendingJobAction.value = null
 }
 
-async function confirmJobAction(job: Job) {
+async function confirmJobAction(job: CloudProject) {
   const pending = pendingJobAction.value
-  if (!pending || pending.jobId !== job.id || actionBusy.value) return
+  if (!pending || pending.projectId !== job.id || actionBusy.value) return
   actionBusy.value = true
   error.value = ''
   notice.value = ''
   try {
     if (pending.kind === 'leave') {
       await leaveJob(job.id)
-      await unlinkLocalProjectsFromJob(job.id, projects.value)
+      await unlinkLocalProjectsFromCloudProject(job.id, projects.value)
       notice.value = t('jobs.leftNotice', { name: job.title })
     } else if (pending.kind === 'archive') {
       await archiveJob(job.id)
       notice.value = t('jobs.archivedNotice', { name: job.title })
     } else {
       await deleteJob(job.id)
-      await unlinkLocalProjectsFromJob(job.id, projects.value)
+      await unlinkLocalProjectsFromCloudProject(job.id, projects.value)
       notice.value = t('jobs.deletedNotice', { name: job.title })
     }
     if (openJobId.value === job.id && pending.kind !== 'archive') closeJob()
@@ -107,7 +107,7 @@ function openJob(jobId: string) {
   void router.replace({ name: 'projects', query: { ...route.query, job: jobId } })
 }
 
-async function onSharedWorkCreated(job: Job) {
+async function onSharedWorkCreated(job: CloudProject) {
   createSharedOpen.value = false
   notice.value = ''
   await refresh()
@@ -227,7 +227,7 @@ function formatDate(iso: string) {
   }
 }
 
-function jobLangPairText(job: Job) {
+function jobLangPairText(job: CloudProject) {
   if (!job.sourceLang && !job.targetLang) return ''
   return langPairLabel(job.sourceLang, job.targetLang)
 }
@@ -333,7 +333,7 @@ async function openInvite() {
 
         <JobHubInline
           v-if="openJobId"
-          :job-id="openJobId"
+          :project-id="openJobId"
           @close="closeJob"
           @changed="refresh"
           @notice="onItemNotice"
@@ -346,7 +346,7 @@ async function openInvite() {
               v-for="job in sharedJobs"
               :key="job.id"
               class="item viewer-item"
-              :class="{ 'has-join-unread': jobHasJoinUnread(job.id) }"
+              :class="{ 'has-join-unread': projectHasJoinUnread(job.id) }"
               @mouseenter="hoverJobId = job.id"
               @mouseleave="hoverJobId = ''"
             >
@@ -358,7 +358,7 @@ async function openInvite() {
                     class="archived-chip"
                   >{{ t('jobs.archivedBadge') }}</span>
                   <span
-                    v-if="jobHasJoinUnread(job.id)"
+                    v-if="projectHasJoinUnread(job.id)"
                     class="join-dot"
                     :title="t('jobs.joinUnreadHint')"
                     aria-hidden="true"
@@ -371,7 +371,7 @@ async function openInvite() {
               </button>
               <div class="item-actions">
                 <template
-                  v-if="pendingJobAction && pendingJobAction.jobId === job.id"
+                  v-if="pendingJobAction && pendingJobAction.projectId === job.id"
                 >
                   <IconButton
                     danger
@@ -400,7 +400,7 @@ async function openInvite() {
                     v-if="!isJobArchived(job)"
                     :title="t('jobs.archive')"
                     :disabled="actionBusy"
-                    @click="pendingJobAction = { jobId: job.id, kind: 'archive' }"
+                    @click="pendingJobAction = { projectId: job.id, kind: 'archive' }"
                   >
                     <EditorGlyph name="archive" />
                   </IconButton>
@@ -408,7 +408,7 @@ async function openInvite() {
                     danger
                     :title="t('jobs.deleteForever')"
                     :disabled="actionBusy"
-                    @click="pendingJobAction = { jobId: job.id, kind: 'delete' }"
+                    @click="pendingJobAction = { projectId: job.id, kind: 'delete' }"
                   >
                     <EditorGlyph name="trash" />
                   </IconButton>
@@ -417,7 +417,7 @@ async function openInvite() {
                   v-else
                   :title="t('jobs.leave')"
                   :disabled="actionBusy"
-                  @click="pendingJobAction = { jobId: job.id, kind: 'leave' }"
+                  @click="pendingJobAction = { projectId: job.id, kind: 'leave' }"
                 >
                   <EditorGlyph name="leave" />
                 </IconButton>

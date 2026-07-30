@@ -1,7 +1,7 @@
 import { getStorageAccountId } from '@/storage/scope'
 import { getJobTmUnit, putJobTmUnit, removeJobTmUnit } from '@/storage/jobTmIdb'
 import { jobTmWritable, readCachedJobResource } from '@/jobs/resources'
-import type { JobResource } from '@/types/job'
+import type { CloudProjectResource } from '@/types/cloudProject'
 import type { TmUnit } from '@/types/tm'
 import { pullJobTmSync, pushJobTmSync } from '@/jobs/tmApi'
 
@@ -126,7 +126,7 @@ async function pushDirty(jobId: string): Promise<void> {
  */
 export async function syncJobTm(
   jobId: string,
-  opts?: { pushOnly?: boolean; resource?: JobResource | null },
+  opts?: { pushOnly?: boolean; resource?: CloudProjectResource | null },
 ): Promise<void> {
   if (!getStorageAccountId()) return
   const resource = opts?.resource ?? readCachedJobResource(jobId)

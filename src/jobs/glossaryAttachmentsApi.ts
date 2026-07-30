@@ -2,39 +2,39 @@ import { apiFetch } from '@/auth/api'
 import { markGlossaryBaseDirty, syncGlossaryBase } from '@/glossary/sync'
 import { ensureGlossaryBase } from '@/storage/glossaryBasesIdb'
 import type {
-  CreateJobGlossaryAttachmentInput,
-  JobGlossaryAttachment,
-  PatchJobGlossaryAttachmentInput,
-} from '@/types/job'
+  CloudProjectGlossaryAttachment,
+  CreateCloudProjectGlossaryAttachmentInput,
+  PatchCloudProjectGlossaryAttachmentInput,
+} from '@/types/cloudProject'
 
-export async function listJobGlossaryAttachments(jobId: string) {
-  const res = await apiFetch<{ attachments: JobGlossaryAttachment[] }>(
-    `/api/projects/${jobId}/glossary-attachments`,
+export async function listJobGlossaryAttachments(projectId: string) {
+  const res = await apiFetch<{ attachments: CloudProjectGlossaryAttachment[] }>(
+    `/api/projects/${projectId}/glossary-attachments`,
   )
   return res.attachments ?? []
 }
 
 /** Promote a local glossary base before attaching it to a job. */
 export async function createJobGlossaryAttachment(
-  jobId: string,
-  input: CreateJobGlossaryAttachmentInput,
+  projectId: string,
+  input: CreateCloudProjectGlossaryAttachmentInput,
 ) {
   const base = await ensureGlossaryBase(input.glossaryBaseId)
   await markGlossaryBaseDirty(base.id)
   await syncGlossaryBase(base.id, { pushOnly: true })
-  return apiFetch<JobGlossaryAttachment>(`/api/projects/${jobId}/glossary-attachments`, {
+  return apiFetch<CloudProjectGlossaryAttachment>(`/api/projects/${projectId}/glossary-attachments`, {
     method: 'POST',
     body: JSON.stringify(input),
   })
 }
 
 export async function patchJobGlossaryAttachment(
-  jobId: string,
+  projectId: string,
   attachmentId: string,
-  input: PatchJobGlossaryAttachmentInput,
+  input: PatchCloudProjectGlossaryAttachmentInput,
 ) {
-  return apiFetch<JobGlossaryAttachment>(
-    `/api/projects/${jobId}/glossary-attachments/${attachmentId}`,
+  return apiFetch<CloudProjectGlossaryAttachment>(
+    `/api/projects/${projectId}/glossary-attachments/${attachmentId}`,
     {
       method: 'PATCH',
       body: JSON.stringify(input),
@@ -42,8 +42,8 @@ export async function patchJobGlossaryAttachment(
   )
 }
 
-export async function deleteJobGlossaryAttachment(jobId: string, attachmentId: string) {
-  await apiFetch<void>(`/api/projects/${jobId}/glossary-attachments/${attachmentId}`, {
+export async function deleteJobGlossaryAttachment(projectId: string, attachmentId: string) {
+  await apiFetch<void>(`/api/projects/${projectId}/glossary-attachments/${attachmentId}`, {
     method: 'DELETE',
   })
 }

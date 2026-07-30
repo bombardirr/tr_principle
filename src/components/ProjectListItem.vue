@@ -28,7 +28,7 @@ const props = defineProps<{
   project: ProjectMeta
   glow?: boolean
   /** When set, editor opens with `?job=` (job hub context). */
-  jobId?: string
+  cloudProjectId?: string
   /** Fallback when project meta has no langs yet (e.g. job hub). */
   sourceLang?: string
   targetLang?: string
@@ -53,8 +53,12 @@ const personalTmCount = ref(0)
 const personalTmUpdatedAt = ref<string | null>(null)
 
 const editorTo = computed(() =>
-  props.jobId
-    ? { name: 'editor' as const, params: { id: props.project.id }, query: { job: props.jobId } }
+  props.cloudProjectId
+    ? {
+        name: 'editor' as const,
+        params: { id: props.project.id },
+        query: { job: props.cloudProjectId },
+      }
     : { name: 'editor' as const, params: { id: props.project.id } },
 )
 

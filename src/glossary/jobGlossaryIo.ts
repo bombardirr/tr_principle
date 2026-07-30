@@ -6,20 +6,20 @@ import { sharedGlossaryLocalId } from '@/storage/glossaryBasesIdb'
 import type { GlossaryTerm } from '@/types/glossary'
 
 export async function ensureSharedGlossaryTermsForJob(opts: {
-  jobId: string
+  projectId: string
   ownerId: string
   glossaryBaseId: string
 }): Promise<GlossaryTerm[]> {
   const localId = sharedGlossaryLocalId(opts.ownerId, opts.glossaryBaseId)
   let terms = await listGlossaryTerms({ baseIds: [localId] })
   if (terms.length) return terms
-  await syncGlossaryBase(localId, { jobId: opts.jobId })
+  await syncGlossaryBase(localId, { projectId: opts.projectId })
   terms = await listGlossaryTerms({ baseIds: [localId] })
   return terms
 }
 
 export async function exportSharedJobGlossary(opts: {
-  jobId: string
+  projectId: string
   ownerId: string
   glossaryBaseId: string
   label?: string
@@ -35,7 +35,7 @@ export async function exportSharedJobGlossary(opts: {
 }
 
 export async function cloneSharedJobGlossary(opts: {
-  jobId: string
+  projectId: string
   ownerId: string
   glossaryBaseId: string
   targetBaseId: string

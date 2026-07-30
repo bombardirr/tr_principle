@@ -14,7 +14,7 @@ import {
   findLangPairPreset,
   type LangPairPreset,
 } from '@/tm/langPairs'
-import type { Job } from '@/types/job'
+import type { CloudProject } from '@/types/cloudProject'
 import type { ProjectRecord } from '@/types/project'
 
 const props = defineProps<{
@@ -25,7 +25,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   close: []
-  created: [job: Job]
+  created: [project: CloudProject]
 }>()
 
 const { t } = useI18n()

@@ -1,5 +1,5 @@
 import { fingerprintDocx } from '@/jobs/fingerprint'
-import type { Job } from '@/types/job'
+import type { CloudProject } from '@/types/cloudProject'
 import type { ProjectMeta, ProjectRecord } from '@/types/project'
 import { getProject, saveProject } from '@/storage/idb'
 
@@ -10,28 +10,31 @@ export function projectFingerprint(record: ProjectRecord) {
   return fingerprintDocx(filename, record.docx)
 }
 
-export function bindProjectToJob(record: ProjectRecord, job: Job): ProjectRecord {
+export function bindLocalProjectToCloudProject(
+  record: ProjectRecord,
+  cloudProject: CloudProject,
+): ProjectRecord {
   return {
     ...record,
     meta: {
       ...record.meta,
-      jobId: job.id,
-      sourceFilename: job.sourceFilename || record.meta.sourceFilename,
-      sourceHash: job.sourceHash || record.meta.sourceHash,
+      projectId: cloudProject.id,
+      sourceFilename: cloudProject.sourceFilename || record.meta.sourceFilename,
+      sourceHash: cloudProject.sourceHash || record.meta.sourceHash,
     },
   }
 }
 
-/** Clear meta.jobId on local projects that pointed at this job. Projects stay intact. */
-export async function unlinkLocalProjectsFromJob(
-  jobId: string,
+/** Clear meta.projectId on local projects that pointed at this cloud project. */
+export async function unlinkLocalProjectsFromCloudProject(
+  projectId: string,
   projects: ProjectMeta[],
 ): Promise<void> {
   for (const meta of projects) {
-    if (meta.jobId !== jobId) continue
+    if (meta.projectId !== projectId) continue
     const record = await getProject(meta.id)
-    if (!record?.meta.jobId) continue
-    record.meta.jobId = undefined
+    if (!record?.meta.projectId) continue
+    record.meta.projectId = undefined
     await saveProject(record)
   }
 }

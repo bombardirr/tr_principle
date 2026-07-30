@@ -28,7 +28,7 @@ describe('syncGlossaryBase', () => {
     })
 
     await syncGlossaryBase('base-a')
-    await syncGlossaryBase('base-b', { jobId: 'job-1' })
+    await syncGlossaryBase('base-b', { projectId: 'job-1' })
 
     expect(localStorage.getItem('appzac-glossary-sync-since:user-1:base-a')).toBe(
       '2026-07-22T12:00:00.000Z',
@@ -71,7 +71,7 @@ describe('syncGlossaryBase', () => {
       method: 'POST',
       body: JSON.stringify({ terms: [term] }),
     })
-    expect(mockApiFetch).toHaveBeenNthCalledWith(3, '/api/jobs/job-1/glossary-attachments', {
+    expect(mockApiFetch).toHaveBeenNthCalledWith(3, '/api/projects/job-1/glossary-attachments', {
       method: 'POST',
       body: JSON.stringify({ glossaryBaseId: 'base-promote' }),
     })

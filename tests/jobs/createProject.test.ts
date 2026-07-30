@@ -1,12 +1,12 @@
 import JSZip from 'jszip'
 import { describe, expect, it } from 'vitest'
-import { createEmptyJobProject } from '@/jobs/createProject'
+import { createEmptyLocalProject } from '@/jobs/createProject'
 
-describe('createEmptyJobProject', () => {
-  it('creates a valid empty DOCX shell linked to the job', async () => {
-    const record = await createEmptyJobProject(
+describe('createEmptyLocalProject', () => {
+  it('creates a valid empty DOCX shell linked to the cloud project', async () => {
+    const record = await createEmptyLocalProject(
       {
-        id: 'job-1',
+        id: 'cloud-project-1',
         ownerUserId: 'owner-1',
         title: 'Shared translation',
         sourceLang: 'ru',
@@ -23,7 +23,7 @@ describe('createEmptyJobProject', () => {
     expect(record.meta).toMatchObject({
       id: 'project-1',
       name: 'Shared translation',
-      jobId: 'job-1',
+      projectId: 'cloud-project-1',
       sourceLang: 'ru',
       targetLang: 'en',
       segmentCount: 0,

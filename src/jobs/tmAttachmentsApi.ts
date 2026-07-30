@@ -1,20 +1,23 @@
 import { apiFetch } from '@/auth/api'
 import { syncTmBase } from '@/tm/sync'
 import type {
-  CreateJobTmAttachmentInput,
-  JobTmAttachment,
-  PatchJobTmAttachmentInput,
-} from '@/types/job'
+  CloudProjectTmAttachment,
+  CreateCloudProjectTmAttachmentInput,
+  PatchCloudProjectTmAttachmentInput,
+} from '@/types/cloudProject'
 
-export async function listJobTmAttachmentsApi(jobId: string) {
-  const res = await apiFetch<{ attachments: JobTmAttachment[] }>(
-    `/api/projects/${jobId}/tm-attachments`,
+export async function listJobTmAttachmentsApi(projectId: string) {
+  const res = await apiFetch<{ attachments: CloudProjectTmAttachment[] }>(
+    `/api/projects/${projectId}/tm-attachments`,
   )
   return res.attachments ?? []
 }
 
-export async function createJobTmAttachment(jobId: string, input: CreateJobTmAttachmentInput) {
-  const row = await apiFetch<JobTmAttachment>(`/api/projects/${jobId}/tm-attachments`, {
+export async function createJobTmAttachment(
+  projectId: string,
+  input: CreateCloudProjectTmAttachmentInput,
+) {
+  const row = await apiFetch<CloudProjectTmAttachment>(`/api/projects/${projectId}/tm-attachments`, {
     method: 'POST',
     body: JSON.stringify(input),
   })
@@ -23,18 +26,18 @@ export async function createJobTmAttachment(jobId: string, input: CreateJobTmAtt
 }
 
 export async function patchJobTmAttachment(
-  jobId: string,
+  projectId: string,
   attachmentId: string,
-  input: PatchJobTmAttachmentInput,
+  input: PatchCloudProjectTmAttachmentInput,
 ) {
-  return apiFetch<JobTmAttachment>(`/api/projects/${jobId}/tm-attachments/${attachmentId}`, {
+  return apiFetch<CloudProjectTmAttachment>(`/api/projects/${projectId}/tm-attachments/${attachmentId}`, {
     method: 'PATCH',
     body: JSON.stringify(input),
   })
 }
 
-export async function deleteJobTmAttachment(jobId: string, attachmentId: string) {
-  await apiFetch<void>(`/api/projects/${jobId}/tm-attachments/${attachmentId}`, {
+export async function deleteJobTmAttachment(projectId: string, attachmentId: string) {
+  await apiFetch<void>(`/api/projects/${projectId}/tm-attachments/${attachmentId}`, {
     method: 'DELETE',
   })
 }

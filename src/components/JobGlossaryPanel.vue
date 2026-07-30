@@ -10,17 +10,17 @@ import {
 } from '@/jobs/glossaryAttachmentsApi'
 import { cloneSharedJobGlossary, exportSharedJobGlossary } from '@/glossary/jobGlossaryIo'
 import { listGlossaryBases, type GlossaryBaseRecord } from '@/storage/glossaryBasesIdb'
-import type { JobGlossaryAttachment } from '@/types/job'
+import type { CloudProjectGlossaryAttachment } from '@/types/cloudProject'
 
-const props = defineProps<{ jobId: string; isOwner: boolean }>()
+const props = defineProps<{ projectId: string; isOwner: boolean }>()
 const emit = defineEmits<{ 'glossary-attachments-changed': [] }>()
 const { t } = useI18n()
-const attachments = ref<JobGlossaryAttachment[]>([])
+const attachments = ref<CloudProjectGlossaryAttachment[]>([])
 const error = ref('')
 const notice = ref('')
 const pickerOpen = ref(false)
 const browse = ref(false)
-const cloneSource = ref<JobGlossaryAttachment | null>(null)
+const cloneSource = ref<CloudProjectGlossaryAttachment | null>(null)
 const cloneTargets = ref<GlossaryBaseRecord[]>([])
 const cloneTargetId = ref('')
 
@@ -29,47 +29,47 @@ function notifyAttachmentsChanged() {
 }
 
 async function refresh() {
-  try { attachments.value = await listJobGlossaryAttachments(props.jobId); error.value = '' }
+  try { attachments.value = await listJobGlossaryAttachments(props.projectId); error.value = '' }
   catch (e) { error.value = e instanceof Error ? e.message : String(e) }
 }
 onMounted(() => void refresh())
 async function attach(glossaryBaseId: string) {
   try {
-    attachments.value.push(await createJobGlossaryAttachment(props.jobId, { glossaryBaseId, canRead: true }))
+    attachments.value.push(await createJobGlossaryAttachment(props.projectId, { glossaryBaseId, canRead: true }))
     pickerOpen.value = false
     notifyAttachmentsChanged()
   }
   catch (e) { error.value = e instanceof Error ? e.message : String(e) }
 }
-async function toggle(item: JobGlossaryAttachment, flag: 'canRead' | 'canWrite' | 'canExport' | 'canClone', event: Event) {
+async function toggle(item: CloudProjectGlossaryAttachment, flag: 'canRead' | 'canWrite' | 'canExport' | 'canClone', event: Event) {
   if (!props.isOwner) return
   try {
-    const updated = await patchJobGlossaryAttachment(props.jobId, item.id, { [flag]: (event.target as HTMLInputElement).checked })
+    const updated = await patchJobGlossaryAttachment(props.projectId, item.id, { [flag]: (event.target as HTMLInputElement).checked })
     attachments.value = attachments.value.map(row => row.id === item.id ? updated : row)
     notifyAttachmentsChanged()
   } catch (e) { error.value = e instanceof Error ? e.message : String(e) }
 }
-async function detach(item: JobGlossaryAttachment) {
+async function detach(item: CloudProjectGlossaryAttachment) {
   try {
-    await deleteJobGlossaryAttachment(props.jobId, item.id)
+    await deleteJobGlossaryAttachment(props.projectId, item.id)
     attachments.value = attachments.value.filter(row => row.id !== item.id)
     notifyAttachmentsChanged()
   }
   catch (e) { error.value = e instanceof Error ? e.message : String(e) }
 }
-async function exportTbx(item: JobGlossaryAttachment) {
+async function exportTbx(item: CloudProjectGlossaryAttachment) {
   if (!item.ownerId) return
-  const result = await exportSharedJobGlossary({ jobId: props.jobId, ownerId: item.ownerId, glossaryBaseId: item.glossaryBaseId, label: item.label })
+  const result = await exportSharedJobGlossary({ projectId: props.projectId, ownerId: item.ownerId, glossaryBaseId: item.glossaryBaseId, label: item.label })
   notice.value = result.count ? t('glossary.jobExported', { count: result.count }) : t('glossary.jobEmpty')
 }
-async function openClone(item: JobGlossaryAttachment) {
+async function openClone(item: CloudProjectGlossaryAttachment) {
   cloneTargets.value = (await listGlossaryBases()).filter(base => !base.sharedOnly)
   cloneTargetId.value = cloneTargets.value[0]?.id ?? ''
   cloneSource.value = item
 }
 async function confirmClone() {
   if (!cloneSource.value?.ownerId || !cloneTargetId.value) return
-  const result = await cloneSharedJobGlossary({ jobId: props.jobId, ownerId: cloneSource.value.ownerId, glossaryBaseId: cloneSource.value.glossaryBaseId, targetBaseId: cloneTargetId.value })
+  const result = await cloneSharedJobGlossary({ projectId: props.projectId, ownerId: cloneSource.value.ownerId, glossaryBaseId: cloneSource.value.glossaryBaseId, targetBaseId: cloneTargetId.value })
   cloneSource.value = null
   notice.value = result.count ? t('glossary.jobCloned', { count: result.count }) : t('glossary.jobEmpty')
 }

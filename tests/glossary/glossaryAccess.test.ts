@@ -9,7 +9,7 @@ const projectMeta: ProjectMeta = {
   updatedAt: '2026-07-22T00:00:00.000Z',
   segmentCount: 0,
   doneCount: 0,
-  jobId: 'job-1',
+  projectId: 'job-1',
 }
 
 describe('resolveGlossaryAccess', () => {

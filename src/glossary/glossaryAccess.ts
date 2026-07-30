@@ -46,7 +46,7 @@ function addFlags(map: Map<string, AccessFlags>, id: string, flags: AccessFlags)
 
 /** Resolve job-shared glossary bases. Personal appears only when explicitly attached. */
 export function resolveGlossaryAccess(input: GlossaryBaseAccessInput): GlossaryBaseAccess {
-  const jobContext = isJobEditorContext(input.jobQueryId, input.projectMeta.jobId)
+  const jobContext = isJobEditorContext(input.jobQueryId, input.projectMeta.projectId)
   const attached = new Map<string, AccessFlags>()
 
   if (jobContext) {

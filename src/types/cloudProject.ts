@@ -1,6 +1,6 @@
-export type JobRole = 'owner' | 'translator' | 'viewer'
+export type CloudProjectRole = 'owner' | 'translator' | 'viewer'
 
-export type Job = {
+export type CloudProject = {
   id: string
   ownerUserId: string
   title: string
@@ -15,10 +15,10 @@ export type Job = {
   archivedAt?: string | null
 }
 
-export type JobMember = {
+export type CloudProjectMember = {
   userId: string
   displayName: string
-  role: JobRole
+  role: CloudProjectRole
   partDone: boolean
   progressDone: number
   progressTotal: number
@@ -27,10 +27,10 @@ export type JobMember = {
   localProjectId?: string | null
 }
 
-export type JobInvite = {
+export type CloudProjectInvite = {
   id: string
   projectId: string
-  role: JobRole
+  role: CloudProjectRole
   createdBy: string
   expiresAt?: string | null
   maxUses?: number | null
@@ -39,7 +39,7 @@ export type JobInvite = {
   createdAt: string
 }
 
-export type CreateJobInput = {
+export type CreateCloudProjectInput = {
   id: string
   title: string
   sourceLang?: string
@@ -49,7 +49,7 @@ export type CreateJobInput = {
   localProjectId?: string
 }
 
-export type PatchJobInput = {
+export type PatchCloudProjectInput = {
   title?: string
   sourceLang?: string
   targetLang?: string
@@ -65,7 +65,7 @@ export type CreateInviteInput = {
 
 export type CreateInviteResponse = {
   token: string
-  invite: JobInvite
+  invite: CloudProjectInvite
 }
 
 export type AcceptInviteInput = {
@@ -75,10 +75,10 @@ export type AcceptInviteInput = {
 
 export type AcceptInviteResponse = {
   projectId: string
-  role: JobRole
+  role: CloudProjectRole
 }
 
-export type PatchJobMemberInput = {
+export type PatchCloudProjectMemberInput = {
   partDone?: boolean
   progressDone?: number
   progressTotal?: number
@@ -86,20 +86,20 @@ export type PatchJobMemberInput = {
   localProjectId?: string
 }
 
-export type JobResourceAcl = {
+export type CloudProjectResourceAcl = {
   canRead: boolean
   canWrite: boolean
   canExport: boolean
   canClone: boolean
 }
 
-export type JobResource = JobResourceAcl & {
+export type CloudProjectResource = CloudProjectResourceAcl & {
   kind: 'job_tm'
   enabled: boolean
-  preset: JobResourceAcl
+  preset: CloudProjectResourceAcl
 }
 
-export type PatchJobResourceInput = {
+export type PatchCloudProjectResourceInput = {
   kind?: 'job_tm'
   enabled?: boolean
   canRead?: boolean
@@ -108,7 +108,7 @@ export type PatchJobResourceInput = {
   canClone?: boolean
 }
 
-export type JobTmAttachment = {
+export type CloudProjectTmAttachment = {
   id: string
   projectId: string
   tmBaseId: string
@@ -124,7 +124,7 @@ export type JobTmAttachment = {
   updatedAt: string
 }
 
-export type CreateJobTmAttachmentInput = {
+export type CreateCloudProjectTmAttachmentInput = {
   tmBaseId: string
   canRead?: boolean
   canWrite?: boolean
@@ -132,14 +132,14 @@ export type CreateJobTmAttachmentInput = {
   canClone?: boolean
 }
 
-export type PatchJobTmAttachmentInput = {
+export type PatchCloudProjectTmAttachmentInput = {
   canRead?: boolean
   canWrite?: boolean
   canExport?: boolean
   canClone?: boolean
 }
 
-export type JobGlossaryAttachment = {
+export type CloudProjectGlossaryAttachment = {
   id: string
   projectId: string
   glossaryBaseId: string
@@ -155,7 +155,7 @@ export type JobGlossaryAttachment = {
   updatedAt: string
 }
 
-export type CreateJobGlossaryAttachmentInput = {
+export type CreateCloudProjectGlossaryAttachmentInput = {
   glossaryBaseId: string
   canRead?: boolean
   canWrite?: boolean
@@ -163,7 +163,7 @@ export type CreateJobGlossaryAttachmentInput = {
   canClone?: boolean
 }
 
-export type PatchJobGlossaryAttachmentInput = {
+export type PatchCloudProjectGlossaryAttachmentInput = {
   canRead?: boolean
   canWrite?: boolean
   canExport?: boolean
