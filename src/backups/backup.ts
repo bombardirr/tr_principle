@@ -1,6 +1,6 @@
 import { packProjectFile } from '@/storage/projectFile'
 import type { ProjectRecord } from '@/types/project'
-import { putProjectBackup } from '@/projects/api'
+import { putProjectBackup } from '@/backups/api'
 
 let timer: ReturnType<typeof setTimeout> | null = null
 let inflight: Promise<void> | null = null

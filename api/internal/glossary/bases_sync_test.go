@@ -13,11 +13,11 @@ import (
 	"time"
 
 	"github.com/bombardirr/tr_principle/api/internal/auth"
+	"github.com/bombardirr/tr_principle/api/internal/backups"
 	"github.com/bombardirr/tr_principle/api/internal/db"
 	"github.com/bombardirr/tr_principle/api/internal/glossary"
 	"github.com/bombardirr/tr_principle/api/internal/httpapi"
 	"github.com/bombardirr/tr_principle/api/internal/jobs"
-	"github.com/bombardirr/tr_principle/api/internal/projects"
 	"github.com/bombardirr/tr_principle/api/internal/tm"
 	"github.com/google/uuid"
 )
@@ -47,7 +47,7 @@ func TestGlossaryBaseCatalogAndOwnerSync(t *testing.T) {
 		authHandler,
 		&tm.Handler{Store: tm.NewStore(pool)},
 		&glossary.Handler{Store: glossary.NewStore(pool)},
-		&projects.Handler{Store: projects.NewStore(pool), BackupDir: t.TempDir()},
+		&backups.Handler{Store: backups.NewStore(pool), BackupDir: t.TempDir()},
 		&jobs.Handler{Store: jobs.NewStore(pool)},
 		"http://localhost",
 		"",
@@ -111,7 +111,7 @@ func TestGlossaryJobMemberCannotSyncDeletedBase(t *testing.T) {
 		authHandler,
 		&tm.Handler{Store: tm.NewStore(pool)},
 		&glossary.Handler{Store: glossary.NewStore(pool)},
-		&projects.Handler{Store: projects.NewStore(pool), BackupDir: t.TempDir()},
+		&backups.Handler{Store: backups.NewStore(pool), BackupDir: t.TempDir()},
 		&jobs.Handler{Store: jobs.NewStore(pool)},
 		"http://localhost",
 		"",

@@ -11,7 +11,7 @@ export async function claimProjectLock(
   holderId: string,
   token?: string,
 ) {
-  return apiFetch<CloudLockResponse>(`/api/projects/${projectId}/lock`, {
+  return apiFetch<CloudLockResponse>(`/api/backups/${projectId}/lock`, {
     method: 'POST',
     body: JSON.stringify({ holderId, token: token || undefined }),
   })
@@ -22,7 +22,7 @@ export async function releaseProjectLock(
   holderId: string,
   token: string,
 ) {
-  return apiFetch<{ ok: boolean }>(`/api/projects/${projectId}/lock`, {
+  return apiFetch<{ ok: boolean }>(`/api/backups/${projectId}/lock`, {
     method: 'DELETE',
     body: JSON.stringify({ holderId, token }),
   })
@@ -39,7 +39,7 @@ export async function putProjectBackup(
   headers.set('Content-Type', 'application/zip')
   const name = opts?.projectName?.trim()
   if (name) headers.set('X-Project-Name', name.slice(0, 200))
-  const res = await fetch(`${apiBase()}/api/projects/${projectId}/backup`, {
+  const res = await fetch(`${apiBase()}/api/backups/${projectId}/backup`, {
     method: 'PUT',
     headers,
     body: blob,
@@ -62,7 +62,7 @@ export async function getProjectBackup(projectId: string): Promise<ArrayBuffer> 
   const headers = new Headers()
   const token = getStoredToken()
   if (token) headers.set('Authorization', `Bearer ${token}`)
-  const res = await fetch(`${apiBase()}/api/projects/${projectId}/backup`, { headers })
+  const res = await fetch(`${apiBase()}/api/backups/${projectId}/backup`, { headers })
   if (!res.ok) {
     throw new ApiError(res.status, res.status === 404 ? 'no backup' : res.statusText)
   }
@@ -73,7 +73,7 @@ export async function hasProjectBackup(projectId: string): Promise<boolean> {
   const headers = new Headers()
   const token = getStoredToken()
   if (token) headers.set('Authorization', `Bearer ${token}`)
-  const res = await fetch(`${apiBase()}/api/projects/${projectId}/backup`, {
+  const res = await fetch(`${apiBase()}/api/backups/${projectId}/backup`, {
     method: 'HEAD',
     headers,
   })
@@ -81,7 +81,7 @@ export async function hasProjectBackup(projectId: string): Promise<boolean> {
 }
 
 export async function deleteProjectBackup(projectId: string) {
-  return apiFetch<{ ok: boolean }>(`/api/projects/${projectId}/backup`, {
+  return apiFetch<{ ok: boolean }>(`/api/backups/${projectId}/backup`, {
     method: 'DELETE',
   })
 }

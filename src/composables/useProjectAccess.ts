@@ -1,6 +1,6 @@
 import { computed, onUnmounted, ref, toValue, watch, type MaybeRefOrGetter } from 'vue'
 import { ApiError } from '@/auth/api'
-import { claimProjectLock, releaseProjectLock } from '@/projects/api'
+import { claimProjectLock, releaseProjectLock } from '@/backups/api'
 import { useProjectLease } from '@/composables/useProjectLease'
 import { getTabId } from '@/storage/projectLease'
 

@@ -11,12 +11,12 @@ import (
 	"time"
 
 	"github.com/bombardirr/tr_principle/api/internal/auth"
+	"github.com/bombardirr/tr_principle/api/internal/backups"
 	"github.com/bombardirr/tr_principle/api/internal/config"
 	"github.com/bombardirr/tr_principle/api/internal/db"
 	"github.com/bombardirr/tr_principle/api/internal/glossary"
 	"github.com/bombardirr/tr_principle/api/internal/httpapi"
 	"github.com/bombardirr/tr_principle/api/internal/jobs"
-	"github.com/bombardirr/tr_principle/api/internal/projects"
 	"github.com/bombardirr/tr_principle/api/internal/tm"
 )
 
@@ -52,22 +52,22 @@ func main() {
 	tmHandler := &tm.Handler{Store: tmStore}
 	glossaryStore := glossary.NewStore(pool)
 	glossaryHandler := &glossary.Handler{Store: glossaryStore}
-	projectsStore := projects.NewStore(pool)
-	projectsHandler := &projects.Handler{
-		Store:     projectsStore,
+	backupsStore := backups.NewStore(pool)
+	backupsHandler := &backups.Handler{
+		Store:     backupsStore,
 		BackupDir: cfg.BackupDir,
 		Auth:      store,
 	}
 	jobsHandler := &jobs.Handler{
 		Store: jobs.NewStore(pool), TM: tmStore, Glossary: glossaryStore, BackupDir: cfg.BackupDir, Auth: store,
 	}
-	api := httpapi.NewRouter(handler, tmHandler, glossaryHandler, projectsHandler, jobsHandler, cfg.AllowedOrigin, cfg.MetricsToken)
+	api := httpapi.NewRouter(handler, tmHandler, glossaryHandler, backupsHandler, jobsHandler, cfg.AllowedOrigin, cfg.MetricsToken)
 	handlerRoot := httpapi.MountSPA(api, cfg.PublicDir)
 
 	purgeCtx, purgeCancel := context.WithCancel(context.Background())
 	defer purgeCancel()
-	projects.StartQuotaPurgeLoop(purgeCtx, &projects.QuotaPurger{
-		Auth: store, Store: projectsStore, BackupDir: cfg.BackupDir,
+	backups.StartQuotaPurgeLoop(purgeCtx, &backups.QuotaPurger{
+		Auth: store, Store: backupsStore, BackupDir: cfg.BackupDir,
 	}, time.Hour)
 
 	srv := &http.Server{

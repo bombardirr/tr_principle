@@ -4,7 +4,7 @@ import { ApiError } from '@/auth/api'
 
 const claimProjectLock = vi.fn()
 
-vi.mock('@/projects/api', () => ({
+vi.mock('@/backups/api', () => ({
   claimProjectLock,
   releaseProjectLock: vi.fn(),
 }))

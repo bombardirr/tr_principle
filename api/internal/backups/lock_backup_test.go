@@ -1,4 +1,4 @@
-package projects_test
+package backups_test
 
 import (
 	"bytes"
@@ -14,11 +14,11 @@ import (
 	"time"
 
 	"github.com/bombardirr/tr_principle/api/internal/auth"
+	"github.com/bombardirr/tr_principle/api/internal/backups"
 	"github.com/bombardirr/tr_principle/api/internal/db"
 	"github.com/bombardirr/tr_principle/api/internal/glossary"
 	"github.com/bombardirr/tr_principle/api/internal/httpapi"
 	"github.com/bombardirr/tr_principle/api/internal/jobs"
-	"github.com/bombardirr/tr_principle/api/internal/projects"
 	"github.com/bombardirr/tr_principle/api/internal/tm"
 	"github.com/google/uuid"
 )
@@ -51,7 +51,7 @@ func TestProjectLockAndBackup(t *testing.T) {
 		authHandler,
 		&tm.Handler{Store: tm.NewStore(pool)},
 		&glossary.Handler{Store: glossary.NewStore(pool)},
-		&projects.Handler{Store: projects.NewStore(pool), BackupDir: backupDir},
+		&backups.Handler{Store: backups.NewStore(pool), BackupDir: backupDir},
 		&jobs.Handler{Store: jobs.NewStore(pool)},
 		"http://localhost",
 		"",
@@ -64,7 +64,7 @@ func TestProjectLockAndBackup(t *testing.T) {
 	tokenB := mustAuth(t, srv.URL+"/api/auth/register", map[string]string{"email": emailB, "password": "password1"})
 
 	projectID := uuid.NewString()
-	lockURL := srv.URL + "/api/projects/" + projectID + "/lock"
+	lockURL := srv.URL + "/api/backups/" + projectID + "/lock"
 
 	claim := mustJSON(t, http.MethodPost, lockURL, tokenA, map[string]string{
 		"holderId": "tab-a",
@@ -94,7 +94,7 @@ func TestProjectLockAndBackup(t *testing.T) {
 		"holderId": "tab-b",
 	}, http.StatusOK)
 
-	backupURL := srv.URL + "/api/projects/" + projectID + "/backup"
+	backupURL := srv.URL + "/api/backups/" + projectID + "/backup"
 	payload := []byte("PK\x03\x04fake-zip-bytes-for-test")
 	req, _ := http.NewRequest(http.MethodPut, backupURL, bytes.NewReader(payload))
 	req.Header.Set("Authorization", "Bearer "+tokenA)

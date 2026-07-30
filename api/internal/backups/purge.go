@@ -1,4 +1,4 @@
-package projects
+package backups
 
 import (
 	"context"
@@ -56,7 +56,7 @@ func (p *QuotaPurger) purgeUser(ctx context.Context, userID uuid.UUID) error {
 			return err
 		}
 		if len(backups) == 0 {
-			// Only job originals left — cannot trim without deleting jobs; stop grace clock update.
+			// Only collab project originals remain; backups cannot trim those.
 			return p.Auth.SyncStorageGrace(ctx, userID)
 		}
 		oldest := backups[0]

@@ -1,4 +1,4 @@
-package projects
+package backups
 
 import (
 	"encoding/json"

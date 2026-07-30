@@ -5,9 +5,9 @@ import (
 	"time"
 
 	"github.com/bombardirr/tr_principle/api/internal/auth"
+	"github.com/bombardirr/tr_principle/api/internal/backups"
 	"github.com/bombardirr/tr_principle/api/internal/glossary"
 	"github.com/bombardirr/tr_principle/api/internal/jobs"
-	"github.com/bombardirr/tr_principle/api/internal/projects"
 	"github.com/bombardirr/tr_principle/api/internal/tm"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -17,7 +17,7 @@ func NewRouter(
 	authHandler *auth.Handler,
 	tmHandler *tm.Handler,
 	glossaryHandler *glossary.Handler,
-	projectsHandler *projects.Handler,
+	backupsHandler *backups.Handler,
 	jobsHandler *jobs.Handler,
 	allowedOrigin string,
 	metricsToken string,
@@ -78,14 +78,14 @@ func NewRouter(
 		r.Post("/bases/{baseId}/sync", glossaryHandler.PushBase)
 	})
 
-	r.Route("/api/projects/{projectID}", func(r chi.Router) {
+	r.Route("/api/backups/{projectID}", func(r chi.Router) {
 		r.Use(authHandler.Middleware)
-		r.Post("/lock", projectsHandler.ClaimLock)
-		r.Delete("/lock", projectsHandler.ReleaseLock)
-		r.Put("/backup", projectsHandler.PutBackup)
-		r.Get("/backup", projectsHandler.GetBackup)
-		r.Head("/backup", projectsHandler.GetBackup)
-		r.Delete("/backup", projectsHandler.DeleteBackup)
+		r.Post("/lock", backupsHandler.ClaimLock)
+		r.Delete("/lock", backupsHandler.ReleaseLock)
+		r.Put("/backup", backupsHandler.PutBackup)
+		r.Get("/backup", backupsHandler.GetBackup)
+		r.Head("/backup", backupsHandler.GetBackup)
+		r.Delete("/backup", backupsHandler.DeleteBackup)
 	})
 
 	r.Group(func(r chi.Router) {

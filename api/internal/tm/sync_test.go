@@ -14,11 +14,11 @@ import (
 	"time"
 
 	"github.com/bombardirr/tr_principle/api/internal/auth"
+	"github.com/bombardirr/tr_principle/api/internal/backups"
 	"github.com/bombardirr/tr_principle/api/internal/db"
 	"github.com/bombardirr/tr_principle/api/internal/glossary"
 	"github.com/bombardirr/tr_principle/api/internal/httpapi"
 	"github.com/bombardirr/tr_principle/api/internal/jobs"
-	"github.com/bombardirr/tr_principle/api/internal/projects"
 	"github.com/bombardirr/tr_principle/api/internal/tm"
 	"github.com/google/uuid"
 )
@@ -50,8 +50,8 @@ func TestTmSyncFlow(t *testing.T) {
 	}
 	tmHandler := &tm.Handler{Store: tm.NewStore(pool)}
 	glossaryHandler := &glossary.Handler{Store: glossary.NewStore(pool)}
-	srv := httptest.NewServer(httpapi.NewRouter(authHandler, tmHandler, glossaryHandler, &projects.Handler{
-		Store:     projects.NewStore(pool),
+	srv := httptest.NewServer(httpapi.NewRouter(authHandler, tmHandler, glossaryHandler, &backups.Handler{
+		Store:     backups.NewStore(pool),
 		BackupDir: t.TempDir(),
 	}, &jobs.Handler{Store: jobs.NewStore(pool)}, "http://localhost", ""))
 	t.Cleanup(srv.Close)
@@ -168,8 +168,8 @@ func TestTmSyncBaseID(t *testing.T) {
 	}
 	tmHandler := &tm.Handler{Store: tm.NewStore(pool)}
 	glossaryHandler := &glossary.Handler{Store: glossary.NewStore(pool)}
-	srv := httptest.NewServer(httpapi.NewRouter(authHandler, tmHandler, glossaryHandler, &projects.Handler{
-		Store:     projects.NewStore(pool),
+	srv := httptest.NewServer(httpapi.NewRouter(authHandler, tmHandler, glossaryHandler, &backups.Handler{
+		Store:     backups.NewStore(pool),
 		BackupDir: t.TempDir(),
 	}, &jobs.Handler{Store: jobs.NewStore(pool)}, "http://localhost", ""))
 	t.Cleanup(srv.Close)

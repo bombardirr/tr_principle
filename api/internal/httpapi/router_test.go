@@ -8,14 +8,14 @@ import (
 	"time"
 
 	"github.com/bombardirr/tr_principle/api/internal/auth"
+	"github.com/bombardirr/tr_principle/api/internal/backups"
 	"github.com/bombardirr/tr_principle/api/internal/glossary"
 	"github.com/bombardirr/tr_principle/api/internal/httpapi"
 	"github.com/bombardirr/tr_principle/api/internal/jobs"
-	"github.com/bombardirr/tr_principle/api/internal/projects"
 	"github.com/bombardirr/tr_principle/api/internal/tm"
 )
 
-func TestProjectRoutes_NoTrailingSlash(t *testing.T) {
+func TestBackupRoutes_NoTrailingSlash(t *testing.T) {
 	authHandler := &auth.Handler{
 		Tokens: auth.NewTokenIssuer([]byte("test-secret-key-32bytes-minimum!!"), time.Hour),
 	}
@@ -23,7 +23,7 @@ func TestProjectRoutes_NoTrailingSlash(t *testing.T) {
 		authHandler,
 		&tm.Handler{},
 		&glossary.Handler{},
-		&projects.Handler{},
+		&backups.Handler{},
 		&jobs.Handler{},
 		"http://localhost",
 		"",
@@ -33,11 +33,12 @@ func TestProjectRoutes_NoTrailingSlash(t *testing.T) {
 		method string
 		path   string
 	}{
-		{http.MethodPost, "/api/projects/test-id/lock"},
-		{http.MethodDelete, "/api/projects/test-id/lock"},
-		{http.MethodPut, "/api/projects/test-id/backup"},
-		{http.MethodGet, "/api/projects/test-id/backup"},
-		{http.MethodHead, "/api/projects/test-id/backup"},
+		{http.MethodPost, "/api/backups/test-id/lock"},
+		{http.MethodDelete, "/api/backups/test-id/lock"},
+		{http.MethodPut, "/api/backups/test-id/backup"},
+		{http.MethodGet, "/api/backups/test-id/backup"},
+		{http.MethodHead, "/api/backups/test-id/backup"},
+		{http.MethodDelete, "/api/backups/test-id/backup"},
 	}
 
 	for _, tt := range tests {
@@ -54,6 +55,43 @@ func TestProjectRoutes_NoTrailingSlash(t *testing.T) {
 	}
 }
 
+func TestOldProjectBackupRoutes_NotFound(t *testing.T) {
+	authHandler := &auth.Handler{
+		Tokens: auth.NewTokenIssuer([]byte("test-secret-key-32bytes-minimum!!"), time.Hour),
+	}
+	handler := httpapi.NewRouter(
+		authHandler,
+		&tm.Handler{},
+		&glossary.Handler{},
+		&backups.Handler{},
+		&jobs.Handler{},
+		"http://localhost",
+		"",
+	)
+
+	tests := []struct {
+		method string
+		path   string
+	}{
+		{http.MethodPost, "/api/projects/test-id/lock"},
+		{http.MethodDelete, "/api/projects/test-id/lock"},
+		{http.MethodPut, "/api/projects/test-id/backup"},
+		{http.MethodGet, "/api/projects/test-id/backup"},
+		{http.MethodHead, "/api/projects/test-id/backup"},
+		{http.MethodDelete, "/api/projects/test-id/backup"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.method+" "+tt.path, func(t *testing.T) {
+			rec := httptest.NewRecorder()
+			handler.ServeHTTP(rec, httptest.NewRequest(tt.method, tt.path, nil))
+			if rec.Code != http.StatusNotFound {
+				t.Fatalf("expected old route to return 404, got %d", rec.Code)
+			}
+		})
+	}
+}
+
 func TestJobsRouteRequiresAuthentication(t *testing.T) {
 	authHandler := &auth.Handler{
 		Tokens: auth.NewTokenIssuer([]byte("test-secret-key-32bytes-minimum!!"), time.Hour),
@@ -62,7 +100,7 @@ func TestJobsRouteRequiresAuthentication(t *testing.T) {
 		authHandler,
 		&tm.Handler{},
 		&glossary.Handler{},
-		&projects.Handler{},
+		&backups.Handler{},
 		&jobs.Handler{},
 		"http://localhost",
 		"",
@@ -96,7 +134,7 @@ func TestMetricsRoute_TokenOK(t *testing.T) {
 		authHandler,
 		&tm.Handler{},
 		&glossary.Handler{},
-		&projects.Handler{},
+		&backups.Handler{},
 		&jobs.Handler{},
 		"http://localhost",
 		"metrics-secret",
@@ -121,7 +159,7 @@ func TestMetricsRoute_NoAuth401(t *testing.T) {
 		authHandler,
 		&tm.Handler{},
 		&glossary.Handler{},
-		&projects.Handler{},
+		&backups.Handler{},
 		&jobs.Handler{},
 		"http://localhost",
 		"metrics-secret",
