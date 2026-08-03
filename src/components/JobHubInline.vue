@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { publicActorLabel, useAuth } from '@/auth/session'
 import { ApiError } from '@/auth/api'
@@ -69,6 +69,10 @@ const originalInput = ref<HTMLInputElement | null>(null)
 const projectInput = ref<HTMLInputElement | null>(null)
 const panelOpen = ref(false)
 const busy = ref(false)
+/** Why the hub is busy — drives overlay copy without swapping layout. */
+const busyPhase = ref<'load' | 'docx' | 'import' | 'original' | 'bind' | 'action' | null>(null)
+/** Nested startBusy/endBusy (e.g. import → bind → load). */
+let busyDepth = 0
 const error = ref('')
 const pendingAction = ref<'leave' | 'archive' | 'delete' | 'remove-original' | null>(null)
 const pendingProject = ref<ProjectRecord | null>(null)
@@ -122,34 +126,59 @@ const displayMembers = computed(() =>
   }),
 )
 
+const busyLabel = computed(() => {
+  switch (busyPhase.value) {
+    case 'docx':
+      return t('jobs.busyDocx')
+    case 'import':
+      return t('jobs.busyImport')
+    case 'original':
+      return t('jobs.busyOriginal')
+    case 'bind':
+      return t('jobs.busyBind')
+    case 'load':
+      return t('jobs.loading')
+    case 'action':
+      return t('jobs.busyWorking')
+    default:
+      return t('jobs.busyWorking')
+  }
+})
+
+function startBusy(phase: NonNullable<typeof busyPhase.value>) {
+  busyDepth += 1
+  busyPhase.value = phase
+  busy.value = true
+}
+
+function endBusy() {
+  busyDepth = Math.max(0, busyDepth - 1)
+  if (busyDepth === 0) {
+    busy.value = false
+    busyPhase.value = null
+  }
+}
+
 watch(
   () => props.projectId,
-  () => {
+  (id, prev) => {
+    if (id !== prev) {
+      job.value = null
+      members.value = []
+      projects.value = []
+      myLiveProgress.value = null
+      jobTmAttachments.value = []
+      error.value = ''
+    }
     void load()
   },
   { immediate: true },
 )
 
-function onWindowFocus() {
-  void load()
-  emit('changed')
-}
-
-onMounted(() => {
-  window.addEventListener('focus', onWindowFocus)
-})
-
-onUnmounted(() => {
-  window.removeEventListener('focus', onWindowFocus)
-})
-
 async function load() {
   if (!props.projectId) return
-  busy.value = true
+  startBusy('load')
   error.value = ''
-  job.value = null
-  myLiveProgress.value = null
-  jobTmAttachments.value = []
   try {
     const [nextJob, nextMembers, nextProjects] = await Promise.all([
       getJob(props.projectId),
@@ -166,7 +195,7 @@ async function load() {
   } catch (err) {
     error.value = err instanceof Error ? err.message : String(err)
   } finally {
-    busy.value = false
+    endBusy()
   }
 }
 
@@ -283,7 +312,7 @@ async function confirmPendingAction() {
     return
   }
   if (kind === 'remove-original' && isArchived.value) return
-  busy.value = true
+  startBusy('action')
   error.value = ''
   try {
     if (kind === 'leave') {
@@ -320,7 +349,7 @@ async function confirmPendingAction() {
           ? err.message
           : String(err)
   } finally {
-    busy.value = false
+    endBusy()
   }
 }
 
@@ -330,7 +359,7 @@ async function onOriginalFile(file: File) {
     return
   }
 
-  busy.value = true
+  startBusy('original')
   error.value = ''
   try {
     const buffer = await file.arrayBuffer()
@@ -355,7 +384,7 @@ async function onOriginalFile(file: File) {
       error.value = t('jobs.originalShareFailed')
     }
   } finally {
-    busy.value = false
+    endBusy()
   }
 }
 
@@ -368,7 +397,7 @@ function onOriginalSelected(event: Event) {
 
 async function downloadOriginal() {
   if (!job.value || busy.value) return
-  busy.value = true
+  startBusy('original')
   error.value = ''
   try {
     const blob = await getJobOriginal(job.value.id)
@@ -376,7 +405,7 @@ async function downloadOriginal() {
   } catch {
     error.value = t('jobs.originalDownloadFailed')
   } finally {
-    busy.value = false
+    endBusy()
   }
 }
 
@@ -428,7 +457,7 @@ async function bindWithWarning(record: ProjectRecord) {
 
 async function bindSelected() {
   if (!selectedId.value || busy.value) return
-  busy.value = true
+  startBusy('bind')
   error.value = ''
   try {
     const record = await getProject(selectedId.value)
@@ -437,7 +466,7 @@ async function bindSelected() {
   } catch (err) {
     error.value = err instanceof Error ? err.message : String(err)
   } finally {
-    busy.value = false
+    endBusy()
   }
 }
 
@@ -446,7 +475,7 @@ async function onDocxSelected(event: Event) {
   const file = input.files?.[0]
   input.value = ''
   if (!file || !job.value) return
-  busy.value = true
+  startBusy('docx')
   error.value = ''
   try {
     const opened = await openDocx(file)
@@ -475,20 +504,20 @@ async function onDocxSelected(event: Event) {
   } catch (err) {
     error.value = err instanceof Error ? err.message : String(err)
   } finally {
-    busy.value = false
+    endBusy()
   }
 }
 
 async function createEmpty() {
   if (!job.value || busy.value) return
-  busy.value = true
+  startBusy('bind')
   error.value = ''
   try {
     await bind(await createEmptyLocalProject(job.value, createProjectId()))
   } catch (err) {
     error.value = err instanceof Error ? err.message : String(err)
   } finally {
-    busy.value = false
+    endBusy()
   }
 }
 
@@ -497,20 +526,20 @@ async function onProjectFileSelected(event: Event) {
   const file = input.files?.[0]
   input.value = ''
   if (!file) return
-  busy.value = true
+  startBusy('import')
   error.value = ''
   try {
     await bindWithWarning(await unpackProjectFile(file))
   } catch (err) {
     error.value = err instanceof Error ? err.message : String(err)
   } finally {
-    busy.value = false
+    endBusy()
   }
 }
 
 async function onLangPairChange(payload: { sourceLang: string; targetLang: string }) {
   if (!job.value || busy.value || isArchived.value || !isOwner.value) return
-  busy.value = true
+  startBusy('action')
   error.value = ''
   try {
     job.value = await patchJob(job.value.id, payload)
@@ -519,17 +548,18 @@ async function onLangPairChange(payload: { sourceLang: string; targetLang: strin
   } catch (err) {
     error.value = err instanceof Error ? err.message : String(err)
   } finally {
-    busy.value = false
+    endBusy()
   }
 }
 </script>
 
 <template>
-  <section class="job-hub">
-    <button type="button" class="back" @click="emit('close')">
+  <section class="job-hub" :aria-busy="busy">
+    <button type="button" class="back" :disabled="busy" @click="emit('close')">
       ← {{ t('jobs.backToSharedList') }}
     </button>
 
+    <div class="hub-shell">
     <header class="hub-head">
       <h3 class="hub-title">
         <span>{{ job?.title || t('jobs.panelTitle') }}</span>
@@ -650,7 +680,6 @@ async function onLangPairChange(payload: { sourceLang: string; targetLang: strin
     />
 
     <p v-if="error" class="error" role="alert">{{ error }}</p>
-    <p v-if="busy && !job" class="muted">{{ t('jobs.loading') }}</p>
 
     <ul v-if="job" class="members">
       <li v-for="member in displayMembers" :key="member.userId" class="member-row">
@@ -792,6 +821,22 @@ async function onLangPairChange(payload: { sourceLang: string; targetLang: strin
       <p class="muted">{{ t('jobs.viewerHubHint') }}</p>
     </section>
 
+    <div
+      v-if="busy"
+      class="hub-busy-overlay"
+      role="status"
+      aria-live="polite"
+    >
+      <span class="hub-busy-card">
+        <span class="hub-spinner" aria-hidden="true">
+          <span class="hub-spinner-ring" />
+          <span class="hub-spinner-orbit" />
+        </span>
+        <span class="hub-busy-label">{{ busyLabel }}</span>
+      </span>
+    </div>
+    </div>
+
     <SharedWorkPanel
       v-if="panelOpen"
       :open="panelOpen"
@@ -827,6 +872,92 @@ async function onLangPairChange(payload: { sourceLang: string; targetLang: strin
   color: var(--text);
 }
 
+.hub-shell {
+  position: relative;
+  min-height: 4.5rem;
+}
+
+.hub-busy-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.75rem;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--bg, var(--surface)) 55%, transparent);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+  pointer-events: all;
+}
+
+.hub-busy-card {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.7rem;
+  max-width: 100%;
+  padding: 0.65rem 0.95rem;
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--border));
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface) 92%, var(--accent));
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.22);
+  color: var(--text);
+}
+
+.hub-spinner {
+  position: relative;
+  display: block;
+  width: 1.25rem;
+  height: 1.25rem;
+  flex-shrink: 0;
+}
+
+.hub-spinner-ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  border-top-color: var(--accent);
+  border-right-color: color-mix(in srgb, var(--accent) 55%, transparent);
+  animation: hub-spin 0.7s linear infinite;
+}
+
+.hub-spinner-orbit {
+  position: absolute;
+  inset: -3px;
+  border-radius: 50%;
+  border: 1.5px solid color-mix(in srgb, var(--accent) 40%, transparent);
+  opacity: 0.55;
+  animation: hub-orbit 1.15s ease-in-out infinite;
+}
+
+.hub-busy-label {
+  font-size: 0.86rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  line-height: 1.25;
+  white-space: nowrap;
+}
+
+@keyframes hub-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes hub-orbit {
+  0%,
+  100% {
+    transform: scale(0.92);
+    opacity: 0.35;
+  }
+  50% {
+    transform: scale(1.08);
+    opacity: 0.7;
+  }
+}
+
 .back {
   display: inline-block;
   margin: 0 0 0.35rem;
@@ -838,6 +969,11 @@ async function onLangPairChange(payload: { sourceLang: string; targetLang: strin
   font-size: 0.8rem;
   cursor: pointer;
   text-align: left;
+}
+
+.back:disabled {
+  opacity: 0.55;
+  cursor: default;
 }
 
 .hub-head,

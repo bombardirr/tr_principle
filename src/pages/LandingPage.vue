@@ -245,10 +245,6 @@ async function copyRecovery() {
 
     <div class="landing-stage">
       <section class="hero">
-        <p class="brand-mark">
-          <img class="brand-mark-icon" src="/logo-mark.png" alt="" width="56" height="56" />
-          <span>{{ t('app.name') }}</span>
-        </p>
         <h1 class="headline">{{ title }}</h1>
         <p v-if="mode === 'home'" class="support">{{ t('landing.support') }}</p>
 
@@ -511,27 +507,6 @@ async function copyRecovery() {
 .hero {
   max-width: 34rem;
   animation: rise 0.7s ease-out both;
-}
-
-.brand-mark {
-  margin: 0 0 0.75rem;
-  display: inline-flex;
-  align-items: center;
-  gap: 0.65rem;
-  font-size: clamp(2.4rem, 6vw, 3.6rem);
-  font-weight: 600;
-  letter-spacing: -0.03em;
-  line-height: 1.05;
-  color: var(--text);
-  animation: rise 0.85s ease-out 0.05s both;
-}
-
-.brand-mark-icon {
-  display: block;
-  width: clamp(2.8rem, 7vw, 3.6rem);
-  height: clamp(2.8rem, 7vw, 3.6rem);
-  object-fit: contain;
-  flex-shrink: 0;
 }
 
 .headline {
@@ -874,7 +849,6 @@ async function copyRecovery() {
 @media (prefers-reduced-motion: reduce) {
   .landing-bg,
   .hero,
-  .brand-mark,
   .cta,
   .scroll-hint {
     animation: none;
