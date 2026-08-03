@@ -9,9 +9,9 @@ const { isAuthenticated, isPro } = useAuth()
 
 const periods = [
   { id: '1m', discount: null as string | null },
-  { id: '3m', discount: '~10%' },
-  { id: '6m', discount: '~17%' },
-  { id: '12m', discount: '~20%' },
+  { id: '3m', discount: '~16%' },
+  { id: '6m', discount: '~28%' },
+  { id: '12m', discount: '~44%' },
 ] as const
 
 function goActivate() {
