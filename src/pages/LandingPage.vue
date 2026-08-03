@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
+import { Cat } from '@lucide/vue'
 import { ApiError, passwordReset } from '@/auth/api'
 import { useAuth } from '@/auth/session'
 import { metrikaGoal } from '@/analytics/metrika'
@@ -21,19 +22,16 @@ const info = ref('')
 const showPassword = ref(false)
 
 const landingRoot = ref<HTMLElement | null>(null)
-/** Continuous panel progress 0 … panels-1 */
-const panelProgress = ref(0)
-const reduceMotion = ref(false)
 
-const featureKeys = ['docx', 'tm', 'local', 'preview'] as const
-const flowKeys = ['open', 'translate', 'export'] as const
-const privacyKeys = ['browser', 'account', 'sync'] as const
-
-const panels = [
-  { id: 'features', kind: 'features' as const },
-  { id: 'flow', kind: 'flow' as const },
-  { id: 'privacy', kind: 'privacy' as const },
-]
+const cubeKeys = [
+  'docx',
+  'browser',
+  'preview',
+  'translate',
+  'plan',
+  'cat',
+  'ru',
+] as const
 
 const title = computed(() => {
   if (mode.value === 'login') return t('landing.loginTitle')
@@ -43,61 +41,10 @@ const title = computed(() => {
   return t('landing.headline')
 })
 
-const activePanel = computed(() => Math.round(panelProgress.value))
-
-function panelStyle(index: number): Record<string, string> {
-  const d = panelProgress.value - index
-  const abs = Math.abs(d)
-  const opacity = Math.max(0, 1 - abs * 1.15)
-  const y = reduceMotion.value ? 0 : d * 18
-  const visible = abs < 1.05
-  return {
-    opacity: String(opacity),
-    transform: `translateY(${y}px)`,
-    visibility: visible ? 'visible' : 'hidden',
-    // kebab-case avoids CSSProperties PointerEvents union vs plain string
-    'pointer-events': abs < 0.45 ? 'auto' : 'none',
-  }
-}
-
-function onScroll() {
-  const root = landingRoot.value
-  if (!root) return
-  const rail = root.querySelector('.landing-rail') as HTMLElement | null
-  const stage = root.querySelector('.landing-stage') as HTMLElement | null
-  if (!rail || !stage) return
-
-  const start = root.offsetTop
-  const scrollRange = Math.max(1, rail.offsetHeight - stage.offsetHeight)
-  const y = window.scrollY - start
-  const t = Math.min(1, Math.max(0, y / scrollRange))
-  panelProgress.value = t * (panels.length - 1)
-}
-
-let raf = 0
-function onScrollRaf() {
-  if (raf) return
-  raf = requestAnimationFrame(() => {
-    raf = 0
-    onScroll()
-  })
-}
-
 onMounted(() => {
   if (isAuthenticated.value) {
     void router.replace({ name: 'projects' })
-    return
   }
-  reduceMotion.value = window.matchMedia('(prefers-reduced-motion: reduce)').matches
-  onScroll()
-  window.addEventListener('scroll', onScrollRaf, { passive: true })
-  window.addEventListener('resize', onScrollRaf)
-})
-
-onUnmounted(() => {
-  window.removeEventListener('scroll', onScrollRaf)
-  window.removeEventListener('resize', onScrollRaf)
-  if (raf) cancelAnimationFrame(raf)
 })
 
 function openLogin() {
@@ -129,17 +76,6 @@ function backHome() {
   info.value = ''
   showPassword.value = false
   shownRecovery.value = ''
-}
-
-function goPanel(i: number) {
-  const root = landingRoot.value
-  if (!root) return
-  const rail = root.querySelector('.landing-rail') as HTMLElement | null
-  const stage = root.querySelector('.landing-stage') as HTMLElement | null
-  if (!rail || !stage) return
-  const scrollRange = Math.max(1, rail.offsetHeight - stage.offsetHeight)
-  const target = root.offsetTop + (i / (panels.length - 1)) * scrollRange
-  window.scrollTo({ top: target, behavior: reduceMotion.value ? 'auto' : 'smooth' })
 }
 
 function looksLikeEmail(raw: string): boolean {
@@ -243,10 +179,12 @@ async function copyRecovery() {
   <div ref="landingRoot" class="landing">
     <div class="landing-bg" aria-hidden="true" />
 
-    <div class="landing-stage">
+    <div class="landing-stage" :class="{ 'landing-stage--auth': mode !== 'home' }">
+      <div class="stage-pair">
       <section class="hero">
         <h1 class="headline">{{ title }}</h1>
-        <p v-if="mode === 'home'" class="support">{{ t('landing.support') }}</p>
+        <p v-if="mode === 'home' && t('landing.support')" class="support">{{ t('landing.support') }}</p>
+        <p v-if="mode === 'home'" class="solo">{{ t('landing.solo') }}</p>
 
         <div v-if="mode === 'home'" class="cta">
           <button type="button" class="primary" @click="openRegister">
@@ -390,78 +328,37 @@ async function copyRecovery() {
             </div>
           </template>
         </form>
-
-        <p v-if="mode === 'home'" class="scroll-hint">{{ t('landing.scrollHint') }}</p>
       </section>
 
-      <aside class="panels" aria-live="polite">
-        <div
-          v-for="(panel, i) in panels"
-          :key="panel.id"
-          class="panel"
-          :class="{ 'panel--active': activePanel === i }"
-          :style="panelStyle(i)"
+      <aside v-if="mode === 'home'" class="cubes" :aria-label="t('landing.cubesLabel')">
+        <article
+          v-for="key in cubeKeys"
+          :key="key"
+          class="cube"
         >
-          <template v-if="panel.kind === 'features'">
-            <ul class="item-list">
-              <li v-for="(key, fi) in featureKeys" :key="key" class="item">
-                <span class="item-index" aria-hidden="true">{{ String(fi + 1).padStart(2, '0') }}</span>
-                <div>
-                  <p class="item-title">{{ t(`landing.features.${key}.title`) }}</p>
-                  <p class="item-text">{{ t(`landing.features.${key}.text`) }}</p>
-                </div>
-              </li>
-            </ul>
-          </template>
-
-          <template v-else-if="panel.kind === 'flow'">
-            <p class="panel-kicker">{{ t('landing.flow.title') }}</p>
-            <ul class="item-list">
-              <li v-for="(key, fi) in flowKeys" :key="key" class="item">
-                <span class="item-index" aria-hidden="true">{{ String(fi + 1).padStart(2, '0') }}</span>
-                <div>
-                  <p class="item-title">{{ t(`landing.flow.${key}.title`) }}</p>
-                  <p class="item-text">{{ t(`landing.flow.${key}.text`) }}</p>
-                </div>
-              </li>
-            </ul>
-          </template>
-
-          <template v-else>
-            <p class="panel-kicker">{{ t('landing.privacy.title') }}</p>
-            <ul class="item-list">
-              <li v-for="(key, fi) in privacyKeys" :key="key" class="item">
-                <span class="item-index" aria-hidden="true">{{ String(fi + 1).padStart(2, '0') }}</span>
-                <div>
-                  <p class="item-title">{{ t(`landing.privacy.${key}.title`) }}</p>
-                  <p class="item-text">{{ t(`landing.privacy.${key}.text`) }}</p>
-                </div>
-              </li>
-            </ul>
-          </template>
-        </div>
-
-        <div class="panel-dots" role="tablist" :aria-label="t('landing.scrollHint')">
-          <button
-            v-for="(panel, i) in panels"
-            :key="panel.id"
-            type="button"
-            class="dot"
-            :class="{ 'dot--on': activePanel === i }"
-            :aria-label="panel.id"
-            :aria-current="activePanel === i ? 'true' : undefined"
-            @click="goPanel(i)"
-          />
-        </div>
+          <div class="cube-title-row">
+            <h2 class="cube-title">{{ t(`landing.cubes.${key}.title`) }}</h2>
+            <Cat v-if="key === 'cat'" class="cube-icon" :size="18" :stroke-width="1.75" aria-hidden="true" />
+            <svg
+              v-else-if="key === 'ru'"
+              class="cube-flag"
+              viewBox="0 0 9 6"
+              width="18"
+              height="12"
+              aria-hidden="true"
+            >
+              <rect width="9" height="2" y="0" fill="#fff" />
+              <rect width="9" height="2" y="2" fill="#0039a6" />
+              <rect width="9" height="2" y="4" fill="#d52b1e" />
+            </svg>
+          </div>
+          <p v-if="t(`landing.cubes.${key}.text`)" class="cube-text">
+            {{ t(`landing.cubes.${key}.text`) }}
+          </p>
+        </article>
       </aside>
+      </div>
     </div>
-
-    <!-- Intentional scroll distance — only this creates page scroll beyond the stage. -->
-    <div
-      class="landing-rail"
-      aria-hidden="true"
-      :style="{ height: `calc(${panels.length - 1} * 85vh)` }"
-    />
   </div>
 </template>
 
@@ -488,40 +385,62 @@ async function copyRecovery() {
 }
 
 .landing-stage {
-  position: sticky;
-  top: 3.25rem;
+  position: relative;
   z-index: 1;
   height: var(--stage-h);
-  display: grid;
-  grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr);
-  gap: clamp(1.5rem, 4vw, 4rem);
+  display: flex;
   align-items: center;
+  justify-content: center;
   box-sizing: border-box;
   padding: 0.5rem 0 1rem;
 }
 
-.landing-rail {
-  pointer-events: none;
+.stage-pair {
+  display: grid;
+  grid-template-columns: minmax(0, 26rem) minmax(0, 26rem);
+  gap: clamp(1.25rem, 3.5vw, 3rem);
+  align-items: center;
+  width: min(100%, calc(52rem + clamp(1.25rem, 3.5vw, 3rem)));
+}
+
+.landing-stage--auth .stage-pair {
+  grid-template-columns: minmax(0, 26rem);
+  width: min(100%, 26rem);
+  justify-items: center;
 }
 
 .hero {
-  max-width: 34rem;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  width: 100%;
+  padding: 0.85rem 0.9rem;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--text) 4%, transparent);
   animation: rise 0.7s ease-out both;
 }
 
 .headline {
   margin: 0;
-  font-size: clamp(1.25rem, 2.4vw, 1.65rem);
-  font-weight: 500;
-  line-height: 1.35;
+  font-size: clamp(1.05rem, 2vw, 1.28rem);
+  font-weight: 600;
+  line-height: 1.3;
   color: var(--text);
 }
 
 .support {
-  margin: 0.85rem 0 0;
-  max-width: 28rem;
+  margin: 0.55rem 0 0;
   color: var(--text-muted);
-  font-size: 1.02rem;
+  font-size: 0.88rem;
+  line-height: 1.4;
+}
+.solo {
+  margin: 0.45rem 0 0;
+  color: var(--text-faint);
+  font-size: 0.82rem;
+  line-height: 1.4;
 }
 .support.warn {
   color: #d89a5a;
@@ -539,41 +458,31 @@ async function copyRecovery() {
   display: flex;
   flex-wrap: wrap;
   gap: 0.65rem;
-  margin-top: 1.6rem;
+  margin-top: 0.85rem;
   animation: rise 0.9s ease-out 0.12s both;
-}
-
-.scroll-hint {
-  margin: 1.75rem 0 0;
-  font-size: 0.78rem;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--text-faint);
-  animation: pulse-hint 2.8s ease-in-out infinite;
 }
 
 .auth-form {
   display: flex;
   flex-direction: column;
-  gap: 0.85rem;
-  margin-top: 1.25rem;
-  max-width: 22rem;
+  gap: 0.75rem;
+  margin-top: 0.85rem;
 }
 
 .auth-form label {
   display: flex;
   flex-direction: column;
   gap: 0.3rem;
-  font-size: 0.85rem;
+  font-size: 0.82rem;
   color: var(--text-muted);
 }
 
 .auth-form input {
   width: 100%;
   box-sizing: border-box;
-  padding: 0.55rem 0.7rem;
-  border-radius: 8px;
-  border: 1px solid var(--border-strong);
+  padding: 0.55rem 0.75rem;
+  border-radius: 12px;
+  border: 1px solid var(--border);
   background: var(--surface);
 }
 
@@ -596,7 +505,7 @@ async function copyRecovery() {
   align-items: center;
   justify-content: center;
   border: none;
-  border-radius: 6px;
+  border-radius: 8px;
   background: transparent;
   color: var(--text-muted);
   cursor: pointer;
@@ -623,7 +532,7 @@ async function copyRecovery() {
   width: 100%;
   box-sizing: border-box;
   padding: 0.45rem 0.7rem;
-  border-radius: 8px;
+  border-radius: 12px;
   border: 1px solid color-mix(in srgb, var(--danger) 45%, transparent);
   background: var(--danger-bg);
   color: var(--danger);
@@ -640,7 +549,7 @@ async function copyRecovery() {
   width: 100%;
   box-sizing: border-box;
   padding: 0.45rem 0.7rem;
-  border-radius: 8px;
+  border-radius: 12px;
   border: 1px solid color-mix(in srgb, var(--ok) 40%, transparent);
   background: color-mix(in srgb, var(--ok) 12%, transparent);
   color: var(--text);
@@ -656,8 +565,9 @@ async function copyRecovery() {
 
 .primary,
 .ghost {
-  border-radius: 8px;
+  border-radius: 12px;
   padding: 0.55rem 1rem;
+  font-size: 0.92rem;
   cursor: pointer;
   border: 1px solid transparent;
 }
@@ -680,99 +590,67 @@ async function copyRecovery() {
   border-color: var(--border-strong);
 }
 
-.panels {
-  position: relative;
-  justify-self: end;
-  width: min(100%, 22rem);
-  height: min(28rem, calc(var(--stage-h) - 3rem));
-}
-
-.panel {
-  position: absolute;
-  inset: 0 0 2rem;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  transition:
-    opacity 0.05s linear,
-    transform 0.05s linear;
-  will-change: opacity, transform;
-}
-
-.panel-kicker {
-  margin: 0 0 0.35rem;
-  font-size: 0.72rem;
-  font-weight: 500;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--text-faint);
-}
-
-.item-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-}
-
-.item {
+.cubes {
   display: grid;
-  grid-template-columns: 2.25rem minmax(0, 1fr);
-  gap: 0.85rem;
-  padding: 0.95rem 0;
-  border-top: 1px solid var(--border);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.65rem;
+  width: 100%;
+  align-content: center;
+  max-height: calc(var(--stage-h) - 2rem);
+  overflow: auto;
+  padding: 0;
+  scrollbar-width: thin;
 }
 
-.item:last-child {
-  border-bottom: 1px solid var(--border);
-}
-
-.item-index {
-  font-size: 0.72rem;
-  font-weight: 500;
-  letter-spacing: 0.06em;
-  color: var(--text-faint);
-  padding-top: 0.2rem;
-}
-
-.item-title {
+.cube {
+  position: relative;
   margin: 0;
-  font-size: 0.98rem;
-  font-weight: 500;
+  padding: 0.85rem 0.9rem;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--text) 4%, transparent);
+}
+
+.cube-title-row {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+}
+
+.cube-title {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  font-size: 0.92rem;
+  font-weight: 600;
+  line-height: 1.3;
   color: var(--text);
 }
 
-.item-text {
-  margin: 0.28rem 0 0;
-  font-size: 0.88rem;
-  line-height: 1.45;
+.cube-icon {
+  flex-shrink: 0;
+  color: var(--accent);
+  opacity: 0.85;
+}
+
+.cube-flag {
+  flex-shrink: 0;
+  width: 1.15rem;
+  height: 0.78rem;
+  border-radius: 2px;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--border) 80%, transparent);
+}
+
+.cube:nth-child(odd):last-child {
+  grid-column: 1 / -1;
+}
+
+.cube-text {
+  margin: 0.35rem 0 0;
+  font-size: 0.82rem;
+  line-height: 1.4;
   color: var(--text-muted);
-}
-
-.panel-dots {
-  position: absolute;
-  right: 0;
-  bottom: 0;
-  display: flex;
-  gap: 0.45rem;
-}
-
-.dot {
-  width: 0.4rem;
-  height: 0.4rem;
-  padding: 0;
-  border: none;
-  border-radius: 999px;
-  background: var(--border-strong);
-  cursor: pointer;
-  transition:
-    background 0.35s ease,
-    transform 0.35s ease,
-    width 0.35s ease;
-}
-
-.dot--on {
-  width: 1.1rem;
-  background: var(--accent);
 }
 
 @keyframes rise {
@@ -795,67 +673,47 @@ async function copyRecovery() {
   }
 }
 
-@keyframes pulse-hint {
-  0%,
-  100% {
-    opacity: 0.45;
-  }
-  50% {
-    opacity: 0.9;
-  }
-}
-
 @media (max-width: 900px) {
   .landing-stage {
-    grid-template-columns: 1fr;
-    align-content: start;
-    gap: 1.25rem;
     height: auto;
     min-height: var(--stage-h);
-    position: relative;
-    top: auto;
-  }
-
-  .landing-rail {
-    display: none;
   }
 
   .landing-bg {
     position: absolute;
   }
 
-  .panels {
-    justify-self: stretch;
-    width: min(100%, 28rem);
-    height: auto;
+  .stage-pair {
+    grid-template-columns: minmax(0, 26rem);
+    width: min(100%, 26rem);
+    justify-items: stretch;
   }
 
-  .panel {
-    position: relative;
-    inset: auto;
-    opacity: 1 !important;
-    transform: none !important;
-    visibility: visible !important;
-    pointer-events: auto !important;
-    margin-bottom: 1.75rem;
+  .hero {
+    min-height: 0;
   }
 
-  .panel-dots,
-  .scroll-hint {
-    display: none;
+  .cubes {
+    max-height: none;
+    overflow: visible;
+  }
+}
+
+@media (max-width: 520px) {
+  .cubes {
+    grid-template-columns: 1fr;
+  }
+
+  .cube:nth-child(odd):last-child {
+    grid-column: auto;
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .landing-bg,
   .hero,
-  .cta,
-  .scroll-hint {
+  .cta {
     animation: none;
-  }
-
-  .panel {
-    transition: none;
   }
 }
 </style>
